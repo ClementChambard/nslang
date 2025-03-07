@@ -65,7 +65,7 @@
   `("i8" "i16" "i32" "i64" "u8" "u16" "u32" "u64" "void" "bool"))
 
 (defconst nslang-keywords
-  `("if" "else" "while" "do" "sizeof" "switch" "case" "default" "let" "type" "struct" "enum" "lib" "fn" "break" "continue" "return" "for"))
+  `("if" "else" "while" "do" "sizeof" "switch" "case" "default" "let" "type" "struct" "enum" "lib" "fn" "break" "continue" "return" "for" "cast"))
 
 (defconst nslang-preprocessors
   `("#include"))
@@ -111,12 +111,14 @@
 (defun nslang-mode-generate-literal-integer ()
   (let* ((integer-suffix-regexp "\\(?:\\(?:i\\|u\\)\\(?:8\\|16\\|32\\|64\\)\\)")
         (literal-hex-regexp (concat "\\<\\(0[xX]\\)\\([0-9a-fA-F]+\\)\\(" integer-suffix-regexp "?\\)\\>"))
+        (literal-bin-regexp (concat "\\<\\(0[bB]\\)\\([01]+\\)\\(" integer-suffix-regexp "?\\)\\>"))
         (literal-oct-regexp (concat "\\<\\(0\\)\\([0-7]*\\)\\(" integer-suffix-regexp "?\\)\\>"))
         (literal-dec-regexp (concat "\\<\\([1-9][0-9]*\\)\\(" integer-suffix-regexp "?\\)\\>")))
     (setq nslang-mode-literal-integer
           `(
             ;; All numbers
             (,literal-hex-regexp (1 'font-lock-number-face) (2 'font-lock-number-face) (3 'font-lock-number-face))
+            (,literal-bin-regexp (1 'font-lock-number-face) (2 'font-lock-number-face) (3 'font-lock-number-face))
             (,literal-oct-regexp (1 'font-lock-number-face) (2 'font-lock-number-face) (3 'font-lock-number-face))
             (,literal-dec-regexp (1 'font-lock-number-face) (2 'font-lock-number-face))))))
 

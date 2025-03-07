@@ -32,6 +32,8 @@ class CompileSingleFileOptions:
         self.compile_only = False
         self.include_paths = ["stdlib/include"]
         self.link_libraries = ["stdlib/bin/stdlib.a"]
+        self.nasm_args = []
+        self.ld_args = []
 
     def check_args(self):
         if len(self.input_files) == 0:
@@ -63,10 +65,16 @@ class CompileSingleFileOptions:
                     fatal_error("missing filename after '-o'")
                 i += 1
                 self.output_files = [args[i]]
+            elif args[i].startswith("--nasm{") and args[i].endswith("}"):
+                self.nasm_args += args[i][7:-1].split()
+            elif args[i].startswith("--ld{") and args[i].endswith("}"):
+                self.ld_args += args[i][7:-1].split()
             elif args[i] == "-c":
                 self.compile_only = True
             elif args[i] == "-ast":
                 self.print_ast = True
+            elif args[i] == "-asm":
+                self.print_asm = True
             elif args[i] == "-ir":
                 self.print_ir = True
             elif args[i].startswith("-I"):
@@ -74,6 +82,8 @@ class CompileSingleFileOptions:
             elif args[i] == "-nostdlib":
                 self.include_paths.remove("stdlib/include")
                 self.link_libraries.remove("stdlib/bin/stdlib.a")
+            elif args[i].startswith("-l"):
+                self.link_libraries.append(args[i])
             else:
                 self.input_files.append(args[i])
             i += 1
@@ -96,7 +106,9 @@ def exec_compiler(args):
         if ANY_FILE_HAD_ERROR:
             fatal_error("compilation had error. aborted.")
         import subprocess
-        subprocess.run(["ld", "-o", options.output_files[0]] + temporary_files + others)
+        additional_ld_flags = [] # ["--dynamic-linker=/lib64/ld-linux-x86-64.so.2", "-pie"]
+        cmd = ["gcc", "-nostdlib", "-o", options.output_files[0]] + temporary_files + others + options.ld_args + additional_ld_flags
+        subprocess.run(cmd)
         subprocess.run(["rm"] + temporary_files)
 
 
@@ -140,12 +152,12 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
 
     # run_ir_interpreter(ir)
 
-    assembly = x86_64.compile_ir(ir)
+    assembly = "default rel\n" + x86_64.compile_ir(ir)
 
     if options.print_asm:
         print(assembly)
 
-    create_object_from_asm(assembly, output_file)
+    create_object_from_asm(assembly, output_file, options.nasm_args)
 
 def main():
     exec_compiler(sys.argv[1:])

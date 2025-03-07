@@ -1,4 +1,4 @@
-from semantic_analysis import Scope, ScopeFlags, TYPES, actions, tmp_int_parse
+from semantic_analysis import Scope, ScopeFlags, TYPES, actions, eval_const_expr
 
 from typing import Callable, Tuple
 
@@ -164,7 +164,7 @@ class Parser:
             case _:
                 return False
 
-    def expect_and_consume(self, expected: Tok, diag_id: str, msg: str) -> bool:
+    def expect_and_consume(self, expected: Tok, diag_id: str = "expected {}", msg: str = "") -> bool:
         if self.tok.ty == expected:
             self.consume_any_token()
             return False
@@ -717,6 +717,20 @@ class Parser:
                 if res is None:
                     res = actions.create_recovery_expr(self.tok.loc, arg.src_range[1], arg)
             return res, not_cast_expr
+        elif saved_kind == Tok.KW_CAST:
+            start_loc = self.consume_token()
+            assert self.tok.ty == Tok.LESS
+            self.consume_token()
+            ty = self.parse_type()
+            assert self.tok.ty == Tok.GREATER
+            self.consume_token()
+            assert self.tok.ty == Tok.LPAREN
+            self.consume_paren()
+            expr = self.parse_expr()
+            assert self.tok.ty == Tok.RPAREN
+            end_loc = self.consume_paren()
+            res = actions.act_on_explicit_cast(ty, expr, start_loc, end_loc)
+            return res, not_cast_expr
         elif saved_kind == Tok.KW_SIZEOF:
             start_loc = self.consume_token()
             assert self.tok.ty == Tok.LPAREN
@@ -808,12 +822,8 @@ class Parser:
                 continue
             if self.tok.ty == Tok.LSQUARE:
                 self.consume_bracket()
-                # allow integral const expression
-                assert self.tok.ty == Tok.NUM
-                count = tmp_int_parse(self.tok.value)
-                self.consume_token()
-                assert self.tok.ty == Tok.RSQUARE
-                self.consume_bracket()
+                count, _ = self.parse_integer_constexpr()
+                self.expect_and_consume(Tok.RSQUARE)
                 cur_type = ArrayType(cur_type, count)
                 continue
             break
@@ -942,7 +952,7 @@ class Parser:
         sub_stmt = None
 
         if self.tok.ty == Tok.RBRACE:
-            sub_stmt = actions.act_on_null_stmt(colon_loc)
+            sub_stmt = actions.act_on_null_stmt(colon_loc.value)
         else:
             sub_stmt = self.parse_stmt(stmt_ctx, None)
 
@@ -968,15 +978,15 @@ class Parser:
             colon_loc.value = expected_loc
         sub_stmt = None
         if self.tok.ty == Tok.RBRACE:
-            sub_stmt = actions.act_on_null_stmt(colon_loc)
+            sub_stmt = actions.act_on_null_stmt(colon_loc.value)
         else:
             sub_stmt = self.parse_stmt(stmt_ctx, None)
 
         if sub_stmt is None:
-            sub_stmt = actions.act_on_null_stmt(colon_loc)
+            sub_stmt = actions.act_on_null_stmt(colon_loc.value)
 
         #self.diagnose_label_followed_by_decl(sub_stmt)
-        return actions.act_on_default_stmt(default_loc, colon_loc, sub_stmt, self.get_cur_scope())
+        return actions.act_on_default_stmt(default_loc, colon_loc.value, sub_stmt, self.get_cur_scope())
 
     def parse_switch_stmt(self, trailing_else_loc: LocPtr):
         assert self.tok.ty == Tok.KW_SWITCH, "Not a switch stmt!"
@@ -1405,6 +1415,14 @@ class Parser:
             return cur_decl
         return self.parse_struct_decl_inner(cur_type, cur_decl)
 
+    def parse_integer_constexpr(self):
+        e = self.parse_expr()
+        end_loc = e.get_range()[1]
+        if not e.ty.is_integer_type():
+            diag(e.get_range()[0], "Expected integer constexpr", Diag.ERROR, [e.get_range()])
+            return 0
+        return eval_const_expr(e), end_loc
+
     def parse_enum_variant(self, enum_type, last_val):
         assert self.tok.ty == Tok.IDENT
         name = self.tok.value.val
@@ -1414,8 +1432,7 @@ class Parser:
             self.consume_token()
             assert self.tok.ty == Tok.NUM
             val = self.tok.value
-            last_val = tmp_int_parse(val)
-            end_loc = self.consume_token()
+            last_val, end_loc = self.parse_integer_constexpr()
         allow_more = self.tok.ty == Tok.COMMA
         if allow_more:
             self.consume_token()

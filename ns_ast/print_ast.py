@@ -143,7 +143,7 @@ def _stmt_str(stmt: Stmt) -> StrTreeNode:
     elif isinstance(stmt, DefaultStmt):
         return (_stmt_node_str(stmt), [_stmt_str(stmt.sub_stmt)])
     elif isinstance(stmt, CaseStmt):
-        return (_stmt_node_str(stmt), [_expr_str(stmt.expr), _stmt_str(stmt.sub_stmt)])
+        return (_stmt_node_str(stmt) + f" case {stmt.case_val}", [_stmt_str(stmt.sub_stmt)] if stmt.sub_stmt is not None else [])
     elif isinstance(stmt, ReturnStmt):
         n_str = _stmt_node_str(stmt)
         sub = []

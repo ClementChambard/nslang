@@ -4,11 +4,11 @@ fn socket(domain: i64, ty: i64, protocol: i64) -> i64 {
     return __builtin_syscall(41, domain, ty, protocol);
 }
 
-fn connect(sockfd: i64, addr: void*, addrlen: i64) -> i64 {
+fn connect(sockfd: i64, addr: SockAddr*, addrlen: i64) -> i64 {
     return __builtin_syscall(42, sockfd, addr, addrlen);
 }
 
-fn accept(sockfd: i64, addr: void*, addrlen: i64*) -> i64 {
+fn accept(sockfd: i64, addr: SockAddr*, addrlen: i64*) -> i64 {
     return __builtin_syscall(43, sockfd, addr, addrlen);
 }
 

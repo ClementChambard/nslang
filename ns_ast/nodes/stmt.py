@@ -64,16 +64,18 @@ class SwitchCase(Stmt):
 class CaseStmt(SwitchCase):
     # CaseStmtIsGNURange: bool
     sub_stmt: Stmt
-    expr: "Expr" # constant expr
+    case_val: int
 
-    def __init__(self, dl: Loc, cl: Loc, sub_stmt: Stmt, e: "Expr"):
+    def __init__(self, dl: Loc, cl: Loc, sub_stmt: Stmt, case_val: int):
         self.keyword_loc = dl
         self.colon_loc = cl
         self.sub_stmt = sub_stmt
         self.next_switch_case = None
-        self.expr = e
+        self.case_val = case_val
 
     def get_range(self) -> LocRge:
+        if self.sub_stmt is None:
+            return (self.keyword_loc, self.colon_loc)
         substmt = self.sub_stmt
         while isinstance(substmt, CaseStmt):
             substmt = substmt.sub_stmt

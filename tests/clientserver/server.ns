@@ -12,7 +12,7 @@ fn main() {
     addr.sin_addr.s_addr = INADDR_ANY;
 
     let result: i64;
-    result = bind(sockfd, &addr, sizeof(addr));
+    result = bind(sockfd, cast<SockAddr*>(&addr), sizeof(addr));
     if (result != 0) {
         print("Bind failed\n");
         return;
@@ -26,7 +26,7 @@ fn main() {
 
     let client_addr: SockAddrIn;
     let client_sockfd: i64;
-    client_sockfd = accept(sockfd, &client_addr, &result);
+    client_sockfd = accept(sockfd, cast<SockAddr*>(&client_addr), &result);
 
     let cnt: i64;
     let buf: i8[1024];

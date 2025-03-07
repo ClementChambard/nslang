@@ -23,14 +23,14 @@ struct SockAddrIn {
     sin_family: sa_family_t;
     sin_port: in_port_t;
     sin_addr: InAddr;
-    sin_zero: i64; // i8[sizeof(SockAddr) - sizeof(in_port_t) - sizeof(in_addr) - sizeof(sa_family_t)]
+    sin_zero: i8[sizeof(SockAddr) - sizeof(in_port_t) - sizeof(InAddr) - sizeof(sa_family_t)];
 };
 
 lib fn socket(domain: i64, ty: i64, protocol: i64) -> i64;
 
-lib fn connect(sockfd: i64, addr: void*, addrlen: i64) -> i64; // TODO: addr: SockAddr -> need explicit cast
+lib fn connect(sockfd: i64, addr: SockAddr*, addrlen: i64) -> i64;
 
-lib fn accept(sockfd: i64, addr: void*, addrlen: i64*) -> i64;
+lib fn accept(sockfd: i64, addr: SockAddr*, addrlen: i64*) -> i64;
 
 lib fn shutdown(sockfd: i64, how: i64) -> i64;
 

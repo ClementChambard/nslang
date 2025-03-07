@@ -1,6 +1,6 @@
 from typing import Tuple, Callable
 from ns_ast.nodes import *
-from semantic_analysis import tmp_int_parse, TYPES, StringLiteralParser
+from semantic_analysis import TYPES, StringLiteralParser, NumLiteralParser
 from utils.diagnostic import diag, Diag
 from .overload import ImplicitConversionSequence, perform_contextually_convert_to_bool, try_implicit_conversion
 
@@ -1188,9 +1188,12 @@ def act_on_conditional_op(question_loc: int, colon_loc: int, cond_expr: Expr, lh
     return ConditionalExpr(cond, question_loc, lhs, colon_loc, rhs, result, vk) #, ok
 
 def act_on_numeric_constant(tok: Token, udl_scope=None) -> IntegerLiteral:
-    # TODO: actually parse the token, and determine actual type
-    value = tmp_int_parse(tok.value)
-    return IntegerLiteral(value, TYPES["i64"], tok.loc)
+    parser = NumLiteralParser(tok)
+    if parser.had_error:
+        diag(tok.loc, "Error parsing numeric constant", Diag.ERROR)
+    if parser.ty.is_integer_type():
+        return IntegerLiteral(parser.res, parser.ty, tok.loc)
+    assert False, "float not implemented"
 
 def act_on_bool_literal(op_loc: Loc, kind: Tok) -> BoolLiteral:
     assert kind == Tok.KW_TRUE or kind == Tok.KW_FALSE, "Unknown boolean value"
@@ -1390,3 +1393,8 @@ def ignored_value_conversions(e: Expr) -> Expr:
 
 def act_on_nullptr_literal(loc: Loc) -> Expr:
     return IntegerLiteral(0, PointerType(Type()), loc)
+
+
+def act_on_explicit_cast(ty: Type, e: Expr, sl: Loc, el: Loc) -> CastExpr:
+    ics = try_implicit_conversion(e, ty, True)
+    return perform_implicit_conversion(e, ty, ics)

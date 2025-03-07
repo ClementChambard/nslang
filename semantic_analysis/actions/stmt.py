@@ -1,5 +1,5 @@
 from ns_ast.nodes import *
-from semantic_analysis import Scope, ScopeFlags
+from semantic_analysis import Scope, ScopeFlags, eval_const_expr
 from .expr import *
 from . import state
 
@@ -140,9 +140,10 @@ def act_on_case_expr(case_loc: Loc, val: Expr):
 
 def act_on_case_stmt(case_loc: Loc, lhs: Expr, colon_loc: Loc):
     assert lhs is not None, "missing LHS value"
+
     # if (getCurFunction()->SwitchStack.empty()) {Diag(CaseLoc, diag::err_case_not_in_switch); return StmtError();}
     # if (LHSVal.isInvalid()) {getCurFunction()->SwitchStack.back().setInt(true); return StmtError();}
-    cs = CaseStmt(case_loc, colon_loc, Stmt(), lhs)
+    cs = CaseStmt(case_loc, colon_loc, Stmt(), eval_const_expr(lhs))
     # getCurFunction()->SwitchStack.back().getPointer()->addSwitchCase(CS);
     return cs
 

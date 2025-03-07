@@ -50,10 +50,16 @@ def generate_lvalue_addr(e: Expr, ir: FullIr, cur_scope, scope_stack) -> List[Ir
         return generate_expr_ir(e, ir, cur_scope, scope_stack)
     # TEMP:
     if isinstance(e, DeclRefExpr) and isinstance(e.ty, PointerType):
-        var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
-        return [IrInstr(IrInstrKind.PSH, 1, var_id)]
+        if (g := ir.has_global(e.decl.name)) >= 0:
+            return [IrInstr(IrInstrKind.PSH, 4, g)]
+        else:
+            var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
+            return [IrInstr(IrInstrKind.PSH, 1, var_id)]
     elif isinstance(e, DeclRefExpr):
-        var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
+        if (g := ir.has_global(e.decl.name)) >= 0:
+            return [IrInstr(IrInstrKind.PSH, 3, g)]
+        else:
+            var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
         return [IrInstr(IrInstrKind.PSH, 2, var_id)]
     elif isinstance(e, MemberExpr):
         return generate_member_expr_addr(e, ir, cur_scope, scope_stack)
@@ -302,6 +308,8 @@ def generate_expr_ir(e, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
 
 def generate_stmt_ir(s: Stmt, ir: FullIr, cur_scope, scope_stack, stmt_gen_info) -> List[IrInstr]:
     out = []
+    if s is None:
+        return out
     if isinstance(s, CompoundStmt):
         for i in s.inner:
             g = generate_stmt_ir(i, ir, cur_scope, scope_stack, stmt_gen_info)

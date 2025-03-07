@@ -1,0 +1,75 @@
+#include io.nsh
+
+type SDL_Scancode = u32;
+type SDL_Keycode = u32;
+
+struct SDL_Keysym {
+    scancode: SDL_Scancode;
+    sym: SDL_Keycode;
+    mod: u16;
+    unused: u32;
+};
+
+struct SDL_KeyboardEvent {
+    type_: u32;
+    timestamp: u32;
+    windowID: u32;
+    state: u8;
+    repeat: u8;
+    padding2: u8;
+    padding3: u8;
+    keysym: SDL_Keysym;
+};
+
+struct SDL_Event {
+    type_: u32;
+    padding: i8[52];
+};
+
+lib fn SDL_Init(a: i64) -> i64;
+lib fn SDL_CreateWindow(name: i8*, x: i64, y: i64, w: i64, h: i64, f: i64) -> void*;
+lib fn SDL_GL_CreateContext(w: void*) -> void*;
+lib fn SDL_GL_SwapWindow(w: void*);
+lib fn SDL_PollEvent(e: SDL_Event*) -> i64;
+lib fn SDL_Quit();
+lib fn SDL_GL_DeleteContext(c: void*);
+lib fn SDL_DestroyWindow(w: void*);
+
+let window: void*;
+let context: void*;
+
+fn init() {
+    SDL_Init(0x20);
+    window = SDL_CreateWindow("test window", 0, 0, 1920, 1080, 2);
+    context = SDL_GL_CreateContext(window);
+}
+
+fn cleanup() {
+    SDL_GL_DeleteContext(context);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+}
+
+let key_event: SDL_KeyboardEvent*;
+let a: i64;
+
+fn main() {
+    init();
+    let c: bool;
+    c = true;
+    let ev: SDL_Event;
+    while (c) {
+        while (SDL_PollEvent(&ev)) {
+            if (ev.type_ == 0x100) c = false;
+            if (ev.type_ == 0x300) {
+                // Keydown
+                key_event = cast<SDL_KeyboardEvent*>(&ev);
+                print_num(key_event->keysym.sym);
+                println();
+            }
+        }
+        SDL_GL_SwapWindow(window);
+    }
+    cleanup();
+    print("HERE!\n");
+}

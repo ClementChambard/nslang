@@ -20,11 +20,12 @@ class StackVariables:
 
 CUR_STACK_VARS: StackVariables = StackVariables([])
 
-def fn_start(stack_frame: [int]) -> str:
+def fn_start(stack_frame: [int], is_main: bool) -> str:
     global CUR_STACK_VARS
     CUR_STACK_VARS = StackVariables(stack_frame)
     out = ""
-    out +=  "    push rbp\n"
+    if not is_main:
+        out +=  "    push rbp\n"
     out +=  "    mov rbp, rsp\n"
     if len(stack_frame) > 0:
         out += f"    sub rsp, {CUR_STACK_VARS.stack_size}\n"
@@ -292,10 +293,11 @@ def instr_codegen(i: IrInstr, ir: FullIr) -> str:
             out += f"    ret\n"
         case IrInstrKind.CAL:
             call_name = i.operand1
+            pic_str = "" if len(ir.functions[call_name].instructions) != 0 else " wrt ..plt"
             param_count = i.operand2
             for i in range(min(param_count, 6)):
                 out += "    pop " + ["rdi", "rsi", "rdx", "rcx", "r8", "r9"][i] + "\n"
-            out += f"    call {call_name}\n"
+            out += f"    call {call_name}{pic_str}\n"
             if (n := max(0, param_count) - 6) > 0:
                 out += "    add rsp, {}\n".format(n*8)
             if ir.functions[call_name].returns_value:
@@ -337,7 +339,7 @@ def instr_codegen(i: IrInstr, ir: FullIr) -> str:
 
 def end_main() -> str:
     out = ""
-    out += "    mov rax, 60\n"
+    out += "    mov rax, 231\n"
     out += "    mov rdi, 0\n" # TODO: return value
     out += "    syscall\n\n"
     return out
@@ -380,7 +382,7 @@ def remove_push_pop(instrs: str) -> str:
 
 def function_code(f, ir, is_main: bool) -> str:
     out = ""
-    out += fn_start(f.stack_frame)
+    out += fn_start(f.stack_frame, is_main)
     for i in f.instructions:
         if is_main and i.opcode == IrInstrKind.RET:
             out += end_main()

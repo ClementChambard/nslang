@@ -267,7 +267,7 @@ class ImplicitConversionSequence:
         return out
 
 
-def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionSequence, c_style: bool):
+def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionSequence, is_explicit: bool):
     from_type = from_e.ty
     scs.set_as_identity_conversion()
     scs.set_from_type(from_type)
@@ -318,7 +318,7 @@ def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionS
     # elif ((FromType->isRealFloatingType() && ToType->isIntegralType(S.Context)) || (FromType->isIntegralOrUnscopedEnumerationType() && ToType->isRealFloatingType())):
     #     scs.second = ImplicitConversionKind.FLOATING_INTEGRAL
     #     from_type = to_type.get_unqualified()
-    elif is_pointer_conversion(from_e, from_type, to_type, False):
+    elif is_pointer_conversion(from_e, from_type, to_type, is_explicit):
         scs.second = ImplicitConversionKind.POINTER_CONVERSION
         from_type = to_type.get_unqualified()
     # elif is_member_pointer_conversion(from_e, from_type, to_type, False, from_type):
@@ -332,7 +332,7 @@ def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionS
 
     if is_function_conversion(from_type, to_type, from_type):
         scs.third = ImplicitConversionKind.FUNCTION_CONVERSION
-    elif is_qualification_conversion(from_type, to_type, c_style):
+    elif is_qualification_conversion(from_type, to_type, is_explicit):
         scs.third = ImplicitConversionKind.QUALIFICATION
         from_type = to_type
     else:
@@ -346,6 +346,18 @@ def is_integral_promotion(from_e: Expr, from_type: Type, to_type: Type) -> bool:
         return False
 
     if from_type == TYPES["i8"] and to_type.kind == BuiltinTypeKind.I64:
+        return True
+    if from_type == TYPES["i16"] and to_type.kind == BuiltinTypeKind.I64:
+        return True
+    if from_type == TYPES["i32"] and to_type.kind == BuiltinTypeKind.I64:
+        return True
+    if from_type == TYPES["u8"] and to_type.kind == BuiltinTypeKind.I64:
+        return True
+    if from_type == TYPES["u16"] and to_type.kind == BuiltinTypeKind.I64:
+        return True
+    if from_type == TYPES["u32"] and to_type.kind == BuiltinTypeKind.I64:
+        return True
+    if from_type == TYPES["u64"] and to_type.kind == BuiltinTypeKind.I64:
         return True
     #if (Context.isPromotableIntegerType(FromType) and from_type != TYPES["bool"] and !FromType->isEnumeralType()) {
     #    if ((FromType->isSignedIntegerType() || Context.getTypeSize(FromType) < Context.getTypeSize(ToType))) {
@@ -368,9 +380,12 @@ def is_floating_conversion(from_type, to_type) -> bool:
     # TODO:
     return False
 
-def is_pointer_conversion(from_e, from_type, to_type, a) -> bool:
+def is_pointer_conversion(from_e, from_type, to_type, is_explicit) -> bool:
     if not isinstance(from_type, PointerType) or not isinstance(to_type, PointerType):
         return False
+    if is_explicit:
+        # TODO: always allow explicit pointer conversion ?
+        return True
     # TODO: define what 'compatible pointer' mean
     return type_is_void(from_type.subtype) or type_is_void(to_type.subtype)
 
@@ -382,9 +397,9 @@ def is_qualification_conversion(from_type: Type, to_type: Type, c_style: bool):
     # TODO:
     return False
 
-def try_implicit_conversion(f: Expr, to_type: Type, c_style: bool = False): #...
+def try_implicit_conversion(f: Expr, to_type: Type, is_explicit: bool = False): #...
     ics = ImplicitConversionSequence()
-    if is_standard_conversion(f, to_type, ics.val, c_style):
+    if is_standard_conversion(f, to_type, ics.val, is_explicit):
         ics.conversion_kind = 0
         return ics
     from_type = f.ty

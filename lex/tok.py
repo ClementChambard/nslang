@@ -82,6 +82,7 @@ class Tok(Enum):
     KW_BOOL = ENUM_N()
     KW_VOID = ENUM_N()
     KW_SIZEOF = ENUM_N()
+    KW_CAST = ENUM_N()
     KW_IF = ENUM_N()
     KW_ELSE = ENUM_N()
     KW_TRUE = ENUM_N()
@@ -185,6 +186,7 @@ class Tok(Enum):
             case self.KW_U64: return "u64"
             case self.KW_BOOL: return "bool"
             case self.KW_SIZEOF: return "sizeof"
+            case self.KW_CAST: return "cast"
             case self.KW_IF: return "if"
             case self.KW_ELSE: return "else"
             case self.KW_TRUE: return "true"
