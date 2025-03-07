@@ -1,0 +1,14 @@
+#include io.nsh
+
+fn print();
+
+fn test(a: i32) -> some_integer {
+    let b;
+    return a + b;
+}
+
+fn main() -> i32 {
+    main();
+    print("Hello, World\n", 1);
+    return 0;
+}

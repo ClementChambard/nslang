@@ -28,6 +28,8 @@
       "repository": "https://github.com/ClementChambard/nslang"
     }
   },
+  "highlights": "queries/highlights.scm",
+  "locals": "queries/locals.scm",
   "bindings": {
     "c": true,
     "go": true,
