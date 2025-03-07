@@ -1,0 +1,203 @@
+#include mem.nsh
+
+fn brk(addr: void*) -> i64 {
+    return __builtin_syscall(12, addr);
+}
+
+let __curbrk: void *;
+
+fn sbrk(size: i64) -> void* {
+    let update_brk: bool;
+    let oldbrk: void*;
+
+    update_brk = __curbrk == nullptr;
+
+    if (update_brk) {
+        __curbrk = brk(nullptr);
+        if (__curbrk < 0)
+            return -1;
+    }
+
+    if (size == 0)
+        return __curbrk;
+
+    oldbrk = __curbrk;
+
+    if (size > 0) {
+        if (oldbrk + size < oldbrk) {
+            // overflow
+            return -1;
+        }
+    }
+    if (size < 0) {
+        if (oldbrk < -size) {
+            return -1;
+        }
+    }
+
+    __curbrk = brk(oldbrk + size);
+    if (__curbrk < 0)
+        return -1;
+
+    return oldbrk;
+}
+
+fn memcpy(dst: void*, src: void*, size: i64) -> void* {
+    let i: i64;
+    let dst_as_i8: i8*;
+    let src_as_i8: i8*;
+    dst_as_i8 = dst;
+    src_as_i8 = src;
+    i = 0;
+    while (i < size) {
+        dst_as_i8[i] = src_as_i8[i];
+        i += 1;
+    }
+    return dst;
+}
+
+fn memset(dst: void*, byte: i8, size: i64) -> void* {
+    let i: i64;
+    let dst_as_i8: i8*;
+    dst_as_i8 = dst;
+    i = 0;
+    while (i < size) {
+        dst_as_i8[i] = byte;
+        i += 1;
+    }
+    return dst;
+}
+
+
+struct __malloc_block_meta {
+    size: i64;
+    next: __malloc_block_meta*;
+    is_free: i64;
+    magic: i64;
+};
+
+let __malloc_global_base: void *;
+
+fn __malloc_find_free_block(last: __malloc_block_meta**, size: i64) -> __malloc_block_meta* {
+    let current: __malloc_block_meta*;
+    current = __malloc_global_base;
+    while (true) {
+        if (current == nullptr) {
+            break;
+        }
+        if (current->is_free != 0) {
+            if (current->size >= size) break;
+        }
+        *last = current;
+        current = current->next;
+    }
+    return current;
+}
+
+fn __malloc_request_space(last: __malloc_block_meta*, size: i64) -> __malloc_block_meta* {
+    let block: __malloc_block_meta*;
+    block = sbrk(0);
+    let request: void*;
+    request = sbrk(size + sizeof(__malloc_block_meta));
+    if (request == -1) {
+        return nullptr;
+    }
+    if (request != block) {
+        return nullptr;
+    }
+    if (last != nullptr) {
+        last->next = block;
+    }
+    block->size = size;
+    block->next = nullptr;
+    block->is_free = 0;
+    block->magic = 0x12345678;
+    return block;
+}
+
+fn __malloc_block_to_data(block: __malloc_block_meta*) -> void* {
+    let block_voidptr: void*;
+    let block_bytes: i8*;
+    block_voidptr = block;
+    block_bytes = block_voidptr;
+    return &block_bytes[sizeof(__malloc_block_meta)];
+}
+
+fn __malloc_data_to_block(data: void*) -> __malloc_block_meta* {
+    let block_voidptr: void*;
+    let block_bytes: i8*;
+    block_voidptr = data;
+    block_bytes = block_voidptr;
+    return &block_bytes[-sizeof(__malloc_block_meta)];
+}
+
+fn malloc(size: i64) -> void* {
+    let block: __malloc_block_meta*;
+    if (size <= 0) {
+        return nullptr;
+    }
+
+    if (__malloc_global_base == nullptr) {
+        block = __malloc_request_space(nullptr, size);
+        if (block == nullptr) {
+            return nullptr;
+        }
+        __malloc_global_base = block;
+    } else {
+        let last: __malloc_block_meta*;
+        last = __malloc_global_base;
+        block = __malloc_find_free_block(&last, size);
+        if (block == nullptr) {
+            block = __malloc_request_space(last, size);
+            if (block == nullptr) {
+                return nullptr;
+            }
+        } else {
+            block->is_free = 0;
+            block->magic = 0x77777777;
+        }
+    }
+
+    return __malloc_block_to_data(block);
+}
+
+fn free(block: void*) {
+    if (block == nullptr) return;
+
+    let meta: __malloc_block_meta*;
+    meta = __malloc_data_to_block(block);
+    // assert(meta->is_free == 0)
+    // assert(meta->magic == 0x12345678 || meta->magic == 0x77777777)
+    meta->is_free = 1;
+    meta->magic = 0x55555555;
+}
+
+fn realloc(ptr: void*, size: i64) -> void* {
+    if (ptr == nullptr) {
+        return malloc(size);
+    }
+
+    let block_ptr: __malloc_block_meta*;
+    block_ptr = __malloc_data_to_block(ptr);
+    if (block_ptr->size >= size) {
+        return ptr;
+    }
+
+    let new_ptr: void*;
+    new_ptr = malloc(size);
+    if (new_ptr == nullptr) {
+        return nullptr;
+    }
+    memcpy(new_ptr, ptr, block_ptr->size);
+    free(ptr);
+    return new_ptr;
+}
+
+fn calloc(nelem: i64, elsize: i64) -> void* {
+    let size: i64;
+    size = nelem * elsize;
+    let ptr: void*;
+    ptr = malloc(size);
+    memset(ptr, 0, size);
+    return ptr;
+}

@@ -1,0 +1,44 @@
+#include net.nsh
+
+fn socket(domain: i64, ty: i64, protocol: i64) -> i64 {
+    return __builtin_syscall(41, domain, ty, protocol);
+}
+
+fn connect(sockfd: i64, addr: void*, addrlen: i64) -> i64 {
+    return __builtin_syscall(42, sockfd, addr, addrlen);
+}
+
+fn accept(sockfd: i64, addr: void*, addrlen: i64*) -> i64 {
+    return __builtin_syscall(43, sockfd, addr, addrlen);
+}
+
+fn shutdown(sockfd: i64, how: i64) -> i64 {
+    return __builtin_syscall(48, sockfd, how);
+}
+
+fn bind(sockfd: i64, addr: void*, addrlen: i64) -> i64 {
+    return __builtin_syscall(49, sockfd, addr, addrlen);
+}
+
+fn listen(sockfd: i64, backlog: i64) -> i64 {
+    return __builtin_syscall(50, sockfd, backlog);
+}
+
+fn send(sockfd: i64, buf: void*, size: i64, flags: i64) -> i64 {
+    return __builtin_syscall(44, sockfd, buf, size, flags, nullptr, 0);
+}
+
+fn recv(sockfd: i64, buf: void*, size: i64, flags: i64) -> i64 {
+    return __builtin_syscall(45, sockfd, buf, size, flags, nullptr, 0);
+}
+
+
+// void create_ipv4_address(char const* ip, int port, struct sockaddr_in* out_addr) {
+//     out_addr->sin_port = htons(port);
+//     out_addr->sin_family = AF_INET;
+//     if (!ip) {
+//         out_addr->sin_addr.s_addr = INADDR_ANY;
+//     } else {
+//         inet_pton(AF_INET, ip, &out_addr->sin_addr.s_addr);
+//     }
+// }

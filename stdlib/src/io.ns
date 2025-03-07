@@ -1,0 +1,75 @@
+#include io.nsh
+
+fn read(fd: i64, buf: void*, count: i64) -> i64 {
+    return __builtin_syscall(0, fd, buf, count);
+}
+
+fn write(fd: i64, buf: void*, count: i64) -> i64 {
+    return __builtin_syscall(1, fd, buf, count);
+}
+
+fn println() {
+    let buf: i8[1];
+
+    buf[0] = 10;
+    write(STDOUT, buf, 1);
+}
+
+fn print(str: i8*) {
+    let size: i64;
+
+    size = 0;
+    while (str[size] != 0) {
+        size += 1;
+    }
+    write(STDOUT, str, size);
+}
+
+fn print_num(num: i64) {
+    let buf: i8[22];
+    let p: i8*;
+    let digit: i64;
+    let neg: bool;
+
+    neg = num < 0;
+    if (neg) num = -num; // technically, this could overflow
+
+    p = &buf[21];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num % 10;
+        num /= 10;
+        digit += 48;
+        *p = digit;
+    } while (num != 0);
+
+    if (neg) {
+       p -= 1;
+       *p = 45;
+    }
+
+    print(p);
+}
+
+fn hex_char(digit: i64) -> i64 {
+   if (digit <= 9) return digit + 48;
+   return digit + 55;
+}
+
+fn print_hex(num: i64) {
+    let buf: i8[19];
+    let p: i8*;
+    p = &buf[18];
+    *p = 0;
+    do {
+        p -= 1;
+        *p = hex_char(num & 0xF);
+        num >>= 4;
+    } while (num != 0);
+    p -= 1;
+    *p = 120;
+    p -= 1;
+    *p = 48;
+    print(p);
+}

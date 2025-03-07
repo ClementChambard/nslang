@@ -1,0 +1,9 @@
+#include file.nsh
+
+fn open(filename: i8*, flags: i64, mode: i64) -> i64 {
+    return __builtin_syscall(2, filename, flags, mode);
+}
+
+fn close(fd: i64) -> i64 {
+    return __builtin_syscall(3, fd);
+}

@@ -1,0 +1,54 @@
+#include stdlib.nsh
+#include darray.nsh
+
+fn darray_init(this: DArray*, el_size: i64) {
+    this->data = nullptr;
+    this->el_size = el_size;
+    this->size = 0;
+    this->capacity = 0;
+}
+
+fn darray_free(this: DArray*) {
+    free(this->data);
+    this->capacity = 0;
+    this->size = 0;
+    this->data = nullptr;
+    this->el_size = 0;
+}
+
+fn darray_get_ptr(this: DArray*, i: i64) -> void* {
+    let data_bytes: i8*;
+    data_bytes = this->data;
+    let offset: i64;
+    offset = this->el_size * i;
+    return &data_bytes[offset];
+}
+
+fn darray_get_cpy(this: DArray*, i: i64, buf: void*) {
+    let data_bytes: i8*;
+    data_bytes = this->data;
+    let offset: i64;
+    offset = this->el_size * i;
+    memcpy(buf, &data_bytes[offset], this->el_size);
+}
+
+fn darray_push(this: DArray*, el: void*) {
+    let cur_size: i64;
+    cur_size = this->size * this->el_size;
+    if ((cur_size + this->el_size) > this->capacity) {
+        let new_capacity: i64;
+        if (this->capacity == 0) new_capacity = this->el_size * 4;
+        else new_capacity = this->capacity * 2;
+        this->data = realloc(this->data, new_capacity);
+        this->capacity = new_capacity;
+    }
+    let copy_to: i8*;
+    copy_to = this->data;
+    copy_to = &copy_to[cur_size];
+    memcpy(copy_to, el, this->el_size);
+    this->size = this->size + 1;
+}
+
+fn darray_pop(this: DArray*) {
+    this->size = this->size - 1;
+}

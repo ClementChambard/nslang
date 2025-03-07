@@ -1,0 +1,5 @@
+#include io.nsh
+
+fn main() {
+    print("Hello, World\n");
+}

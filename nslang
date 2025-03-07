@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+
+ANY_FILE_HAD_ERROR = False
+
+import sys
+from dataclasses import dataclass
+from typing import List
+from utils.diagnostic import fatal_error
+
+@dataclass
+class CompileSingleFileOptions:
+    print_ast: bool
+    print_ir: bool
+    print_asm: bool
+    optimize_ast: bool
+    optimize_ir: bool
+    input_files: List[str]
+    output_files: None | List[str]
+    output_file_set: bool
+    include_paths: List[str]
+    compile_only: bool
+    link_libraries: List[str]
+
+    def __init__(self):
+        self.print_ast = False
+        self.print_ir = False
+        self.print_asm = False
+        self.optimize_ast = True
+        self.optimize_ir = True
+        self.input_files = []
+        self.output_files = None
+        self.compile_only = False
+        self.include_paths = ["stdlib/include"]
+        self.link_libraries = ["stdlib/bin/stdlib.a"]
+
+    def check_args(self):
+        if len(self.input_files) == 0:
+            fatal_error("no input file")
+
+        if self.compile_only:
+            for i in self.input_files:
+                if not i.endswith(".ns"):
+                    fatal_error(f"unknown input file '{i}'")
+            if len(self.input_files) > 1 and self.output_files is not None:
+                fatal_error("cannot specify '-o' with '-c' with multiple files")
+            if self.output_files is None:
+                self.output_files = [a[:-3] + ".o" for a in self.input_files]
+            return
+
+        for i in self.input_files:
+            if not (i.endswith(".ns") or i.endswith(".o") or i.endswith(".a") or i.endswith(".so")):
+                fatal_error(f"unknown input file '{i}'")
+        if self.output_files is None:
+            self.output_files = ["a.out"]
+
+    def read_from_args(self, args):
+        i = 0
+        while i < len(args):
+            if args[i] == "-o":
+                if self.output_files is not None:
+                    fatal_error("'-o' already set")
+                if i >= len(args) - 1:
+                    fatal_error("missing filename after '-o'")
+                i += 1
+                self.output_files = [args[i]]
+            elif args[i] == "-c":
+                self.compile_only = True
+            elif args[i] == "-ast":
+                self.print_ast = True
+            elif args[i] == "-ir":
+                self.print_ir = True
+            elif args[i].startswith("-I"):
+                self.include_paths.append(args[i][2:])
+            elif args[i] == "-nostdlib":
+                self.include_paths.remove("stdlib/include")
+                self.link_libraries.remove("stdlib/bin/stdlib.a")
+            else:
+                self.input_files.append(args[i])
+            i += 1
+
+
+def exec_compiler(args):
+    options = CompileSingleFileOptions()
+    options.read_from_args(args)
+    options.check_args()
+    if options.compile_only:
+        for i, o in zip(options.input_files, options.output_files):
+            compile(i, o, options)
+    else:
+        to_compile = [f for f in options.input_files if f.endswith(".ns")]
+        others = [f for f in options.input_files if not f.endswith(".ns")]
+        others += options.link_libraries
+        temporary_files = [f[:-3] + ".o" for f in to_compile]
+        for i, o in zip(to_compile, temporary_files):
+            compile(i, o, options)
+        if ANY_FILE_HAD_ERROR:
+            fatal_error("compilation had error. aborted.")
+        import subprocess
+        subprocess.run(["ld", "-o", options.output_files[0]] + temporary_files + others)
+        subprocess.run(["rm"] + temporary_files)
+
+
+
+
+def compile(input_file, output_file, options: CompileSingleFileOptions):
+    from lex import Lexer
+    from parse import Parser
+    from ns_ast import optimize_ast, print_ast
+    from ir import generate_ir, run_ir_interpreter, print_ir, optimize_ir
+    from codegen import x86_64, create_object_from_asm
+    from utils.diagnostic import compilation_had_errors, reset_errors
+
+    lexer = Lexer()
+    lexer.add_include_paths(options.include_paths)
+
+    lexer.enter_source_file(input_file)
+
+    parser = Parser(lexer)
+
+    ast = parser.parse_translation_unit()
+
+    if compilation_had_errors():
+        reset_errors()
+        global ANY_FILE_HAD_ERROR
+        ANY_FILE_HAD_ERROR = True
+        return
+
+    if options.print_ast:
+        print_ast(ast)
+
+    if options.optimize_ast:
+        optimize_ast(ast)
+
+    ir = generate_ir(ast)
+    if options.optimize_ir:
+        ir = optimize_ir(ir)
+
+    if options.print_ir:
+        print_ir(ir)
+
+    # run_ir_interpreter(ir)
+
+    assembly = x86_64.compile_ir(ir)
+
+    if options.print_asm:
+        print(assembly)
+
+    create_object_from_asm(assembly, output_file)
+
+def main():
+    exec_compiler(sys.argv[1:])
+    # input_files = ["stdlib.ns", "main.ns"]
+    # output_obj = ["stdlib.o", "main.o"]
+    # output_exe = "a.out"
+    # from codegen import link_executable
+    #
+    # for i, o in zip(input_files, output_obj):
+    #     compile(i, o)
+    #
+    #
+    # link_executable(output_obj, outputfilename = output_exe)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,39 @@
+#include io.nsh
+#include net.nsh
+#include file.nsh
+
+fn main() {
+    let sockfd: i64;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    let addr: SockAddrIn;
+    addr.sin_family = AF_INET;
+    addr.sin_port = 0x1234;
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    let result: i64;
+    result = bind(sockfd, &addr, sizeof(addr));
+    if (result != 0) {
+        print("Bind failed\n");
+        return;
+    }
+
+    result = listen(sockfd, 10);
+    if (result != 0) {
+        print("Listen failed\n");
+        return;
+    }
+
+    let client_addr: SockAddrIn;
+    let client_sockfd: i64;
+    client_sockfd = accept(sockfd, &client_addr, &result);
+
+    let cnt: i64;
+    let buf: i8[1024];
+    cnt = recv(client_sockfd, buf, 1023, 0);
+    buf[cnt] = 0;
+    print(buf);
+
+    shutdown(sockfd, SHUT_RDWR);
+    close(sockfd);
+}

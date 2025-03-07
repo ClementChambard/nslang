@@ -1,0 +1,40 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "nslang",
+      "camelcase": "NSLang",
+      "title": "ns lang",
+      "scope": "source.nslang",
+      "file-types": [
+        "ns",
+        "nsh"
+      ],
+      "injection-regex": "^nslang$",
+      "class-name": "TreeSitterNslang"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Nslang grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "ClementChambard",
+        "email": "clement.chambard@gmail.com"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/ClementChambard/nslang"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true,
+    "zig": false
+  }
+}

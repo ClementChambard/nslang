@@ -1,0 +1,26 @@
+#include io.nsh
+#include net.nsh
+#include file.nsh
+
+fn main() {
+    let sockfd: i64;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    let addr: SockAddrIn;
+    addr.sin_family = AF_INET;
+    addr.sin_port = 0x1234;
+    addr.sin_addr.s_addr = 0x0100007f; // 127.0.0.1
+
+    // addr.sin_addr.s_addr = 0x4100a8c0; // 192.168.0.65
+
+    let result: i64;
+    result = connect(sockfd, &addr, sizeof(addr));
+    if (result != 0) {
+        print("Connect failed\n");
+        return;
+    }
+
+    send(sockfd, "Hello, from client\n", 19, 0);
+
+    close(sockfd);
+}
