@@ -12,14 +12,19 @@ class CompileSingleFileOptions:
     print_ast: bool
     print_ir: bool
     print_asm: bool
+    comment_ir_in_asm: bool
     optimize_ast: bool
     optimize_ir: bool
     input_files: List[str]
-    output_files: None | List[str]
+    output_files: List[str]
     output_file_set: bool
     include_paths: List[str]
     compile_only: bool
     link_libraries: List[str]
+    use_tst_emit: bool
+    no_runtime: bool
+    to_remove: List[str]
+    clang_args: List[str]
 
     def __init__(self):
         self.print_ast = False
@@ -28,12 +33,17 @@ class CompileSingleFileOptions:
         self.optimize_ast = True
         self.optimize_ir = True
         self.input_files = []
-        self.output_files = None
+        self.output_files = []
         self.compile_only = False
-        self.include_paths = ["stdlib/include"]
-        self.link_libraries = ["stdlib/bin/stdlib.a"]
+        self.include_paths = ["/home/clement/dev/nslang/stdlib/include"]
+        self.link_libraries = ["/home/clement/dev/nslang/stdlib/bin/stdlib.a", "/home/clement/dev/nslang/stdlib/bin/runtime.a"]
         self.nasm_args = []
         self.ld_args = []
+        self.use_tst_emit = False
+        self.no_runtime = False
+        self.to_remove = []
+        self.clang_args = []
+        self.comment_ir_in_asm = False
 
     def check_args(self):
         if len(self.input_files) == 0:
@@ -43,23 +53,25 @@ class CompileSingleFileOptions:
             for i in self.input_files:
                 if not i.endswith(".ns"):
                     fatal_error(f"unknown input file '{i}'")
-            if len(self.input_files) > 1 and self.output_files is not None:
+            if len(self.input_files) > 1 and len(self.output_files) > 0:
                 fatal_error("cannot specify '-o' with '-c' with multiple files")
-            if self.output_files is None:
+            if len(self.output_files) == 0:
                 self.output_files = [a[:-3] + ".o" for a in self.input_files]
             return
 
         for i in self.input_files:
             if not (i.endswith(".ns") or i.endswith(".o") or i.endswith(".a") or i.endswith(".so")):
                 fatal_error(f"unknown input file '{i}'")
-        if self.output_files is None:
+        if len(self.output_files) == 0:
             self.output_files = ["a.out"]
+        if self.comment_ir_in_asm and not self.print_asm:
+            fatal_error("cannot specify '-irinasm' without '-asm'")
 
     def read_from_args(self, args):
         i = 0
         while i < len(args):
             if args[i] == "-o":
-                if self.output_files is not None:
+                if len(self.output_files) > 0:
                     fatal_error("'-o' already set")
                 if i >= len(args) - 1:
                     fatal_error("missing filename after '-o'")
@@ -68,7 +80,9 @@ class CompileSingleFileOptions:
             elif args[i].startswith("--nasm{") and args[i].endswith("}"):
                 self.nasm_args += args[i][7:-1].split()
             elif args[i].startswith("--ld{") and args[i].endswith("}"):
-                self.ld_args += args[i][7:-1].split()
+                self.ld_args += args[i][5:-1].split()
+            elif args[i].startswith("--llvm{") and args[i].endswith("}"):
+                self.clang_args += args[i][7:-1].split()
             elif args[i] == "-c":
                 self.compile_only = True
             elif args[i] == "-ast":
@@ -77,11 +91,18 @@ class CompileSingleFileOptions:
                 self.print_asm = True
             elif args[i] == "-ir":
                 self.print_ir = True
+            elif args[i] == "-tstllvm":
+                self.use_tst_emit = True
+            elif args[i] == "-irinasm":
+                self.comment_ir_in_asm = True
+            elif args[i] == "-noruntime":
+                self.no_runtime = True
+                self.link_libraries.remove("/home/clement/dev/nslang/stdlib/bin/runtime.a")
             elif args[i].startswith("-I"):
                 self.include_paths.append(args[i][2:])
             elif args[i] == "-nostdlib":
-                self.include_paths.remove("stdlib/include")
-                self.link_libraries.remove("stdlib/bin/stdlib.a")
+                self.include_paths.remove("/home/clement/dev/nslang/stdlib/include")
+                self.link_libraries.remove("/home/clement/dev/nslang/stdlib/bin/stdlib.a")
             elif args[i].startswith("-l"):
                 self.link_libraries.append(args[i])
             else:
@@ -96,6 +117,9 @@ def exec_compiler(args):
     if options.compile_only:
         for i, o in zip(options.input_files, options.output_files):
             compile(i, o, options)
+        if len(options.to_remove) > 0:
+            import subprocess
+            subprocess.run(["rm"] + options.to_remove)
     else:
         to_compile = [f for f in options.input_files if f.endswith(".ns")]
         others = [f for f in options.input_files if not f.endswith(".ns")]
@@ -109,7 +133,8 @@ def exec_compiler(args):
         additional_ld_flags = [] # ["--dynamic-linker=/lib64/ld-linux-x86-64.so.2", "-pie"]
         cmd = ["gcc", "-nostdlib", "-o", options.output_files[0]] + temporary_files + others + options.ld_args + additional_ld_flags
         subprocess.run(cmd)
-        subprocess.run(["rm"] + temporary_files)
+        if len(temporary_files) > 0 or len(options.to_remove) > 0:
+            subprocess.run(["rm"] + temporary_files + options.to_remove)
 
 
 
@@ -118,9 +143,10 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
     from lex import Lexer
     from parse import Parser
     from ns_ast import optimize_ast, print_ast
-    from ir import generate_ir, run_ir_interpreter, print_ir, optimize_ir
+    from ir import generate_ir, print_ir, optimize_ir
     from codegen import x86_64, create_object_from_asm
     from utils.diagnostic import compilation_had_errors, reset_errors
+    from emit_tst import tst_emit
 
     lexer = Lexer()
     lexer.add_include_paths(options.include_paths)
@@ -129,12 +155,28 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
 
     parser = Parser(lexer)
 
-    ast = parser.parse_translation_unit()
+    ast = parser.parse()
 
     if compilation_had_errors():
         reset_errors()
         global ANY_FILE_HAD_ERROR
         ANY_FILE_HAD_ERROR = True
+        return
+
+    if options.use_tst_emit:
+        output_file = output_file[:-1] + "ll"
+        options.to_remove.append(output_file)
+        tst_emit(ast, output_file)
+        if options.print_ir:
+            with open(output_file, "r") as f:
+                print(f.read())
+        import subprocess
+        if options.print_asm:
+            subprocess.run(["clang", "-S", output_file, "-o", ".tmp.S"] + options.clang_args)
+            with open(".tmp.S", "r") as f:
+                print(f.read())
+            subprocess.run(["rm", ".tmp.S"])
+        subprocess.run(["clang", "-c", output_file] + options.clang_args)
         return
 
     if options.print_ast:
@@ -150,9 +192,7 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
     if options.print_ir:
         print_ir(ir)
 
-    # run_ir_interpreter(ir)
-
-    assembly = "default rel\n" + x86_64.compile_ir(ir)
+    assembly = x86_64.compile_ir(ir, options.comment_ir_in_asm)
 
     if options.print_asm:
         print(assembly)

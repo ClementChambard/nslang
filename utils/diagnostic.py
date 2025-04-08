@@ -1,6 +1,6 @@
 from typing import Self, Tuple
 from lex import Loc, LocRge, LOC_INVALID, OpenedFile, Token
-from utils.my_enum import Enum, ENUM_INIT, ENUM_N
+import enum
 
 
 def fatal_error(msg):
@@ -8,10 +8,11 @@ def fatal_error(msg):
     exit(1)
 
 
-class Diag(Enum):
-    WARNING = ENUM_INIT()
-    ERROR = ENUM_N()
-    NOTE = ENUM_N()
+class Diag(enum.Enum):
+    WARNING = enum.auto()
+    ERROR = enum.auto()
+    NOTE = enum.auto()
+    UNIMPLEMENTED = enum.auto()
 
 _HAD_ERRORS: bool = False
 _LAST_LOC: Loc = 0
@@ -50,6 +51,8 @@ class DiagRenderer:
                 os += "34m"
             case Diag.ERROR:
                 os += "31m"
+            case Diag.UNIMPLEMENTED:
+                os += "31m"
             case _:
                 os += "37m"
         return os
@@ -64,6 +67,8 @@ class DiagRenderer:
                 os += "note: "
             case Diag.ERROR:
                 os += "error: "
+            case Diag.UNIMPLEMENTED:
+                os += "unimplemented: "
             case _:
                 os += "UNKDIAG: "
         if show_colors:

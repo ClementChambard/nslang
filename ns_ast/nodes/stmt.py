@@ -4,9 +4,15 @@ from lex import Loc, LocRge
 from . import Decl
 
 
+type StmtChild = "Stmt | Decl"
+
 @dataclass
 class Stmt:
-    pass
+    def get_range(self) -> LocRge:
+        return (0, 0)
+
+    def children(self) -> List[StmtChild]:
+        return []
 
 
 @dataclass
@@ -22,6 +28,9 @@ class DeclStmt(Stmt):
 
     def get_range(self) -> LocRge:
         return (self.start_loc, self.end_loc)
+
+    def children(self) -> List[StmtChild]:
+        return [self.decl]
 
 
 @dataclass
@@ -52,6 +61,9 @@ class CompoundStmt(Stmt):
     def get_range(self) -> LocRge:
         return (self.lbrace_loc, self.rbrace_loc)
 
+    def children(self) -> List[StmtChild]:
+        return list(self.inner)
+
 
 @dataclass
 class SwitchCase(Stmt):
@@ -81,6 +93,9 @@ class CaseStmt(SwitchCase):
             substmt = substmt.sub_stmt
         return (self.keyword_loc, substmt.get_range()[1])
 
+    def children(self) -> List[StmtChild]:
+        return [self.sub_stmt]
+
 
 @dataclass
 class DefaultStmt(SwitchCase):
@@ -95,8 +110,8 @@ class DefaultStmt(SwitchCase):
     def get_range(self) -> LocRge:
         return (self.keyword_loc, self.sub_stmt.get_range()[1])
 
-
-# CPP: Label stmt, Attributed Stmt
+    def children(self) -> List[StmtChild]:
+        return [self.sub_stmt]
 
 
 @dataclass
@@ -128,6 +143,9 @@ class IfStmt(Stmt):
             return (self.if_loc, self.else_stmt.get_range()[1])
         return (self.if_loc, self.then_stmt.get_range()[1])
 
+    def children(self):
+        return [self.cond, self.then_stmt] + [[], [self.else_stmt]][self.else_stmt is not None]
+
 
 @dataclass
 class SwitchStmt(Stmt):
@@ -151,6 +169,9 @@ class SwitchStmt(Stmt):
     def get_range(self) -> LocRge:
         return (self.switch_loc, self.body.get_range()[1])
 
+    def children(self):
+        return [self.cond, self.body]
+
 
 @dataclass
 class WhileStmt(Stmt):
@@ -172,6 +193,9 @@ class WhileStmt(Stmt):
     def get_range(self) -> LocRge:
         return (self.while_loc, self.while_stmt.get_range()[1])
 
+    def children(self):
+        return [self.cond, self.while_stmt]
+
 
 @dataclass
 class DoStmt(Stmt):
@@ -190,6 +214,9 @@ class DoStmt(Stmt):
 
     def get_range(self) -> LocRge:
         return (self.do_loc, self.rparen_loc)
+
+    def children(self):
+        return [self.expr, self.body]
 
 
 @dataclass
@@ -238,3 +265,6 @@ class ReturnStmt(Stmt):
         if self.ret_expr is None:
             return (self.return_loc, self.return_loc)
         return (self.return_loc, self.ret_expr.get_range()[1])
+
+    def children(self) -> List[StmtChild]:
+        return [self.ret_expr] if self.ret_expr is not None else []

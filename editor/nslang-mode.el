@@ -73,23 +73,8 @@
 (defconst nslang-builtins
   `("__builtin_syscall"))
 
-(defvar nslang-mode-literal-boolean nil)
-
-(defun nslang-mode-generate-literal-boolean ()
-  (let ((literal-bool-regexp (regexp-opt `("true" "false") 'words)))
-    (setq nslang-mode-literal-boolean
-          `(
-            ;; highlight
-            (,literal-bool-regexp (0 font-lock-constant-face))))))
-
-(defvar nslang-mode-literal-nullptr nil)
-
-(defun nslang-mode-generate-literal-nullptr ()
-  (let ((literal-nullptr-regexp (regexp-opt `("nullptr") 'words)))
-    (setq nslang-mode-literal-nullptr
-          `(
-            ;; highlight
-            (,literal-nullptr-regexp (0 font-lock-constant-face))))))
+(defconst nslang-literals
+  `("true" "false" "nullptr" "vaarg"))
 
 (defvar nslang-mode-keywords nil)
 
@@ -97,14 +82,16 @@
   (let ((types-regexp (regexp-opt nslang-types 'words))
         (preprocessors-regexp (regexp-opt nslang-preprocessors))
         (keywords-regexp (regexp-opt nslang-keywords 'words))
-        (builtins-regexp (regexp-opt nslang-builtins 'words)))
+        (builtins-regexp (regexp-opt nslang-builtins 'words))
+        (literals-regexp (regexp-opt nslang-literals 'words)))
     (setq nslang-mode-keywords
           `(
             ;; All kinds of keywords here
             (,types-regexp (0 font-lock-type-face))
             (,builtins-regexp (0 font-lock-builtin-face))
             (,preprocessors-regexp (0 font-lock-preprocessor-face))
-            (,keywords-regexp (0 font-lock-keyword-face))))))
+            (,keywords-regexp (0 font-lock-keyword-face))
+            (,literals-regexp (0 font-lock-constant-face))))))
 
 (defvar nslang-mode-literal-integer)
 
@@ -125,18 +112,14 @@
 (defun nslang-mode-add-keywords (&optional mode)
   "Install keywords"
   (font-lock-add-keywords mode (nslang-mode-generate-keywords) nil)
-  (font-lock-add-keywords mode (nslang-mode-generate-literal-boolean) nil)
   (font-lock-add-keywords mode (nslang-mode-generate-literal-integer) nil)
-  (font-lock-add-keywords mode (nslang-mode-generate-literal-nullptr) nil)
   ;(font-lock-add-keywords mode (nslang-mode-generate-literal-string) nil)
   )
 
 (defun nslang-mode-remove-keywords (&optional mode)
   "Remove keywords"
   (font-lock-remove-keywords mode nslang-mode-keywords)
-  (font-lock-remove-keywords mode nslang-mode-literal-boolean)
   (font-lock-remove-keywords mode nslang-mode-literal-integer)
-  (font-lock-remove-keywords mode nslang-mode-literal-nullptr)
   ;(font-lock-remove-keywords mode nslang-mode-literal-string)
   )
 

@@ -1,0 +1,114 @@
+#include str.nsh
+#include mem.nsh
+#include io.nsh
+
+fn test_cstr_functions() {
+    print("TESTS cstr functions\n");
+    let s_1: CStr;
+    let s_2: CStr;
+    s_1 = "abcde";
+    s_2 = "fg";
+
+    // strlen
+    print("%s = %i (expected: %i)\n", "strlen(s_1)", strlen(s_1), 5);
+    print("%s = %i (expected: %i)\n", "strlen(s_2)", strlen(s_2), 2);
+
+    // strdup
+    let s_1_dup: CStr;
+    s_1_dup = strdup(s_1);
+    print("%s = '%s' (expected: '%s')\n", "strdup(s_1)", s_1_dup, s_1);
+
+    // strcmp
+    print("%s = %i (expected: %i)\n", "strcmp(s_1, s_2)", strcmp(s_1, s_2), 'a' - 'f');
+    print("%s = %i (expected: %i)\n", "strcmp(s_1, s_1_dup)", strcmp(s_1, s_1_dup), 0);
+
+    // strcat
+    let s_cat: CStr;
+    s_cat = strcat(s_1, s_2);
+    print("%s = '%s' (expected: '%s')\n", "strcat(s_1, s_2)", s_cat, "abcdefg");
+
+    // cleanup
+    free(s_1_dup);
+    free(s_cat);
+    print("\n");
+}
+
+fn test_str_functions() {
+    print("TESTS str functions\n");
+    let s: Str;
+
+    // str_from_cstr
+    str_from_cstr(&s, "  abc def \t ");
+    print("%s = '%S' (expected: '%s')\n", "str_from_cstr(\"  abc def \\t \")", &s, "  abc def \t ");
+
+    // str_strip
+    str_strip(&s);
+    print("%s = '%S' (expected: '%s')\n", "str_strip(&s)", &s, "abc def");
+
+    print("\n");
+}
+
+fn test_string_functions() {
+    print("TESTS string functions\n");
+    let s1: String;
+    string_init(&s1);
+    print("string_init(s1) = '%S' (expected: '')\n", &s1.inner);
+
+    string_from_cstr(&s1, "test string");
+    print("string_from_cstr(s1, \"test string\") = '%S' (expected: 'test string')\n", &s1.inner);
+
+    string_reserve(&s1, 100);
+    print("string_reserve(s1, 100) -> capacity = %i (expected: 100)\n", s1.capacity);
+
+    string_shrink_to_fit(&s1);
+    print("string_shrink_to_fit(s1) -> capacity = %i (expected: %i)\n", s1.capacity, s1.inner.len);
+
+    string_truncate(&s1, 10);
+    print("string_truncate(s1, 10) = '%S' (expected: 'test strin')\n", &s1.inner);
+
+    let popped: char;
+    popped = string_pop(&s1);
+    print("string_pop(s1) = '%S' -> popped = '%c' (expected: 'test stri' 'n')\n", &s1.inner, popped);
+
+    popped = string_remove(&s1, 1);
+    print("string_remove(s1, 1) = '%S' -> removed = '%c' (expected: 'tst stri' 'e')\n", &s1.inner, popped);
+
+    string_push(&s1, 'n');
+    print("string_push(s1, 'n') = '%S' (expected: 'tst strin')\n", &s1.inner);
+
+    string_push_cstr(&s1, "g tst");
+    print("string_push_cstr(s1, \"g tst\") = '%S' (expected: 'tst string tst')\n", &s1.inner);
+
+    string_push_format(&s1, "%i", 1);
+    print("string_push_format(s1, \"%%i\", 1) = '%S' (expected: 'tst string tst1')\n", &s1.inner);
+    string_destroy(&s1);
+
+    string_format(&s1, "test %i (0x%X)", 10, 10);
+    print("string_format(\"test %%i (0x%%X)\", 10, 10) = '%S' (expected: 'test 10 (0xA)')\n", &s1.inner);
+
+    string_insert(&s1, 4, 's');
+    print("string_insert(s1, 4, 's') = '%S' (expected: 'tests 10 (0xA)')\n", &s1.inner);
+
+    string_insert_cstr(&s1, 6, "500");
+    print("string_insert_cstr(s1, 6, \"500\") = '%S' (expected: 'tests 50010 (0xA)')\n", &s1.inner);
+
+    let s2: String;
+    string_split_off(&s1, 9, &s2);
+    print("string_split_off(s1, 9, s2) = '%S' / '%S' (expected: 'tests 500' '10 (0xA)')\n", &s1.inner, &s2.inner);
+
+    string_clear(&s2);
+    print("string_clear(s2) = '%S' (expected: '')\n", &s2.inner);
+
+    string_clone_from(&s2, &s1);
+    print("string_clone_from(s1) = '%S' (expected: '%S')", &s2.inner, &s1.inner);
+
+    string_destroy(&s1);
+    string_destroy(&s2);
+    print("\n");
+}
+
+fn main() {
+    test_cstr_functions();
+    test_str_functions();
+    test_string_functions();
+}

@@ -1,14 +1,15 @@
-from utils.my_enum import Enum, ENUM_INIT, ENUM_N
+from ns_ast.nodes.stmt import StmtChild
 from . import Stmt, ValueDecl, Type, BuiltinType, BuiltinTypeKind
 from lex import Loc, LocRge, Tok, IdentInfo
 from dataclasses import dataclass
-from typing import List
+from typing import List, Self
+import enum
 
 
-class ValueKind(Enum):
-    PRVALUE = (ENUM_INIT(),)
-    LVALUE = (ENUM_N(),)
-    XVALUE = (ENUM_N(),)
+class ValueKind(enum.Enum):
+    PRVALUE = (enum.auto(),)
+    LVALUE = (enum.auto(),)
+    XVALUE = (enum.auto(),)
 
 
 @dataclass
@@ -100,33 +101,36 @@ class ParenExpr(Expr):
     def get_range(self) -> LocRge:
         return (self.l, self.r)
 
+    def children(self) -> List[StmtChild]:
+        return [self.val]
 
-class UnaryOperatorKind(Enum):
-    POSTINC = ENUM_INIT()
-    POSTDEC = ENUM_N()
-    PREINC = ENUM_N()
-    PREDEC = ENUM_N()
-    ADDROF = ENUM_N()
-    DEREF = ENUM_N()
-    PLUS = ENUM_N()
-    MINUS = ENUM_N()
-    NOT = ENUM_N()
-    LNOT = ENUM_N()
 
-    @staticmethod
-    def from_tok(t: Tok):
+class UnaryOperatorKind(enum.Enum):
+    POSTINC = enum.auto()
+    POSTDEC = enum.auto()
+    PREINC = enum.auto()
+    PREDEC = enum.auto()
+    ADDROF = enum.auto()
+    DEREF = enum.auto()
+    PLUS = enum.auto()
+    MINUS = enum.auto()
+    NOT = enum.auto()
+    LNOT = enum.auto()
+
+    @classmethod
+    def from_tok(cls, t: Tok):
         match t:
-            case Tok.PLUSPLUS: return UnaryOperatorKind.PREINC
-            case Tok.MINUSMINUS: return UnaryOperatorKind.PREDEC
-            case Tok.AMP: return UnaryOperatorKind.ADDROF
-            case Tok.STAR: return UnaryOperatorKind.DEREF
-            case Tok.PLUS: return UnaryOperatorKind.PLUS
-            case Tok.MINUS: return UnaryOperatorKind.MINUS
-            case Tok.TILDE: return UnaryOperatorKind.NOT
-            case Tok.EXCLAIM: return UnaryOperatorKind.LNOT
+            case Tok.PLUSPLUS: return cls.PREINC
+            case Tok.MINUSMINUS: return cls.PREDEC
+            case Tok.AMP: return cls.ADDROF
+            case Tok.STAR: return cls.DEREF
+            case Tok.PLUS: return cls.PLUS
+            case Tok.MINUS: return cls.MINUS
+            case Tok.TILDE: return cls.NOT
+            case Tok.EXCLAIM: return cls.LNOT
 
 
-    def as_str(self) -> str:
+    def __str__(self) -> str:
         match self:
             case self.POSTINC: return "post ++"
             case self.POSTDEC: return "post --"
@@ -162,77 +166,79 @@ class UnaryExpr(Expr):
     def get_range(self) -> LocRge:
         return (self.arg.get_range()[0], self.loc) if self.is_postfix() else (self.loc, self.arg.get_range()[1])
 
+    def children(self) -> List[StmtChild]:
+        return [self.arg]
 
-class BinaryOperatorKind(Enum):
-    MUL = ENUM_INIT()
-    DIV = ENUM_N()
-    REM = ENUM_N()
-    ADD = ENUM_N()
-    SUB = ENUM_N()
-    SHL = ENUM_N()
-    SHR = ENUM_N()
-    LT = ENUM_N()
-    GT = ENUM_N()
-    LE = ENUM_N()
-    GE = ENUM_N()
-    EQ = ENUM_N()
-    NE = ENUM_N()
-    AND = ENUM_N()
-    XOR = ENUM_N()
-    OR = ENUM_N()
-    LAND = ENUM_N()
-    LOR = ENUM_N()
-    ASSIGN = ENUM_N()
-    MULASSIGN = ENUM_N()
-    DIVASSIGN = ENUM_N()
-    REMASSIGN = ENUM_N()
-    ADDASSIGN = ENUM_N()
-    SUBASSIGN = ENUM_N()
-    SHLASSIGN = ENUM_N()
-    SHRASSIGN = ENUM_N()
-    ANDASSIGN = ENUM_N()
-    XORASSIGN = ENUM_N()
-    ORASSIGN = ENUM_N()
 
-    def is_compound_assignment(self):
-        return self in [BinaryOperatorKind.MULASSIGN, BinaryOperatorKind.DIVASSIGN, BinaryOperatorKind.REMASSIGN, BinaryOperatorKind.ADDASSIGN, BinaryOperatorKind.SUBASSIGN, BinaryOperatorKind.SHLASSIGN,
-                        BinaryOperatorKind.SHRASSIGN, BinaryOperatorKind.ANDASSIGN, BinaryOperatorKind.XORASSIGN, BinaryOperatorKind.ORASSIGN]
+class BinaryOperatorKind(enum.Enum):
+    MUL = enum.auto()
+    DIV = enum.auto()
+    REM = enum.auto()
+    ADD = enum.auto()
+    SUB = enum.auto()
+    SHL = enum.auto()
+    SHR = enum.auto()
+    LT = enum.auto()
+    GT = enum.auto()
+    LE = enum.auto()
+    GE = enum.auto()
+    EQ = enum.auto()
+    NE = enum.auto()
+    AND = enum.auto()
+    XOR = enum.auto()
+    OR = enum.auto()
+    LAND = enum.auto()
+    LOR = enum.auto()
+    ASSIGN = enum.auto()
+    MULASSIGN = enum.auto()
+    DIVASSIGN = enum.auto()
+    REMASSIGN = enum.auto()
+    ADDASSIGN = enum.auto()
+    SUBASSIGN = enum.auto()
+    SHLASSIGN = enum.auto()
+    SHRASSIGN = enum.auto()
+    ANDASSIGN = enum.auto()
+    XORASSIGN = enum.auto()
+    ORASSIGN = enum.auto()
 
-    @staticmethod
-    def from_tok(t: Tok):
+    def is_compound_assignment(self) -> bool:
+        return self.value >= self.MULASSIGN.value and self.value <= self.ORASSIGN.value
+
+    @classmethod
+    def from_tok(cls, t: Tok): #  -> Self
         match t:
-            case Tok.STAR: return BinaryOperatorKind.MUL
-            case Tok.SLASH: return BinaryOperatorKind.DIV
-            case Tok.PERCENT: return BinaryOperatorKind.REM
-            case Tok.PLUS: return BinaryOperatorKind.ADD
-            case Tok.MINUS: return BinaryOperatorKind.SUB
-            case Tok.LESSLESS: return BinaryOperatorKind.SHL
-            case Tok.GREATERGREATER: return BinaryOperatorKind.SHR
-            case Tok.LESS: return BinaryOperatorKind.LT
-            case Tok.GREATER: return BinaryOperatorKind.GT
-            case Tok.LESSEQUAL: return BinaryOperatorKind.LE
-            case Tok.GREATEREQUAL: return BinaryOperatorKind.GE
-            case Tok.EQUALEQUAL: return BinaryOperatorKind.EQ
-            case Tok.EXCLAIMEQUAL: return BinaryOperatorKind.NE
-            case Tok.AMP: return BinaryOperatorKind.AND
-            case Tok.CARET: return BinaryOperatorKind.XOR
-            case Tok.PIPE: return BinaryOperatorKind.OR
-            case Tok.AMPAMP: return BinaryOperatorKind.LAND
-            case Tok.PIPEPIPE: return BinaryOperatorKind.LOR
-            case Tok.EQUAL: return BinaryOperatorKind.ASSIGN
-            case Tok.STAREQUAL: return BinaryOperatorKind.MULASSIGN
-            case Tok.SLASHEQUAL: return BinaryOperatorKind.DIVASSIGN
-            case Tok.PERCENTEQUAL: return BinaryOperatorKind.REMASSIGN
-            case Tok.PLUSEQUAL: return BinaryOperatorKind.ADDASSIGN
-            case Tok.MINUSEQUAL: return BinaryOperatorKind.SUBASSIGN
-            case Tok.LESSLESSEQUAL: return BinaryOperatorKind.SHLASSIGN
-            case Tok.GREATERGREATEREQUAL: return BinaryOperatorKind.SHRASSIGN
-            case Tok.AMPEQUAL: return BinaryOperatorKind.ANDASSIGN
-            case Tok.CARETEQUAL: return BinaryOperatorKind.XORASSIGN
-            case Tok.PIPEEQUAL: return BinaryOperatorKind.ORASSIGN
+            case Tok.STAR: return cls.MUL
+            case Tok.SLASH: return cls.DIV
+            case Tok.PERCENT: return cls.REM
+            case Tok.PLUS: return cls.ADD
+            case Tok.MINUS: return cls.SUB
+            case Tok.LESSLESS: return cls.SHL
+            case Tok.GREATERGREATER: return cls.SHR
+            case Tok.LESS: return cls.LT
+            case Tok.GREATER: return cls.GT
+            case Tok.LESSEQUAL: return cls.LE
+            case Tok.GREATEREQUAL: return cls.GE
+            case Tok.EQUALEQUAL: return cls.EQ
+            case Tok.EXCLAIMEQUAL: return cls.NE
+            case Tok.AMP: return cls.AND
+            case Tok.CARET: return cls.XOR
+            case Tok.PIPE: return cls.OR
+            case Tok.AMPAMP: return cls.LAND
+            case Tok.PIPEPIPE: return cls.LOR
+            case Tok.EQUAL: return cls.ASSIGN
+            case Tok.STAREQUAL: return cls.MULASSIGN
+            case Tok.SLASHEQUAL: return cls.DIVASSIGN
+            case Tok.PERCENTEQUAL: return cls.REMASSIGN
+            case Tok.PLUSEQUAL: return cls.ADDASSIGN
+            case Tok.MINUSEQUAL: return cls.SUBASSIGN
+            case Tok.LESSLESSEQUAL: return cls.SHLASSIGN
+            case Tok.GREATERGREATEREQUAL: return cls.SHRASSIGN
+            case Tok.AMPEQUAL: return cls.ANDASSIGN
+            case Tok.CARETEQUAL: return cls.XORASSIGN
+            case Tok.PIPEEQUAL: return cls.ORASSIGN
             case _: assert False, "Invalid token for bin op"
 
-    def as_str(self) -> str:
+    def __str__(self) -> str:
         match self:
             case self.MUL: return "*"
             case self.DIV: return "/"
@@ -287,34 +293,30 @@ class BinaryExpr(Expr):
     def get_range(self) -> LocRge:
         return (self.lhs.get_range()[0], self.rhs.get_range()[1])
 
+    def children(self) -> List[StmtChild]:
+        return [self.lhs, self.rhs]
+
 
 @dataclass
-class CompoundAssignExpr(Expr):
-    opc: BinaryOperatorKind
-    op_loc: Loc
-    lhs: Expr
-    rhs: Expr
+class CompoundAssignExpr(BinaryExpr):
     def __init__(self, lhs: Expr, rhs: Expr, opc: BinaryOperatorKind, res_ty: Type, vk: ValueKind, op_loc: Loc): # ctx, ok, fpfeatures
         self.ty = res_ty
         self.value_kind = vk # ok
         self.opc = opc
-        # assert(!is_compound_assignment_op())
+        # assert(is_compound_assignment_op())
         self.op_loc = op_loc
         self.lhs = lhs
         self.rhs = rhs
         # excluded_overflow_pattern = False, fpfeatures ...
-
-    def get_range(self) -> LocRge:
-        return (self.lhs.get_range()[0], self.rhs.get_range()[1])
 
 
 @dataclass
 class CallExpr(Expr):
     rparen_loc: Loc
     fn: Expr
-    args: [Expr]
+    args: List[Expr]
 
-    def __init__(self, fn: Expr, args: [Expr], ty: Type, vk: ValueKind, rparen_loc: Loc): # fpfeatures, min_num_args = 0, uses_adl = NotADL
+    def __init__(self, fn: Expr, args: List[Expr], ty: Type, vk: ValueKind, rparen_loc: Loc): # fpfeatures, min_num_args = 0, uses_adl = NotADL
         self.ty = ty
         self.value_kind = vk
         self.fn = fn
@@ -323,6 +325,9 @@ class CallExpr(Expr):
 
     def get_range(self) -> LocRge:
         return (self.fn.get_range()[0], self.rparen_loc)
+
+    def children(self) -> List[StmtChild]:
+        return [self.fn, *self.args]
 
 
 @dataclass
@@ -343,6 +348,9 @@ class SizeofExpr(Expr):
 
     def get_range(self) -> LocRge:
         return (self.sizeof_loc, self.rparen_loc)
+
+    def children(self) -> List[StmtChild]:
+        return [] if self.expr is None else [self.expr]
 
 
 @dataclass
@@ -366,6 +374,9 @@ class MemberExpr(Expr):
     def get_range(self) -> LocRge:
         return (self.base.get_range()[0], self.oploc)
 
+    def children(self) -> List[StmtChild]:
+        return [self.base]
+
 
 @dataclass
 class ArraySubscriptExpr(Expr):
@@ -382,6 +393,9 @@ class ArraySubscriptExpr(Expr):
 
     def get_range(self) -> LocRge:
         return (self.lhs.get_range()[0], self.rbracket_loc)
+
+    def children(self) -> List[StmtChild]:
+        return [self.lhs, self.rhs]
 
 
 @dataclass
@@ -402,7 +416,10 @@ class ConditionalExpr(Expr):
         self.rhs = rhs
 
     def get_range(self) -> LocRge:
-        return (self.cond.get_range()[0], self.rhs.get_range[1])
+        return (self.cond.get_range()[0], self.rhs.get_range()[1])
+
+    def children(self) -> List[StmtChild]:
+        return [self.cond, self.lhs, self.rhs]
 
 
 @dataclass
@@ -420,6 +437,9 @@ class RecoveryExpr(Expr):
 
     def get_range(self) -> LocRge:
         return (self.begin_loc, self.end_loc)
+
+    def children(self) -> List[StmtChild]:
+        return list(self.sub_exprs)
 
 
 @dataclass
@@ -440,34 +460,37 @@ class BuiltinExpr(Expr):
     def get_range(self) -> LocRge:
         return (self.builtin_loc, self.rparen_loc)
 
+    def children(self) -> List[StmtChild]:
+        return list(self.args)
 
-class CastKind(Enum):
-    NOOP = ENUM_INIT()
-    TO_VOID = ENUM_N()
-    LVALUE_TO_RVALUE = ENUM_N()
-    POINTER_TO_BOOLEAN = ENUM_N()
-    INTEGRAL_TO_BOOLEAN = ENUM_N()
-    INTEGRAL_CAST = ENUM_N()
-    ARRAY_TO_POINTER_DECAY = ENUM_N()
-    FUNCTION_TO_POINTER_DECAY = ENUM_N()
+
+class CastKind(enum.Enum):
+    NOOP = enum.auto()
+    TO_VOID = enum.auto()
+    LVALUE_TO_RVALUE = enum.auto()
+    POINTER_TO_BOOLEAN = enum.auto()
+    INTEGRAL_TO_BOOLEAN = enum.auto()
+    INTEGRAL_CAST = enum.auto()
+    ARRAY_TO_POINTER_DECAY = enum.auto()
+    FUNCTION_TO_POINTER_DECAY = enum.auto()
 
     def __str__(self) -> str:
         match self:
-            case CastKind.NOOP:
+            case self.NOOP:
                 return "Noop"
-            case CastKind.TO_VOID:
+            case self.TO_VOID:
                 return "ToVoid"
-            case CastKind.POINTER_TO_BOOLEAN:
+            case self.POINTER_TO_BOOLEAN:
                 return "PointerToBoolean"
-            case CastKind.INTEGRAL_TO_BOOLEAN:
+            case self.INTEGRAL_TO_BOOLEAN:
                 return "IntegralToBoolean"
-            case CastKind.INTEGRAL_CAST:
+            case self.INTEGRAL_CAST:
                 return "IntegralCast"
-            case CastKind.LVALUE_TO_RVALUE:
+            case self.LVALUE_TO_RVALUE:
                 return "LValueToRValue"
-            case CastKind.ARRAY_TO_POINTER_DECAY:
+            case self.ARRAY_TO_POINTER_DECAY:
                 return "ArrayToPointerDecay"
-            case CastKind.FUNCTION_TO_POINTER_DECAY:
+            case self.FUNCTION_TO_POINTER_DECAY:
                 return "FunctionToPointerDecay"
             case _:
                 assert False, "Unhandled match case"
@@ -487,11 +510,29 @@ class CastExpr(Expr):
     def get_range(self) -> LocRge:
         return self.op.get_range()
 
+    def children(self) -> List[StmtChild]:
+        return [self.op]
+
 
 @dataclass
 class ImplicitCastExpr(CastExpr):
     def __init__(self, ty: Type, kind: CastKind, op: Expr, vk: ValueKind):
         super().__init__(ty, vk, kind, op)
+
+
+@dataclass
+class VAArgExpr(Expr):
+    s: Loc
+    e: Loc
+
+    def __init__(self, ty: Type, s: Loc, e: Loc):
+        self.s = s
+        self.e = e
+        self.ty = ty
+        self.value_kind = ValueKind.PRVALUE
+
+    def get_range(self) -> LocRge:
+        return (self.s, self.e)
 
 
 def ignore_parens_single_step(e: Expr) -> Expr:

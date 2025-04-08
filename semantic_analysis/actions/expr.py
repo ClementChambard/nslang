@@ -1,8 +1,9 @@
 from typing import Tuple, Callable
 from ns_ast.nodes import *
-from semantic_analysis import TYPES, StringLiteralParser, NumLiteralParser
+from semantic_analysis import TYPES, StringLiteralParser, NumLiteralParser, CharLiteralParser
 from utils.diagnostic import diag, Diag
 from .overload import ImplicitConversionSequence, perform_contextually_convert_to_bool, try_implicit_conversion
+from . import state
 
 def get_expr_range(e: Expr | None) -> Tuple[int, int]:
     if e is None: return (LOC_INVALID, LOC_INVALID)
@@ -830,29 +831,34 @@ def act_on_postfix_unary_op(scope, op_loc: Loc, op: Tok, arg: Expr) -> UnaryExpr
 def lookup_field_in_struct(struct_type: StructType, name: str):
     assert isinstance(struct_type, StructType)
     offset = 0
-    for f in struct_type.fields:
-        al = f.ty.get_align()
+    for n, ty in struct_type.fields.items():
+        al = ty.get_align()
         if (a := (offset % al)) != 0:
             offset += al - a
-        if f.name == name:
-            return f, offset
-        offset += f.ty.get_size()
+        if n == name:
+            return (n, ty), offset
+        offset += ty.get_size()
     return None, 0
 
 def build_member_reference_expr(base: Expr, base_type: Type, oploc: Loc, is_arrow: bool, ss, first_qualifier_in_scope, name_info, scope, name: UnqualifiedId) -> Expr:
     # TODO:
     struct_type = None
     if is_arrow:
-        assert isinstance(base_type, PointerType) and isinstance(base_type.subtype, StructType)
+        if not (isinstance(base_type, PointerType) and isinstance(base_type.subtype, StructType)):
+            diag(base.get_range()[0], "base expr of '->' is not a pointer to a struct", Diag.ERROR, [base.get_range()])
+            assert False
+        base = default_lvalue_conversion(base)
         struct_type = base_type.subtype
     else:
-        assert isinstance(base_type, StructType)
+        if not isinstance(base_type, StructType):
+            diag(base.get_range()[0], "base expr of '.' is not a struct", Diag.ERROR, [base.get_range()])
+            assert False
         struct_type = base_type
     field, offset = lookup_field_in_struct(struct_type, name_info)
     if field is None:
-        assert False, "Unknown field"
-
-    return MemberExpr(base, is_arrow, oploc, name_info, field.ty, ValueKind.LVALUE, offset)
+        diag(name.start_location, f"unknown field '{name.value.val}' for '{struct_type}'", Diag.ERROR)
+        assert False
+    return MemberExpr(base, is_arrow, oploc, name_info, field[1], ValueKind.LVALUE, offset)
 
 def act_on_member_access_expr(scope, base: Expr, oploc: Loc, opkind: Tok, ss, name: UnqualifiedId) -> Expr:
     # DeclarationNameInfo name_info
@@ -882,7 +888,10 @@ def create_builtin_array_subscript_expr(base: Expr, lloc: Loc, idx: Expr, rloc: 
         if isinstance(op.ty, ArrayType) and op.value_kind != ValueKind.LVALUE:
             vk = ValueKind.XValue
 
-    rhs_expr = default_function_array_lvalue_conversion(rhs_expr);
+    lhs_expr = default_lvalue_conversion(lhs_expr)
+    if lhs_expr is None:
+        return None
+    rhs_expr = default_function_array_lvalue_conversion(rhs_expr)
     if rhs_expr is None:
         return None
     lhs_ty, rhs_ty = lhs_expr.ty, rhs_expr.ty
@@ -944,22 +953,25 @@ def create_builtin_array_subscript_expr(base: Expr, lloc: Loc, idx: Expr, rloc: 
 
 def gather_arguments_for_call(call_loc: Loc, fdecl: FnDecl, proto: FunctionType, args: List[Expr], all_args: List[Expr]) -> bool:
     num_params = len(proto.param_types)
-    for i in range(num_params):
-        proto_arg_type = proto.param_types[i]
-        param = fdecl.param_decls[i]
-        if i >= len(args):
-            return True
-        arg = args[i];
-        # InitializedEntity Entity = InitializedEntity::InitializeParameter(Context, Param, proto_arg_type)
-        # ExprResult ArgE = PerformCopyInitialization(Entity, SourceLocation(), Arg, false, false);
-        # if (ArgE.isInvalid()) return true;
-        # Arg = ArgE.getAs<Expr>();
-        # CheckArrayAccess(Arg);
-        # CheckStaticArrayArgument(CallLoc, Param, Arg);
+    for i in range(len(args)):
+        arg = args[i]
+        if i < num_params:
+            proto_arg_type = proto.param_types[i]
+            param = fdecl.param_decls[i]
+            if i >= len(args):
+                return True
+            # InitializedEntity Entity = InitializedEntity::InitializeParameter(Context, Param, proto_arg_type)
+            # ExprResult ArgE = PerformCopyInitialization(Entity, SourceLocation(), Arg, false, false);
+            # if (ArgE.isInvalid()) return true;
+            # Arg = ArgE.getAs<Expr>();
+            # CheckArrayAccess(Arg);
+            # CheckStaticArrayArgument(CallLoc, Param, Arg);
 
-        # TODO: actual
-        ics = try_implicit_conversion(arg, proto_arg_type)
-        arg = perform_implicit_conversion(arg, proto_arg_type, ics)
+            # TODO: actual
+            ics = try_implicit_conversion(arg, proto_arg_type)
+            arg = perform_implicit_conversion(arg, proto_arg_type, ics)
+        else:
+            arg = default_function_array_lvalue_conversion(arg)
 
         all_args.append(arg)
 
@@ -970,13 +982,14 @@ def convert_arguments_for_call(call: CallExpr, fn: Expr, fdecl: FnDecl, proto: F
     num_params = len(proto.param_types)
 
     if len(args) < num_params:
-        diag(rparen_loc, f"too few arguments to function call, expected {num_params}, have {len(args)}", Diag.ERROR) # << Fn->getSourceRange()
-        diag(fdecl.get_range()[0], f"{fdecl.name} declared here", Diag.NOTE) # << FDecl->getParametersSourceRange();
+        expected = ["expected", "expected at least"][fdecl.is_vararg]
+        diag(rparen_loc, f"too few arguments to function call, {expected} {num_params}, have {len(args)}", Diag.ERROR, [fn.get_range()])
+        diag(fdecl.get_range()[0], f"{fdecl.name} declared here", Diag.NOTE, [fdecl.get_params_range()])
         return True
 
-    if len(args) > num_params:
-        diag(args[num_params].get_range()[0], f"too many arguments to function call, expected {num_params}, have {len(args)}", Diag.ERROR) # << Fn->getSourceRange() << SourceRange(Args[NumParams]->getBeginLoc(), Args.back()->getEndLoc());
-        diag(fdecl.get_range()[0], f"{fdecl.name} declared here", Diag.NOTE) # << FDecl->getParametersSourceRange();
+    if len(args) > num_params and not fdecl.is_vararg:
+        diag(args[num_params].get_range()[0], f"too many arguments to function call, expected {num_params}, have {len(args)}", Diag.ERROR, [fn.get_range()])
+        diag(fdecl.get_range()[0], f"{fdecl.name} declared here", Diag.NOTE, [fdecl.get_params_range()])
         call.args = call.args[:num_params]
         return True
 
@@ -990,7 +1003,7 @@ def convert_arguments_for_call(call: CallExpr, fn: Expr, fdecl: FnDecl, proto: F
 
     return False
 
-def build_resolved_call_expr(fn: Expr, ndecl: NamedDecl, lparen_loc: Loc, args: [Expr], rparen_loc: Loc, is_exec_config: bool, uses_adl: int = 0) -> Expr:
+def build_resolved_call_expr(fn: Expr, ndecl: NamedDecl, lparen_loc: Loc, args: List[Expr], rparen_loc: Loc, is_exec_config: bool, uses_adl: int = 0) -> Expr:
     fnty = ndecl.ty
     assert isinstance(fnty, FunctionType)
 
@@ -1001,7 +1014,7 @@ def build_resolved_call_expr(fn: Expr, ndecl: NamedDecl, lparen_loc: Loc, args: 
 
     return the_call
 
-def build_call_expr(scope, fn: Expr, lparen_loc: Loc, arg_exprs: [Expr], rparen_loc: Loc, is_exec_config: bool, allow_recovery: bool) -> Expr:
+def build_call_expr(scope, fn: Expr, lparen_loc: Loc, arg_exprs: List[Expr], rparen_loc: Loc, is_exec_config: bool, allow_recovery: bool) -> Expr:
     # result = maybe_convert_paren_list_expr_to_paren_expr(scope, fn);
     # if result is None: return None
     # fn = result
@@ -1041,7 +1054,7 @@ def build_call_expr(scope, fn: Expr, lparen_loc: Loc, arg_exprs: [Expr], rparen_
 
     return build_resolved_call_expr(fn, ndecl, lparen_loc, arg_exprs, rparen_loc, is_exec_config);
 
-def act_on_call_expr(scope, fn: Expr, lparen_loc: Loc, arg_exprs: [Expr], rparen_loc: Loc) -> Expr:
+def act_on_call_expr(scope, fn: Expr, lparen_loc: Loc, arg_exprs: List[Expr], rparen_loc: Loc) -> Expr:
     call = build_call_expr(scope, fn, lparen_loc, arg_exprs, rparen_loc, False, True)
     if call is None:
         return call
@@ -1059,7 +1072,7 @@ def act_on_call_expr(scope, fn: Expr, lparen_loc: Loc, arg_exprs: [Expr], rparen
     # }
     return call;
 
-def act_on_array_subscript_expr(scope, base: Expr, lbloc: Loc, arg_exprs: [Expr], rbloc: Loc) -> Expr:
+def act_on_array_subscript_expr(scope, base: Expr, lbloc: Loc, arg_exprs: List[Expr], rbloc: Loc) -> Expr:
     # if (((base->getType()->isRecordType() || (ArgExprs.size() != 1 || isa<PackExpansionExpr>(ArgExprs[0]) || ArgExprs[0]->getType()->isRecordType())))) {
     #   return CreateOverloadedArraySubscriptExpr(lbLoc, rbLoc, base, ArgExprs);
     # }
@@ -1075,6 +1088,9 @@ def act_on_array_subscript_expr(scope, base: Expr, lbloc: Loc, arg_exprs: [Expr]
 
 def perform_implicit_conversion(f: Expr, to_type: Type, ics: ImplicitConversionSequence): # Action, CCK
     # TODO: doit
+    if ics.conversion_kind != 0:
+        diag(f.get_range()[0], "Invalid conversion", Diag.ERROR, [f.get_range()])
+        print(f, to_type)
     assert ics.conversion_kind == 0 # TODO:
     scs = ics.val
     from_type = f.ty
@@ -1195,6 +1211,14 @@ def act_on_numeric_constant(tok: Token, udl_scope=None) -> IntegerLiteral:
         return IntegerLiteral(parser.res, parser.ty, tok.loc)
     assert False, "float not implemented"
 
+def act_on_character_constant(tok: Token, udl_scope=None) -> IntegerLiteral:
+    parser = CharLiteralParser(tok)
+    if parser.had_error:
+        diag(tok.loc, "Error parsing char constant", Diag.ERROR)
+    if parser.ty.is_integer_type():
+        return IntegerLiteral(parser.res, parser.ty, tok.loc)
+    assert False, "incorrect type for char constant"
+
 def act_on_bool_literal(op_loc: Loc, kind: Tok) -> BoolLiteral:
     assert kind == Tok.KW_TRUE or kind == Tok.KW_FALSE, "Unknown boolean value"
     return BoolLiteral(kind == Tok.KW_TRUE, TYPES["bool"], op_loc)
@@ -1314,12 +1338,6 @@ def create_recovery_expr(
     # if t.is_null() or t->is_undeduced_type() or not context.recovery_ast_type: t = context.dependent_ty
     return RecoveryExpr(t, begin, end, sub_exprs)
 
-def act_on_builtin_hexdump_expr(builtin_tok, rparen_loc, args):
-    assert len(args) == 1, "missing arg for hexdump"
-    arg = args[0]
-    arg = default_function_array_lvalue_conversion(arg)
-    return BuiltinExpr(builtin_tok.value.val, builtin_tok.loc, [arg], rparen_loc)
-
 def act_on_builtin_syscall_expr(builtin_tok, rparen_loc, args):
     out_args = []
     for a in args:
@@ -1330,8 +1348,6 @@ def act_on_builtin_expr(builtin_tok, rparen_loc, args):
     match builtin_tok.ty:
         case Tok.BUILTIN_SYSCALL:
             return act_on_builtin_syscall_expr(builtin_tok, rparen_loc, args)
-        case Tok.BUILTIN_HEXDUMP:
-            return act_on_builtin_hexdump_expr(builtin_tok, rparen_loc, args)
         case _:
             assert False, "unhandled builtin tok kind"
 
@@ -1398,3 +1414,16 @@ def act_on_nullptr_literal(loc: Loc) -> Expr:
 def act_on_explicit_cast(ty: Type, e: Expr, sl: Loc, el: Loc) -> CastExpr:
     ics = try_implicit_conversion(e, ty, True)
     return perform_implicit_conversion(e, ty, ics)
+
+
+def act_on_vaarg_expr(ty: Type, sl: Loc, el: Loc) -> VAArgExpr:
+    fn = state.CUR_FN_DECL
+    assert fn is not None
+    if not fn.is_vararg:
+        diag(sl, "cannot use vararg expr in non vararg function", Diag.ERROR)
+        return None
+    return VAArgExpr(ty, sl, el)
+
+
+def act_on_sizeof_expr(ty: Type, expr: Expr | None, sl: Loc, el: Loc) -> SizeofExpr:
+    return SizeofExpr(ty, expr, sl, el)

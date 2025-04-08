@@ -1,112 +1,112 @@
-from utils.my_enum import Enum, ENUM_INIT, ENUM_N
+from enum import Enum, auto
 
 class Tok(Enum):
     # SPECIAL
-    UNKNOWN = ENUM_INIT()
-    EOF = ENUM_N()
+    UNKNOWN = auto()
+    EOF = auto()
 
     # IDENTIFIER
-    IDENT = ENUM_N()
+    IDENT = auto()
 
     # CONSTANTS
-    NUM = ENUM_N()
-    STR = ENUM_N()
-    CHR = ENUM_N()
+    NUM = auto()
+    STR = auto()
+    CHR = auto()
 
     # PUNCTUATION
-    LPAREN = ENUM_N()
-    RPAREN = ENUM_N()
-    LBRACE = ENUM_N()
-    RBRACE = ENUM_N()
-    LSQUARE = ENUM_N()
-    RSQUARE = ENUM_N()
-    SEMI = ENUM_N()
-    COLON = ENUM_N()
-    PERIOD = ENUM_N()
-    ARROW = ENUM_N()
-    ELLIPSIS = ENUM_N()
-    GREATER = ENUM_N()
-    GREATERGREATER = ENUM_N()
-    COMMA = ENUM_N()
-    EQUAL = ENUM_N()
-    EXCLAIM = ENUM_N()
-    STAREQUAL = ENUM_N()
-    SLASHEQUAL = ENUM_N()
-    PERCENTEQUAL = ENUM_N()
-    PLUSEQUAL = ENUM_N()
-    MINUSEQUAL = ENUM_N()
-    LESSLESSEQUAL = ENUM_N()
-    GREATERGREATEREQUAL = ENUM_N()
-    AMPEQUAL = ENUM_N()
-    CARETEQUAL = ENUM_N()
-    PIPEEQUAL = ENUM_N()
-    QUESTION = ENUM_N()
-    PIPEPIPE = ENUM_N()
-    AMPAMP = ENUM_N()
-    PIPE = ENUM_N()
-    TILDE = ENUM_N()
-    CARET = ENUM_N()
-    AMP = ENUM_N()
-    EXCLAIMEQUAL = ENUM_N()
-    EQUALEQUAL = ENUM_N()
-    LESSEQUAL = ENUM_N()
-    LESS = ENUM_N()
-    GREATEREQUAL = ENUM_N()
-    SPACESHIP = ENUM_N()
-    LESSLESS = ENUM_N()
-    PLUS = ENUM_N()
-    PLUSPLUS = ENUM_N()
-    MINUS = ENUM_N()
-    MINUSMINUS = ENUM_N()
-    PERCENT = ENUM_N()
-    SLASH = ENUM_N()
-    STAR = ENUM_N()
-    PERIODSTAR = ENUM_N()
-    ARROWSTAR = ENUM_N()
+    LPAREN = auto()
+    RPAREN = auto()
+    LBRACE = auto()
+    RBRACE = auto()
+    LSQUARE = auto()
+    RSQUARE = auto()
+    SEMI = auto()
+    COLON = auto()
+    PERIOD = auto()
+    ARROW = auto()
+    ELLIPSIS = auto()
+    GREATER = auto()
+    GREATERGREATER = auto()
+    COMMA = auto()
+    EQUAL = auto()
+    EXCLAIM = auto()
+    STAREQUAL = auto()
+    SLASHEQUAL = auto()
+    PERCENTEQUAL = auto()
+    PLUSEQUAL = auto()
+    MINUSEQUAL = auto()
+    LESSLESSEQUAL = auto()
+    GREATERGREATEREQUAL = auto()
+    AMPEQUAL = auto()
+    CARETEQUAL = auto()
+    PIPEEQUAL = auto()
+    QUESTION = auto()
+    PIPEPIPE = auto()
+    AMPAMP = auto()
+    PIPE = auto()
+    TILDE = auto()
+    CARET = auto()
+    AMP = auto()
+    EXCLAIMEQUAL = auto()
+    EQUALEQUAL = auto()
+    LESSEQUAL = auto()
+    LESS = auto()
+    GREATEREQUAL = auto()
+    SPACESHIP = auto()
+    LESSLESS = auto()
+    PLUS = auto()
+    PLUSPLUS = auto()
+    MINUS = auto()
+    MINUSMINUS = auto()
+    PERCENT = auto()
+    SLASH = auto()
+    STAR = auto()
+    PERIODSTAR = auto()
+    ARROWSTAR = auto()
 
     # KEYWORDS
-    KW_FN = ENUM_N()
-    KW_LET = ENUM_N()
-    KW_LIB = ENUM_N()
-    KW_TYPE = ENUM_N()
-    KW_STRUCT = ENUM_N()
-    KW_ENUM = ENUM_N()
-    KW_I8 = ENUM_N()
-    KW_I16 = ENUM_N()
-    KW_I32 = ENUM_N()
-    KW_I64 = ENUM_N()
-    KW_U8 = ENUM_N()
-    KW_U16 = ENUM_N()
-    KW_U32 = ENUM_N()
-    KW_U64 = ENUM_N()
-    KW_BOOL = ENUM_N()
-    KW_VOID = ENUM_N()
-    KW_SIZEOF = ENUM_N()
-    KW_CAST = ENUM_N()
-    KW_IF = ENUM_N()
-    KW_ELSE = ENUM_N()
-    KW_TRUE = ENUM_N()
-    KW_FALSE = ENUM_N()
-    KW_NULLPTR = ENUM_N()
-    KW_CASE = ENUM_N()
-    KW_DEFAULT = ENUM_N()
-    KW_SWITCH = ENUM_N()
-    KW_WHILE = ENUM_N()
-    KW_DO = ENUM_N()
-    KW_FOR = ENUM_N()
-    KW_CONTINUE = ENUM_N()
-    KW_BREAK = ENUM_N()
-    KW_RETURN = ENUM_N()
+    KW_FN = auto()
+    KW_LET = auto()
+    KW_LIB = auto()
+    KW_TYPE = auto()
+    KW_STRUCT = auto()
+    KW_ENUM = auto()
+    KW_I8 = auto()
+    KW_I16 = auto()
+    KW_I32 = auto()
+    KW_I64 = auto()
+    KW_U8 = auto()
+    KW_U16 = auto()
+    KW_U32 = auto()
+    KW_U64 = auto()
+    KW_BOOL = auto()
+    KW_VOID = auto()
+    KW_SIZEOF = auto()
+    KW_CAST = auto()
+    KW_IF = auto()
+    KW_ELSE = auto()
+    KW_TRUE = auto()
+    KW_FALSE = auto()
+    KW_NULLPTR = auto()
+    KW_VAARG = auto()
+    KW_CASE = auto()
+    KW_DEFAULT = auto()
+    KW_SWITCH = auto()
+    KW_WHILE = auto()
+    KW_DO = auto()
+    KW_FOR = auto()
+    KW_CONTINUE = auto()
+    KW_BREAK = auto()
+    KW_RETURN = auto()
 
     # BUILTINS
-    BUILTIN_SYSCALL = ENUM_N()
-    BUILTIN_HEXDUMP = ENUM_N()
+    BUILTIN_SYSCALL = auto()
 
     def is_keyword(self):
         return self.value >= self.KW_FN.value and self.value <= self.KW_RETURN.value
 
     def is_builtin(self):
-        return self.value >= self.BUILTIN_SYSCALL.value and self.value <= self.BUILTIN_HEXDUMP.value
+        return self.value >= self.BUILTIN_SYSCALL.value and self.value <= self.BUILTIN_SYSCALL.value
 
     def is_builtin_type(self):
         return self.value >= self.KW_I8.value and self.value <= self.KW_BOOL.value
@@ -114,9 +114,8 @@ class Tok(Enum):
     def __str__(self) -> str:
         return self.get_name()
 
-    def get_name(self):
+    def get_name(self) -> str:
         match self:
-            case self.UNKNOWN: return "????"
             case self.EOF: return "end of file"
             case self.IDENT: return "identifier"
             case self.NUM: return "numeral constant"
@@ -192,6 +191,7 @@ class Tok(Enum):
             case self.KW_TRUE: return "true"
             case self.KW_FALSE: return "false"
             case self.KW_NULLPTR: return "nullptr"
+            case self.KW_VAARG: return "vaarg"
             case self.KW_CASE: return "case"
             case self.KW_DEFAULT: return "default"
             case self.KW_SWITCH: return "switch"
@@ -202,4 +202,4 @@ class Tok(Enum):
             case self.KW_BREAK: return "break"
             case self.KW_RETURN: return "return"
             case self.BUILTIN_SYSCALL: return "__builtin_syscall"
-            case self.BUILTIN_HEXDUMP: return "__builtin_hexdump"
+            case _: return "????"

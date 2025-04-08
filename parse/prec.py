@@ -1,31 +1,25 @@
-from utils.my_enum import Enum, ENUM_INIT, ENUM_N
+import enum
 from lex import Tok
 
-class Prec(Enum):
-    UNKNOWN = ENUM_INIT()
-    COMMA = ENUM_N()
-    ASSIGN = ENUM_N()
-    COND = ENUM_N()
-    OR = ENUM_N()
-    AND = ENUM_N()
-    BOR = ENUM_N()
-    XOR = ENUM_N()
-    BAND = ENUM_N()
-    EQ = ENUM_N()
-    COMP = ENUM_N()  # CPP -> spaceship after
-    SHIFT = ENUM_N()
-    PLUS = ENUM_N()
-    STAR = ENUM_N()  # CPP -> ptr to member after
+class Prec(enum.Enum):
+    UNKNOWN = enum.auto()
+    COMMA = enum.auto()
+    ASSIGN = enum.auto()
+    COND = enum.auto()
+    OR = enum.auto()
+    AND = enum.auto()
+    BOR = enum.auto()
+    XOR = enum.auto()
+    BAND = enum.auto()
+    EQ = enum.auto()
+    COMP = enum.auto()  # CPP -> spaceship after
+    SHIFT = enum.auto()
+    PLUS = enum.auto()
+    STAR = enum.auto()  # CPP -> ptr to member after
 
     @staticmethod
-    def from_bin_op(token_kind: Tok, greater_than_is_operator: bool) -> "Prec":
+    def from_bin_op(token_kind: Tok) -> "Prec":
         match token_kind:
-            case Tok.GREATER:
-                return [Prec.UNKNOWN, Prec.COMP][greater_than_is_operator]
-            case Tok.GREATERGREATER:
-                return [Prec.UNKNOWN, Prec.SHIFT][greater_than_is_operator]
-            case Tok.COMMA:
-                return Prec.COMMA
             case (
                 Tok.EQUAL
                 | Tok.STAREQUAL
@@ -54,9 +48,9 @@ class Prec(Enum):
                 return Prec.BAND
             case Tok.EXCLAIMEQUAL | Tok.EQUALEQUAL:
                 return Prec.EQ
-            case Tok.LESSEQUAL | Tok.LESS | Tok.GREATEREQUAL:
+            case Tok.LESSEQUAL | Tok.LESS | Tok.GREATER | Tok.GREATEREQUAL:
                 return Prec.COMP
-            case Tok.LESSLESS:
+            case Tok.LESSLESS | Tok.GREATERGREATER:
                 return Prec.SHIFT
             case Tok.PLUS | Tok.MINUS:
                 return Prec.PLUS

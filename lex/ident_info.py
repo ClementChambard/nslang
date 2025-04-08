@@ -1,26 +1,28 @@
+from dataclasses import dataclass
+from typing import Self
 from . import Tok
 
 
-IDENTIFIERS = {}
-
-
+@dataclass
 class IdentInfo:
+    identifiers = {}
+    
     ty: Tok
     val: str
 
     def __init__(self, name: str, ty: Tok = Tok.IDENT):
         self.ty = ty
         self.val = name
-        IDENTIFIERS[name] = self
+        self.identifiers[name] = self
 
-    def needs_handling(self):
+    def needs_handling(self) -> bool:
         return False
 
-    @staticmethod
-    def find(name: str):  # -> self
-        if name not in IDENTIFIERS.keys():
+    @classmethod
+    def find(cls, name: str) -> Self:
+        if name not in cls.identifiers.keys():
             _ = IdentInfo(name)
-        return IDENTIFIERS[name]
+        return cls.identifiers[name]
 
 
 IdentInfo("fn", Tok.KW_FN)
@@ -46,6 +48,7 @@ IdentInfo("else", Tok.KW_ELSE)
 IdentInfo("true", Tok.KW_TRUE)
 IdentInfo("false", Tok.KW_FALSE)
 IdentInfo("nullptr", Tok.KW_NULLPTR)
+IdentInfo("vaarg", Tok.KW_VAARG)
 IdentInfo("case", Tok.KW_CASE)
 IdentInfo("default", Tok.KW_DEFAULT)
 IdentInfo("switch", Tok.KW_SWITCH)
@@ -56,4 +59,3 @@ IdentInfo("continue", Tok.KW_CONTINUE)
 IdentInfo("break", Tok.KW_BREAK)
 IdentInfo("return", Tok.KW_RETURN)
 IdentInfo("__builtin_syscall", Tok.BUILTIN_SYSCALL)
-IdentInfo("__builtin_hexdump", Tok.BUILTIN_HEXDUMP)

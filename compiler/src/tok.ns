@@ -1,0 +1,107 @@
+#include tok.nsh
+
+fn tok_is_keyword(self: Tok) -> bool {
+    if (self < TOK_KW_FN) return false;
+    return self <= TOK_KW_RETURN;
+}
+
+fn tok_is_builtin(self: Tok) -> bool {
+    return self == TOK_BUILTIN_SYSCALL;
+}
+
+fn tok_is_builtin_type(self: Tok) -> bool {
+    if (self < TOK_KW_I8) return false;
+    return self <= TOK_KW_BOOL;
+}
+
+fn tok_get_name(self: Tok) -> i8* {
+    if (self == TOK_EOF) return cast<i8*>("end of file");
+    else if (self == TOK_IDENT) return cast<i8*>("identifier");
+    else if (self == TOK_NUM) return cast<i8*>("numeral constant");
+    else if (self == TOK_CHR) return cast<i8*>("char constant");
+    else if (self == TOK_STR) return cast<i8*>("string literal");
+    else if (self == TOK_LPAREN) return cast<i8*>("(");
+    else if (self == TOK_RPAREN) return cast<i8*>(")");
+    else if (self == TOK_LBRACE) return cast<i8*>("{");
+    else if (self == TOK_RBRACE) return cast<i8*>("}");
+    else if (self == TOK_LSQUARE) return cast<i8*>("[");
+    else if (self == TOK_RSQUARE) return cast<i8*>("]");
+    else if (self == TOK_SEMI) return cast<i8*>(";");
+    else if (self == TOK_COLON) return cast<i8*>(":");
+    else if (self == TOK_PERIOD) return cast<i8*>(".");
+    else if (self == TOK_ARROW) return cast<i8*>("->");
+    else if (self == TOK_ELLIPSIS) return cast<i8*>("...");
+    else if (self == TOK_GREATER) return cast<i8*>(">");
+    else if (self == TOK_GREATERGREATER) return cast<i8*>(">>");
+    else if (self == TOK_COMMA) return cast<i8*>(",");
+    else if (self == TOK_EQUAL) return cast<i8*>("=");
+    else if (self == TOK_EXCLAIM) return cast<i8*>("!");
+    else if (self == TOK_STAREQUAL) return cast<i8*>("*=");
+    else if (self == TOK_SLASHEQUAL) return cast<i8*>("/=");
+    else if (self == TOK_PERCENTEQUAL) return cast<i8*>("%=");
+    else if (self == TOK_PLUSEQUAL) return cast<i8*>("+=");
+    else if (self == TOK_MINUSEQUAL) return cast<i8*>("-=");
+    else if (self == TOK_LESSLESSEQUAL) return cast<i8*>("<<=");
+    else if (self == TOK_GREATERGREATEREQUAL) return cast<i8*>(">>=");
+    else if (self == TOK_AMPEQUAL) return cast<i8*>("&=");
+    else if (self == TOK_CARETEQUAL) return cast<i8*>("^=");
+    else if (self == TOK_PIPEEQUAL) return cast<i8*>("|=");
+    else if (self == TOK_QUESTION) return cast<i8*>("?");
+    else if (self == TOK_PIPEPIPE) return cast<i8*>("||");
+    else if (self == TOK_AMPAMP) return cast<i8*>("&&");
+    else if (self == TOK_PIPE) return cast<i8*>("|");
+    else if (self == TOK_CARET) return cast<i8*>("^");
+    else if (self == TOK_AMP) return cast<i8*>("&");
+    else if (self == TOK_TILDE) return cast<i8*>("~");
+    else if (self == TOK_EXCLAIMEQUAL) return cast<i8*>("!=");
+    else if (self == TOK_EQUALEQUAL) return cast<i8*>("==");
+    else if (self == TOK_LESSEQUAL) return cast<i8*>("<=");
+    else if (self == TOK_LESS) return cast<i8*>("<");
+    else if (self == TOK_GREATEREQUAL) return cast<i8*>(">=");
+    else if (self == TOK_SPACESHIP) return cast<i8*>("<=>");
+    else if (self == TOK_LESSLESS) return cast<i8*>("<<");
+    else if (self == TOK_PLUS) return cast<i8*>("+");
+    else if (self == TOK_PLUSPLUS) return cast<i8*>("++");
+    else if (self == TOK_MINUS) return cast<i8*>("-");
+    else if (self == TOK_MINUSMINUS) return cast<i8*>("--");
+    else if (self == TOK_PERCENT) return cast<i8*>("%");
+    else if (self == TOK_SLASH) return cast<i8*>("/");
+    else if (self == TOK_STAR) return cast<i8*>("*");
+    else if (self == TOK_PERIODSTAR) return cast<i8*>(".*");
+    else if (self == TOK_ARROWSTAR) return cast<i8*>("->*");
+    else if (self == TOK_KW_FN) return cast<i8*>("fn");
+    else if (self == TOK_KW_LET) return cast<i8*>("let");
+    else if (self == TOK_KW_TYPE) return cast<i8*>("type");
+    else if (self == TOK_KW_VOID) return cast<i8*>("void");
+    else if (self == TOK_KW_LIB) return cast<i8*>("lib");
+    else if (self == TOK_KW_STRUCT) return cast<i8*>("struct");
+    else if (self == TOK_KW_ENUM) return cast<i8*>("enum");
+    else if (self == TOK_KW_I8) return cast<i8*>("i8");
+    else if (self == TOK_KW_I16) return cast<i8*>("i16");
+    else if (self == TOK_KW_I32) return cast<i8*>("i32");
+    else if (self == TOK_KW_I64) return cast<i8*>("i64");
+    else if (self == TOK_KW_U8) return cast<i8*>("u8");
+    else if (self == TOK_KW_U16) return cast<i8*>("u16");
+    else if (self == TOK_KW_U32) return cast<i8*>("u32");
+    else if (self == TOK_KW_U64) return cast<i8*>("u64");
+    else if (self == TOK_KW_BOOL) return cast<i8*>("bool");
+    else if (self == TOK_KW_SIZEOF) return cast<i8*>("sizeof");
+    else if (self == TOK_KW_CAST) return cast<i8*>("cast");
+    else if (self == TOK_KW_IF) return cast<i8*>("if");
+    else if (self == TOK_KW_ELSE) return cast<i8*>("else");
+    else if (self == TOK_KW_TRUE) return cast<i8*>("true");
+    else if (self == TOK_KW_FALSE) return cast<i8*>("false");
+    else if (self == TOK_KW_NULLPTR) return cast<i8*>("nullptr");
+    else if (self == TOK_KW_VAARG) return cast<i8*>("vaarg");
+    else if (self == TOK_KW_CASE) return cast<i8*>("case");
+    else if (self == TOK_KW_DEFAULT) return cast<i8*>("default");
+    else if (self == TOK_KW_SWITCH) return cast<i8*>("switch");
+    else if (self == TOK_KW_WHILE) return cast<i8*>("while");
+    else if (self == TOK_KW_DO) return cast<i8*>("do");
+    else if (self == TOK_KW_FOR) return cast<i8*>("for");
+    else if (self == TOK_KW_CONTINUE) return cast<i8*>("continue");
+    else if (self == TOK_KW_BREAK) return cast<i8*>("break");
+    else if (self == TOK_KW_RETURN) return cast<i8*>("return");
+    else if (self == TOK_BUILTIN_SYSCALL) return cast<i8*>("__builtin_syscall");
+    else return cast<i8*>("????");
+}

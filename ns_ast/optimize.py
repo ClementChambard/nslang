@@ -1,6 +1,5 @@
 
 from .nodes import *
-from lex import Tok
 
 
 @dataclass
@@ -125,6 +124,8 @@ def _optimize_expr(expr: Expr) -> OptimizeExprResult:
         return OptimizeExprResult(expr, True)
     elif isinstance(expr, DeclRefExpr):
         return OptimizeExprResult(expr, False)
+    elif isinstance(expr, VAArgExpr):
+        return OptimizeExprResult(expr, False)
     elif isinstance(expr, BoolLiteral):
         return OptimizeExprResult(IntegerLiteral(int(expr.value), expr.ty, expr.loc), True)
     elif isinstance(expr, ParenExpr):
@@ -161,17 +162,17 @@ def _optimize_expr(expr: Expr) -> OptimizeExprResult:
 
 @dataclass
 class OptimizeStmtResult:
-    result: Stmt | None
+    result: Stmt
 
 
 def _optimize_compound_stmt(stmt: CompoundStmt) -> OptimizeStmtResult:
     res = []
     for s in stmt.inner:
         r = _optimize_stmt(s)
-        if r.result is not None:
+        if not isinstance(r.result, NullStmt):
             res.append(r.result)
     if len(res) == 0:
-        return OptimizeStmtResult(None)
+        return OptimizeStmtResult(NullStmt(0))
     if len(res) == 1:
         return OptimizeStmtResult(res[0])
     stmt.inner = res
@@ -181,7 +182,7 @@ def _optimize_compound_stmt(stmt: CompoundStmt) -> OptimizeStmtResult:
 def _optimize_expr_stmt(expr: Expr) -> OptimizeStmtResult:
     res = _optimize_expr(expr)
     if res.is_pure:
-        return OptimizeStmtResult(None)
+        return OptimizeStmtResult(NullStmt(0))
     else:
         return OptimizeStmtResult(res.result)
 
@@ -191,18 +192,18 @@ def _optimize_if_stmt(stmt: IfStmt) -> OptimizeStmtResult:
     else_stmt = (
         _optimize_stmt(stmt.else_stmt)
         if stmt.else_stmt is not None
-        else OptimizeStmtResult(None)
+        else OptimizeStmtResult(NullStmt(0))
     )
-    if then_stmt.result is None and else_stmt.result is None:
+    if isinstance(then_stmt.result, NullStmt) and isinstance(else_stmt.result, NullStmt):
         expr = _optimize_expr(stmt.cond)
         if expr.is_pure:
-            return OptimizeStmtResult(None)
+            return OptimizeStmtResult(NullStmt(0))
         else:
             return OptimizeStmtResult(expr.result)
-    if then_stmt.result is None:
+    if isinstance(then_stmt.result, NullStmt):
         # if then is none, instead, invert the condition
         # right now it's only a null stmt
-        then_stmt.result = NullStmt(LOC_INVALID)
+        then_stmt.result = NullStmt(stmt.then_stmt.get_range()[0])
     expr = _optimize_expr(stmt.cond).result
     if not isinstance(expr, IntegerLiteral):
         stmt.then_stmt = then_stmt.result
@@ -233,7 +234,7 @@ def _optimize_while_stmt(stmt: WhileStmt) -> OptimizeStmtResult:
         stmt.cond = expr
         stmt.while_stmt = body.result
         return OptimizeStmtResult(stmt)
-    return OptimizeStmtResult(None)
+    return OptimizeStmtResult(NullStmt(0))
 
 
 def _optimize_do_stmt(stmt: DoStmt) -> OptimizeStmtResult:
@@ -246,7 +247,7 @@ def _optimize_stmt(stmt: Stmt) -> OptimizeStmtResult:
     if isinstance(stmt, CompoundStmt):
         return _optimize_compound_stmt(stmt)
     if isinstance(stmt, NullStmt):
-        return OptimizeStmtResult(None)
+        return OptimizeStmtResult(stmt)
     if isinstance(stmt, IfStmt):
         return _optimize_if_stmt(stmt)
     if isinstance(stmt, WhileStmt):
@@ -267,12 +268,12 @@ def _optimize_stmt(stmt: Stmt) -> OptimizeStmtResult:
     return OptimizeStmtResult(stmt)
 
 
-def optimize_ast(translation_unit):
+def optimize_ast(translation_unit: List[Decl]):
     for d in translation_unit:
         if isinstance(d, FnDecl) and d.body is not None:
-            stmts = []
-            for s in d.body.inner:
-                r = _optimize_stmt(s)
-                if r.result is not None:
-                    stmts.append(r.result)
-            d.body.inner = stmts
+            out_body = []
+            for stmt in d.body.inner:
+                stmt = _optimize_stmt(stmt).result
+                if not isinstance(stmt, NullStmt):
+                    out_body.append(stmt)
+            d.body.inner = out_body

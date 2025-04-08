@@ -177,9 +177,10 @@ def act_on_null_stmt(semi_loc):
 
 
 def act_on_return_stmt(return_loc, ret_val_expr, scope, allow_recovery = False):
-    ret_val_expr = correct_delayed_typos_in_expr(ret_val_expr, None, True)
-    if ret_val_expr is None:
-        return None
+    if ret_val_expr is not None:
+        ret_val_expr = correct_delayed_typos_in_expr(ret_val_expr, None, True)
+        if ret_val_expr is None:
+            return None
 
     fd = state.CUR_FN_DECL
     if fd is None:
@@ -196,7 +197,7 @@ def act_on_return_stmt(return_loc, ret_val_expr, scope, allow_recovery = False):
                 if ret_val_expr is None:
                     return None
                 ret_val_expr = imp_cast_expr_to_type(ret_val_expr, Type(), CastKind.TO_VOID)
-                diag(return_loc, "diag::ext_return_has_expr) << getCurFunctionOrMethodDecl() << 0 << RetValExp->getSourceRange()", Diag.ERROR)
+                diag(return_loc, f"void function {fd.name} should not return a value", Diag.ERROR, [ret_val_expr.get_range()])
             ret_val_expr = act_on_finish_full_expr(ret_val_expr, return_loc, False)
             if ret_val_expr is None:
                 return None

@@ -1,0 +1,177 @@
+#include lexer.nsh
+#include loc.nsh
+#include mem.nsh
+#include str.nsh
+#include file.nsh
+#include io.nsh
+
+fn lexer_init(self: Lexer*) {
+    self->cur_lexer = nullptr;
+    darray_init(&self->lexer_stack);
+    darray_init(&self->cached_tokens);
+    darray_init(&self->include_paths);
+    darray_init(&self->already_included_files);
+}
+
+fn lexer_delete(self: Lexer*) {
+    let i: i64;
+    if (self->cur_lexer != nullptr) free(self->cur_lexer);
+    i = 0; while (i < self->lexer_stack.len) { free(self->lexer_stack.data[i]); i += 1; }
+    darray_destroy(&self->lexer_stack);
+    i = 0; while (i < self->cached_tokens.len) { free(self->cached_tokens.data[i]); i += 1; }
+    darray_destroy(&self->cached_tokens);
+    i = 0; while (i < self->include_paths.len) { free(self->include_paths.data[i]); i += 1; }
+    darray_destroy(&self->include_paths);
+    i = 0; while (i < self->already_included_files.len) { free(self->already_included_files.data[i]); i += 1; }
+    darray_destroy(&self->already_included_files);
+}
+
+fn lexer_add_include_path(self: Lexer*, path: i8*) {
+    darray_push(&self->include_paths, strdup(path));
+}
+
+fn __find_file_to_include_relative(self: Lexer*, filename: i8*, filename_len: i64, loc: Loc) -> i8* {
+    let result: i8*;
+    let i: i64;
+
+    // add current directory
+    let cur_dir: Str;
+    let slash_pos: i64;
+    str_from_cstr(&cur_dir, self->cur_lexer->f->filename);
+    slash_pos = -1;
+    i = 0;
+    while (i < cur_dir.len) {
+        if (cur_dir.data[i] == '/') slash_pos = i;
+        i += 1;
+    }
+    if (slash_pos != -1) {
+       let cur_dir_tmp: i8*;
+       cur_dir_tmp = malloc(slash_pos + 1);
+       memcpy(cur_dir_tmp, cur_dir.data, slash_pos);
+       cur_dir_tmp[slash_pos] = 0;
+       darray_push(&self->include_paths, cur_dir_tmp);
+    } else {
+       // no slasn, then '.'
+       darray_push(&self->include_paths, strdup("."));
+    }
+
+    // check possible file paths
+    i = 0;
+    while (i < self->include_paths.len) {
+        let dir_len: i64;
+        dir_len = strlen(self->include_paths.data[i]);
+        let tmp_result: i8*;
+        tmp_result = malloc(filename_len + 2 + dir_len);
+        memcpy(tmp_result, self->include_paths.data[i], dir_len);
+        tmp_result[dir_len] = '/';
+        memcpy(&tmp_result[dir_len+1], filename, filename_len);
+        tmp_result[dir_len + 1 + filename_len] = 0;
+
+        // check file exists
+        // TODO: better method ?
+        let open_res: i64;
+        open_res = open(tmp_result, O_RDWR, 0);
+        if (open_res > 0) {
+            close(open_res);
+            result = tmp_result;
+            break;
+        }
+
+        free(tmp_result);
+        i += 1;
+    }
+
+    // remove current directory if it was added
+    if (slash_pos != -1) {
+        free(darray_pop(&self->include_paths));
+    }
+
+    // if not found, error and include nothing
+    if (result == nullptr) {
+        // TODO: error
+        return cast<i8*>("/dev/null");
+    }
+    return result;
+}
+
+fn __find_file_to_include(self: Lexer*, filename: i8*, filename_len: i64, loc: Loc) -> i8* {
+    let result: i8*;
+    let i: i64;
+
+    // if filename is absolute path, return it
+    if (filename[0] == '/') {
+        result = malloc(filename_len + 1);
+        result[filename_len] = 0;
+        memcpy(result, filename, filename_len);
+    } else {
+        result = __find_file_to_include_relative(self, filename, filename_len, loc);
+    }
+
+    // check if it was already included
+    i = 0;
+    while (i < self->already_included_files.len) {
+        if (strcmp(result, self->already_included_files.data[i]) == 0) {
+            free(result);
+            return cast<i8*>("/dev/null");
+        }
+        i += 1;
+    }
+
+    // add it to included list and return it
+    darray_push(&self->already_included_files, result);
+    return result;
+}
+
+fn lexer_enter_token(self: Lexer*, token: Token*) {
+    darray_push(&self->cached_tokens, token);
+}
+
+fn lexer_enter_source_file(self: Lexer*, filename: i8*) {
+    if (self->cur_lexer != nullptr) {
+        darray_push(&self->lexer_stack, self->cur_lexer);
+    }
+    self->cur_lexer = file_lexer_create(filename, self);
+}
+
+fn lexer_end_source_file(self: Lexer*, token: Token*) {
+    if (self->cur_lexer == nullptr) {
+        return;
+    }
+    if (self->lexer_stack.len == 0) {
+        file_lexer_construct_token(self->cur_lexer, token, self->cur_lexer->pos + 1, TOK_EOF);
+        return;
+    }
+    free(self->cur_lexer);
+    self->cur_lexer = cast<FileLexer*>(darray_pop(&self->lexer_stack));
+    file_lexer_lex_internal(self->cur_lexer, token);
+}
+
+fn lexer_handle_directive(self: Lexer*, token: Token*) {
+    let dir_kind: Str;
+    file_lexer_read_to_whitespace(self->cur_lexer, &dir_kind);
+    if (dir_kind.len != 7) {
+        print("Directive is not include !!! %s\n", dir_kind.data);
+        return;
+    }
+    if (memcmp(dir_kind.data, "include", 7) != 0) {
+        print("Directive is not include !!!");
+        return;
+    }
+
+    file_lexer_read_to_end_of_line(self->cur_lexer, &dir_kind);
+    str_strip(&dir_kind);
+    let include_file: i8*;
+    include_file = __find_file_to_include(self, dir_kind.data, dir_kind.len, token->loc);
+    lexer_enter_source_file(self, include_file);
+    file_lexer_lex_internal(self->cur_lexer, token);
+}
+
+fn lexer_handle_ident(self: Lexer*, token: Token*, ident_info: IdentInfo*) {}
+
+fn lexer_lex(self: Lexer*) -> Token* {
+    if (self->cached_tokens.len != 0) {
+        return darray_pop_front(&self->cached_tokens);
+    }
+    if (self->cur_lexer == nullptr) return nullptr;
+    return file_lexer_lex(self->cur_lexer);
+}

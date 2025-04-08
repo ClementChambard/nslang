@@ -1,0 +1,401 @@
+#include str.nsh
+#include mem.nsh
+
+fn isspace(c: char) -> bool {
+    if (c == ' ') return true;
+    if (c >= 0x9) if (c <= 0xd) return true;
+    if (c >= 0x1c) if (c <= 0x1f) return true;
+    return false;
+}
+
+fn strcmp(str_1: CStr, str_2: CStr) -> i64 {
+    if (str_1 == str_2) return 0;
+    while (*str_1 != 0) {
+        if (*str_1 != *str_2) return *str_1 - *str_2;
+        str_1 = &str_1[1];
+        str_2 = &str_2[1];
+    }
+    return *str_1 - *str_2;
+}
+
+fn strlen(str: CStr) -> i64 {
+    let len: i64;
+    len = 0;
+    while (str[len] != 0) len += 1;
+    return len;
+}
+
+fn strdup(str: CStr) -> CStr {
+    let len: i64;
+    let out: CStr;
+    len = strlen(str);
+    out = malloc(len + 1);
+    memcpy(out, str, len);
+    out[len] = 0;
+    return out;
+}
+
+fn strcat(str_1: CStr, str_2: CStr) -> CStr {
+    let len_1: i64;
+    let len_2: i64;
+    let out: CStr;
+    len_1 = strlen(str_1);
+    len_2 = strlen(str_2);
+    out = malloc(len_1 + len_2 + 1);
+    memcpy(out, str_1, len_1);
+    memcpy(&out[len_1], str_2, len_2);
+    out[len_1 + len_2] = 0;
+    return out;
+}
+
+
+
+
+fn str_strip(self: Str*) {
+    while (isspace(self->data[0])) {
+        self->data = &self->data[1];
+        self->len = self->len - 1;
+    }
+    while (isspace(self->data[self->len - 1])) {
+        self->len = self->len - 1;
+    }
+}
+
+fn str_from_cstr(self: Str*, cstr: CStr) {
+    self->len = strlen(cstr);
+    self->data = cstr;
+}
+
+fn __string_alloc_more(self: String*) {
+    if (self->capacity == 0) {
+        self->capacity = 8;
+    } else {
+        self->capacity = self->capacity * 2;
+    }
+    self->inner.data = realloc(self->inner.data, self->capacity + 1);
+}
+
+fn string_init(self: String*) {
+    self->inner.len = 0;
+    self->inner.data = 0;
+    self->capacity = 0;
+}
+
+fn string_destroy(self: String*) {
+    if (self->inner.data != nullptr) free(self->inner.data);
+    self->inner.len = 0;
+    self->inner.data = nullptr;
+    self->capacity = 0;
+}
+
+fn string_push(self: String*, c: char) {
+    if (self->inner.len + 1 > self->capacity) {
+        __string_alloc_more(self);
+    }
+    self->inner.data[self->inner.len] = c;
+    self->inner.len = self->inner.len + 1;
+    self->inner.data[self->inner.len] = 0;
+}
+
+fn string_push_str(self: String*, s: Str*) {
+    while (self->inner.len + s->len > self->capacity) {
+        __string_alloc_more(self);
+    }
+    memcpy(&self->inner.data[self->inner.len], s->data, s->len);
+    self->inner.len = self->inner.len + s->len;
+    self->inner.data[self->inner.len] = 0;
+}
+
+fn string_push_cstr(self: String*, s: i8*) {
+    let str: Str;
+    str_from_cstr(&str, s);
+    string_push_str(self, &str);
+}
+
+
+
+
+
+fn fmt_num(self: String*, num: i64, signed: bool) {
+    let buf: i8[22];
+    let p: i8*;
+    let digit: i64;
+    let neg: bool;
+
+    if (signed) {
+        neg = num < 0;
+        if (neg) num = -num; // technically, this could overflow
+    } else {
+        neg = false;
+    }
+
+    p = &buf[21];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num % 10; // TODO: this assumes signed integers => some chars are invalid
+        num /= 10;
+        *p = digit + '0';
+    } while (num != 0);
+
+    if (neg) {
+       p -= 1;
+       *p = '-';
+    }
+    string_push_cstr(self, p);
+}
+
+fn fmt_hex(self: String*, num: i64, upper: bool) {
+    let buf: i8[19];
+    let p: i8*;
+    let digit: i64;
+    p = &buf[18];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num & 0xF;
+        num >>= 4;
+        if (digit <= 9) {
+            *p = digit + '0';
+        } else if (upper) {
+            *p = digit + (-10 + 'A');
+        } else {
+            *p = digit + (-10 + 'a');
+        }
+    } while (num != 0);
+    string_push_cstr(self, p);
+}
+
+fn string_format(self: String*, fmt: CStr, ...) { // TODO: forward varargs
+    let i: i64;
+    let last_i: i64;
+    let str_to_add: Str;
+    self->inner.len = 0;
+
+    i = 0;
+    last_i = 0;
+
+    while (fmt[i] != 0) {
+        if (fmt[i] != '%') {
+            i += 1;
+            continue;
+        }
+        if (i != last_i) {
+            str_to_add.len = i - last_i;
+            str_to_add.data = &fmt[last_i];
+            string_push_str(self, &str_to_add);
+            last_i = i;
+        }
+        i += 1;
+        if (fmt[i] == '%') {
+            string_push(self, '%');
+        } else if (fmt[i] == 'i') {
+            fmt_num(self, vaarg<i64>, true);
+        } else if (fmt[i] == 'u') {
+            fmt_num(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'x') {
+            fmt_hex(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'X') {
+            fmt_hex(self, vaarg<i64>, true);
+        } else if (fmt[i] == 's') {
+            string_push_cstr(self, vaarg<CStr>);
+        } else if (fmt[i] == 'S') {
+            string_push_str(self, vaarg<Str*>);
+        } else if (fmt[i] == 'c') {
+            string_push(self, vaarg<char>);
+        }
+
+        i += 1;
+        last_i = i;
+    }
+    if (i != last_i) {
+        str_to_add.len = i - last_i;
+        str_to_add.data = &fmt[last_i];
+        string_push_str(self, &str_to_add);
+    }
+}
+
+fn string_push_format(self: String*, fmt: CStr, ...) {
+    let i: i64;
+    let last_i: i64;
+    let str_to_add: Str;
+
+    i = 0;
+    last_i = 0;
+
+    while (fmt[i] != 0) {
+        if (fmt[i] != '%') {
+            i += 1;
+            continue;
+        }
+        if (i != last_i) {
+            str_to_add.len = i - last_i;
+            str_to_add.data = &fmt[last_i];
+            string_push_str(self, &str_to_add);
+            last_i = i;
+        }
+        i += 1;
+        if (fmt[i] == '%') {
+            string_push(self, '%');
+        } else if (fmt[i] == 'i') {
+            fmt_num(self, vaarg<i64>, true);
+        } else if (fmt[i] == 'u') {
+            fmt_num(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'x') {
+            fmt_hex(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'X') {
+            fmt_hex(self, vaarg<i64>, true);
+        } else if (fmt[i] == 's') {
+            string_push_cstr(self, vaarg<CStr>);
+        } else if (fmt[i] == 'S') {
+            string_push_str(self, vaarg<Str*>);
+        } else if (fmt[i] == 'c') {
+            string_push(self, vaarg<char>);
+        }
+
+        i += 1;
+        last_i = i;
+    }
+    if (i != last_i) {
+        str_to_add.len = i - last_i;
+        str_to_add.data = &fmt[last_i];
+        string_push_str(self, &str_to_add);
+    }
+}
+
+fn string_insert(self: String*, idx: i64, c: char) {
+    if (idx >= self->inner.len) {
+        string_push(self, c);
+        return;
+    }
+    if (idx < 0) idx = 0;
+    if (self->inner.len + 1 > self->capacity) {
+        __string_alloc_more(self);
+    }
+    let i: i64;
+    i = self->inner.len;
+    while (i >= idx) {
+        self->inner.data[i + 1] = self->inner.data[i];
+        i -= 1;
+    }
+    self->inner.data[idx] = c;
+    self->inner.len = self->inner.len + 1;
+}
+
+fn string_insert_str(self: String*, idx: i64, str: Str*) {
+    if (idx >= self->inner.len) {
+        string_push_str(self, str);
+        return;
+    }
+    if (idx < 0) idx = 0;
+    while (self->inner.len + str->len > self->capacity) {
+        __string_alloc_more(self);
+    }
+    let i: i64;
+    i = self->inner.len;
+    while (i >= idx) {
+        self->inner.data[i + str->len] = self->inner.data[i];
+        i -= 1;
+    }
+    memcpy(&self->inner.data[idx], str->data, str->len);
+    self->inner.len = self->inner.len + str->len;
+}
+
+fn string_insert_cstr(self: String*, idx: i64, cstr: CStr) {
+    let s: Str;
+    str_from_cstr(&s, cstr);
+    string_insert_str(self, idx, &s);
+}
+
+fn string_split_off(self: String*, idx: i64, out: String*) {
+    if (idx >= self->inner.len) {
+        string_init(out);
+        return;
+    }
+    if (idx <= 0) {
+        out->inner.len = self->inner.len;
+        out->inner.data = self->inner.data;
+        out->capacity = self->capacity;
+        string_init(self);
+        return;
+    }
+    let remainder: Str;
+    remainder.len = self->inner.len - idx;
+    remainder.data = &self->inner.data[idx];
+    string_from_str(out, &remainder);
+    string_truncate(self, idx);
+}
+
+fn string_clear(self: String*) { self->inner.len = 0; }
+
+fn string_clone_from(self: String*, clone_from: String*) {
+    self->inner.len = clone_from->inner.len;
+    self->capacity = clone_from->capacity;
+    self->inner.data = malloc(self->capacity + 1);
+    memcpy(self->inner.data, clone_from->inner.data, self->inner.len);
+    self->inner.data[self->inner.len] = 0;
+}
+
+fn string_reserve(self: String*, count: i64) {
+    if (self->capacity > count) return;
+    self->capacity = count;
+    self->inner.data = realloc(self->inner.data, self->capacity);
+}
+
+fn string_shrink_to_fit(self: String*) {
+    if (self->capacity == self->inner.len) return;
+    let new_buf: char*;
+    new_buf = malloc(self->inner.len + 1);
+    memcpy(new_buf, self->inner.data, self->inner.len + 1);
+    free(self->inner.data);
+    self->capacity = self->inner.len;
+    self->inner.data = new_buf;
+}
+
+fn string_truncate(self: String*, count: i64) {
+    if (self->inner.len > count) self->inner.len = count;
+}
+
+fn string_pop(self: String*) -> char {
+    let out: char;
+    out = self->inner.data[self->inner.len - 1];
+    self->inner.len = self->inner.len - 1;
+    return out;
+}
+
+fn string_remove(self: String*, idx: i64) -> char {
+    if (idx >= self->inner.len) {
+        return string_pop(self);
+    }
+    if (idx < 0) idx = 0;
+    let out: char;
+    out = self->inner.data[idx];
+    let i: i64;
+    i = idx;
+    while (i < self->inner.len) {
+        self->inner.data[i] = self->inner.data[i + 1];
+        i += 1;
+    }
+    self->inner.len = self->inner.len - 1;
+    return out;
+}
+
+fn string_from_str(self: String*, str: Str*) {
+    self->capacity = str->len;
+    self->inner.len = str->len;
+    self->inner.data = malloc(str->len + 1);
+    memcpy(self->inner.data, str->data, str->len);
+    self->inner.data[self->inner.len] = 0;
+}
+
+fn string_from_cstr(self: String*, cstr: CStr) {
+    let s: Str;
+    str_from_cstr(&s, cstr);
+    string_from_str(self, &s);
+}
+
+fn string_from_raw_parts(self: String*, data: char*, len: i64, capacity: i64) {
+    self->inner.data = data;
+    self->inner.len = len;
+    self->capacity = capacity;
+}

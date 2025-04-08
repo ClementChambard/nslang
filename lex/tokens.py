@@ -20,8 +20,15 @@ class Token:
         self.value = tok.value
         self.loc = tok.loc
 
-    def get_end_loc(self):
+    def get_end_loc(self) -> Loc:
         if isinstance(self.value, IdentInfo):
-            return loc + len(self.value.val)
+            return self.loc + len(self.value.val)
+        elif isinstance(self.value, str):
+            return self.loc + len(self.value)
         else:
-            return loc + len(self.value)
+            return self.loc
+
+    def ident(self) -> IdentInfo:
+        assert self.ty == Tok.IDENT, "ident method can only be called on identifiers"
+        assert isinstance(self.value, IdentInfo)
+        return self.value

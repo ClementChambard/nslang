@@ -1,5 +1,5 @@
 
-def ident_continue(c: str):
+def ident_continue(c: str) -> bool:
     return (
         (c <= "z" and c >= "a")
         or (c <= "Z" and c >= "A")

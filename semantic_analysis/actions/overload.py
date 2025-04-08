@@ -1,32 +1,32 @@
 from ns_ast.nodes import *
 from dataclasses import dataclass
 from typing import List, Any
-from utils.my_enum import Enum, ENUM_INIT, ENUM_N
 from semantic_analysis import TYPES
+import enum
 
 
-class ImplicitConversionKind(Enum):
-    IDENTITY = ENUM_INIT()
-    LVALUE_TO_RVALUE = ENUM_N()
-    ARRAY_TO_POINTER = ENUM_N()
-    FUNCTION_TO_POINTER = ENUM_N()
-    FUNCTION_CONVERSION = ENUM_N()
-    QUALIFICATION = ENUM_N()
-    INTEGRAL_PROMOTION = ENUM_N()
-    FLOATING_PROMOTION = ENUM_N()
-    INTEGRAL_CONVERSION = ENUM_N()
-    FLOATING_CONVERSION = ENUM_N()
-    FLOATING_INTEGRAL = ENUM_N()
-    POINTER_CONVERSION = ENUM_N()
-    POINTER_MEMBER = ENUM_N()
-    BOOLEAN_CONVERSION = ENUM_N()
-    COMPATIBLE_CONVERSION = ENUM_N()
-    DERIVED_TO_BASE = ENUM_N()
-    ZERO_EVENT_CONVERSION = ENUM_N()
-    ZERO_QUEUE_CONVERSION = ENUM_N()
-    INCOMPATIBLE_POINTER_CONVERSION = ENUM_N()
-    FIXED_POINT_CONVERSION = ENUM_N()
-    NUM_CONVERSION_KINDS = ENUM_N()
+class ImplicitConversionKind(enum.Enum):
+    IDENTITY = enum.auto()
+    LVALUE_TO_RVALUE = enum.auto()
+    ARRAY_TO_POINTER = enum.auto()
+    FUNCTION_TO_POINTER = enum.auto()
+    FUNCTION_CONVERSION = enum.auto()
+    QUALIFICATION = enum.auto()
+    INTEGRAL_PROMOTION = enum.auto()
+    FLOATING_PROMOTION = enum.auto()
+    INTEGRAL_CONVERSION = enum.auto()
+    FLOATING_CONVERSION = enum.auto()
+    FLOATING_INTEGRAL = enum.auto()
+    POINTER_CONVERSION = enum.auto()
+    POINTER_MEMBER = enum.auto()
+    BOOLEAN_CONVERSION = enum.auto()
+    COMPATIBLE_CONVERSION = enum.auto()
+    DERIVED_TO_BASE = enum.auto()
+    ZERO_EVENT_CONVERSION = enum.auto()
+    ZERO_QUEUE_CONVERSION = enum.auto()
+    INCOMPATIBLE_POINTER_CONVERSION = enum.auto()
+    FIXED_POINT_CONVERSION = enum.auto()
+    NUM_CONVERSION_KINDS = enum.auto()
 
     def get_rank(self):
         return [ImplicitConversionRank.EXACT_MATCH,
@@ -51,19 +51,19 @@ class ImplicitConversionKind(Enum):
                 ImplicitConversionRank.CONVERSION][self.value]
 
 
-class ImplicitConversionRank(Enum):
-    EXACT_MATCH = ENUM_INIT()
-    PROMOTION = ENUM_N()
-    CONVERSION = ENUM_N()
-    C_CONVERSION_EXTENSION = ENUM_N()
+class ImplicitConversionRank(enum.Enum):
+    EXACT_MATCH = enum.auto()
+    PROMOTION = enum.auto()
+    CONVERSION = enum.auto()
+    C_CONVERSION_EXTENSION = enum.auto()
 
 
-class NarrowingKind(Enum):
-    NOT_NARROWING = ENUM_INIT()
-    TYPE_NARROWING = ENUM_N()
-    CONSTANT_NARROWING = ENUM_N()
-    VARIABLE_NARROWING = ENUM_N()
-    DEPENDENT_NARROWING = ENUM_N()
+class NarrowingKind(enum.Enum):
+    NOT_NARROWING = enum.auto()
+    TYPE_NARROWING = enum.auto()
+    CONSTANT_NARROWING = enum.auto()
+    VARIABLE_NARROWING = enum.auto()
+    DEPENDENT_NARROWING = enum.auto()
 
 
 @dataclass
@@ -381,6 +381,12 @@ def is_floating_conversion(from_type, to_type) -> bool:
     return False
 
 def is_pointer_conversion(from_e, from_type, to_type, is_explicit) -> bool:
+    # TODO: cast ptr to int
+    if isinstance(from_type, PointerType) and to_type == TYPES["i64"] and is_explicit:
+        return True
+    # TODO: cast int to ptr
+    if isinstance(to_type, PointerType) and from_type == TYPES["i64"] and is_explicit:
+        return True
     if not isinstance(from_type, PointerType) or not isinstance(to_type, PointerType):
         return False
     if is_explicit:

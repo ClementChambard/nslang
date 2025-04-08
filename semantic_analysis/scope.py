@@ -1,8 +1,9 @@
 from typing import Self, List, Any
 from dataclasses import dataclass
 from ns_ast import Decl, NamedDecl
+import enum
 
-class ScopeFlags:
+class ScopeFlags(enum.IntFlag):
     NO = 0x000
     FN = 0x001
     BREAK = 0x002

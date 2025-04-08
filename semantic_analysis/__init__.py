@@ -1,5 +1,6 @@
 from .string_literal import StringLiteralParser
 from .number_literal import NumLiteralParser
+from .char_literal import CharLiteralParser
 from .scope import Scope, ScopeFlags
 from .constexpr import eval_const_expr
 from ns_ast.nodes import BuiltinType, BuiltinTypeKind

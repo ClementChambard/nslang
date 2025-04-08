@@ -1,0 +1,58 @@
+#include mem.nsh
+#include darray.nsh
+
+fn darray_init(self: DArray*) {
+    self->data = nullptr;
+    self->len = 0;
+    self->capacity = 0;
+}
+
+fn darray_destroy(self: DArray*) {
+    if (self->data) free(self->data);
+    self->data = nullptr;
+    self->len = 0;
+    self->capacity = 0;
+}
+
+fn __darray_increase_capacity(self: DArray*) {
+    if (self->capacity == 0) {
+        self->capacity = 4;
+    } else {
+        self->capacity = self->capacity * 2;
+    }
+    let new_size: i64;
+    new_size = self->capacity * sizeof(void*);
+    self->data = realloc(self->data, new_size);
+}
+
+fn darray_push(self: DArray*, value: void*) {
+    if (self->len + 1 > self->capacity) {
+        __darray_increase_capacity(self);
+    }
+    self->data[self->len] = value;
+    self->len = self->len + 1;
+}
+
+fn darray_pop(self: DArray*) -> void* {
+    if (self->len == 0) return nullptr;
+    self->len = self->len - 1;
+    return self->data[self->len];
+}
+
+fn darray_pop_front(self: DArray*) -> void* {
+    if (self->len == 0) return nullptr;
+    let to_return: void*;
+    to_return = self->data[0];
+    darray_erase(self, 0);
+    return to_return;
+}
+
+fn darray_erase(self: DArray*, pos: i64) {
+    let i: i64;
+    i = pos;
+    while (i < self->len - 1) {
+        self->data[i] = self->data[i+1];
+        i += 1;
+    }
+    self->len = self->len - 1;
+}

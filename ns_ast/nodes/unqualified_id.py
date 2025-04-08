@@ -1,9 +1,9 @@
-from utils.my_enum import Enum, ENUM_INIT, ENUM_N
+import enum
 from dataclasses import dataclass
 from lex import Loc, IdentInfo, LocRge
 
-class UnqualifiedIdKind(Enum):
-    IDENTIFIER = ENUM_INIT()
+class UnqualifiedIdKind(enum.Enum):
+    IDENTIFIER = enum.auto()
     # operator function id
     # conversion function id
     # literal operator id
@@ -26,7 +26,7 @@ class UnqualifiedId:
         self.value = None
 
     def is_valid(self) -> bool:
-        return start_location != 0
+        return self.start_location != 0
 
     def set_identifier(self, i: IdentInfo, idloc: Loc):
         self.kind = UnqualifiedIdKind.IDENTIFIER

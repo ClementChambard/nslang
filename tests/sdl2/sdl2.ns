@@ -64,8 +64,7 @@ fn main() {
             if (ev.type_ == 0x300) {
                 // Keydown
                 key_event = cast<SDL_KeyboardEvent*>(&ev);
-                print_num(key_event->keysym.sym);
-                println();
+                print("%u\n", key_event->keysym.sym);
             }
         }
         SDL_GL_SwapWindow(window);

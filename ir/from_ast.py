@@ -1,12 +1,13 @@
+from dataclasses import dataclass
 from typing import List
-from . import IrInstrKind, IrInstr, FunctionIr, IrGlobal, FullIr
+from . import IrInstrKind, IrInstr, FunctionIr, IrGlobal, FullIr, StackFrameEntry, ParamEntry
 from utils.diagnostic import diag, Diag
-
 from ns_ast.nodes import *
 
 
 LABEL_ID: int = 0
 
+@dataclass
 class LabelUsage:
     used: bool
     name: str
@@ -15,10 +16,12 @@ class LabelUsage:
         self.used = False
         self.name = name
 
+
+@dataclass
 class StmtGenInfo:
-    stack_frame: []
-    break_stack: []
-    continue_stack: []
+    stack_frame: List[StackFrameEntry]
+    break_stack: List[LabelUsage]
+    continue_stack: List[LabelUsage]
 
     def __init__(self):
         self.stack_frame = []
@@ -32,43 +35,61 @@ def new_label_name(name: str) -> str:
     LABEL_ID += 1
     return name
 
-
 def scope_lookup(cur_scope: dict, scope_stack: list, name: str) -> int:
     if name in cur_scope.keys():
         return cur_scope[name]
     assert len(scope_stack) > 0
     return scope_lookup(scope_stack[-1], scope_stack[:-1], name)
 
-def generate_lvalue_addr(e: Expr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
-    if isinstance(e, ImplicitCastExpr):
-        assert e.kind == CastKind.ARRAY_TO_POINTER_DECAY
-        e = e.op
-        assert isinstance(e, DeclRefExpr) and isinstance(e.ty, ArrayType)
+def generate_declref_lvalue_addr(e: DeclRefExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    if (g := ir.has_global(e.decl.name)) >= 0:
+        return [IrInstr(IrInstrKind.PSH, 3, g)]
+    else:
         var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
-        return [IrInstr(IrInstrKind.PSH, 2, var_id)]
-    if e.value_kind == ValueKind.PRVALUE and isinstance(e.ty, PointerType):
-        return generate_expr_ir(e, ir, cur_scope, scope_stack)
-    # TEMP:
-    if isinstance(e, DeclRefExpr) and isinstance(e.ty, PointerType):
-        if (g := ir.has_global(e.decl.name)) >= 0:
-            return [IrInstr(IrInstrKind.PSH, 4, g)]
-        else:
-            var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
-            return [IrInstr(IrInstrKind.PSH, 1, var_id)]
+    return [IrInstr(IrInstrKind.PSH, 2, var_id)]
+
+def generate_lvalue_addr(e: Expr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    assert e.value_kind == ValueKind.LVALUE
+    # if isinstance(e, DeclRefExpr) and isinstance(e.ty, PointerType):
+    #     return generate_decl_ref_lvalue_addr(e, ir, cur_scope, scope_stack)
+    #     if (g := ir.has_global(e.decl.name)) >= 0:
+    #         return [IrInstr(IrInstrKind.PSH, 4, g)]
+    #     else:
+    #         var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
+    #         return [IrInstr(IrInstrKind.PSH, 1, var_id)]
+    # elif isinstance(e, MemberExpr) and isinstance(e.ty, PointerType):
+    #     out = generate_member_expr_addr(e, ir, cur_scope, scope_stack)
+    #     out += [IrInstr(IrInstrKind.LDA, e.ty.subtype.get_size(), None)]
+    #     return out
+    if isinstance(e, ParenExpr):
+        return generate_lvalue_addr(e.val, ir, cur_scope, scope_stack)
+    elif isinstance(e, CastExpr):
+        # if e.kind == CastKind.ARRAY_TO_POINTER_DECAY:
+        #     e = e.op
+        #     if not isinstance(e, DeclRefExpr) or not isinstance(e.ty, ArrayType):
+        #         print(e)
+        #         diag(e.get_range()[0], "ASSERT FALSE", Diag.ERROR, [e.get_range()])
+        #         assert False
+        #     var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
+        #     return [IrInstr(IrInstrKind.PSH, 2, var_id)]
+        if e.kind == CastKind.NOOP:
+            return generate_lvalue_addr(e.op, ir, cur_scope, scope_stack)
+    elif isinstance(e, ArraySubscriptExpr):
+        return generate_array_subscript_addr(e, ir, cur_scope, scope_stack)
     elif isinstance(e, DeclRefExpr):
-        if (g := ir.has_global(e.decl.name)) >= 0:
-            return [IrInstr(IrInstrKind.PSH, 3, g)]
-        else:
-            var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
-        return [IrInstr(IrInstrKind.PSH, 2, var_id)]
+        return generate_declref_lvalue_addr(e, ir, cur_scope, scope_stack)
     elif isinstance(e, MemberExpr):
         return generate_member_expr_addr(e, ir, cur_scope, scope_stack)
     print(e)
+    diag(e.get_range()[0], "Unimplemented lvalue_addr case", Diag.UNIMPLEMENTED, [e.get_range()])
     assert False
 
 def generate_array_subscript_addr(e: ArraySubscriptExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    # Generates the code for &(e.lhs)[(e.rhs)]
+    # equals e.lhs + e.rhs * sizeof(*e.lhs)
     out = []
-    out += generate_lvalue_addr(e.lhs, ir, cur_scope, scope_stack)
+    assert isinstance(e.lhs.ty, PointerType)
+    out += generate_expr_ir(e.lhs, ir, cur_scope, scope_stack)
     out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
     off_size = e.lhs.ty.subtype.get_size()
     out += [IrInstr(IrInstrKind.MUL, 0, off_size)]
@@ -76,241 +97,268 @@ def generate_array_subscript_addr(e: ArraySubscriptExpr, ir: FullIr, cur_scope, 
     return out
 
 def generate_member_expr_addr(e: MemberExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    # Generates the code for &((e.lhs).(e.field))
+    # equals &(e.lhs) + offsetof(e.field)
     out = []
-    out += generate_lvalue_addr(e.base, ir, cur_scope, scope_stack)
+    if e.base.value_kind == ValueKind.LVALUE and not e.is_arrow:
+        out += generate_lvalue_addr(e.base, ir, cur_scope, scope_stack)
+    elif e.base.value_kind == ValueKind.PRVALUE and e.is_arrow:
+        assert isinstance(e.base.ty, PointerType), "-> on non pointer"
+        out += generate_expr_ir(e.base, ir, cur_scope, scope_stack)
+    else:
+        assert False, "Member access on non lvalue"
     out += [IrInstr(IrInstrKind.ADD, 0, e.field_offset)]
     return out
 
 def generate_addrof_ir(e: Expr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    # Generates the code for &e
     if isinstance(e, ArraySubscriptExpr):
         return generate_array_subscript_addr(e, ir, cur_scope, scope_stack)
+    elif isinstance(e, CastExpr) and e.kind == CastKind.NOOP:
+        return generate_addrof_ir(e.op, ir, cur_scope, scope_stack)
+    elif isinstance(e, ParenExpr):
+        return generate_addrof_ir(e.val, ir, cur_scope, scope_stack)
     elif isinstance(e, MemberExpr):
         return generate_member_expr_addr(e, ir, cur_scope, scope_stack)
     elif isinstance(e, DeclRefExpr):
-        var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
-        return [IrInstr(IrInstrKind.PSH, 2, var_id)]
+        return generate_declref_lvalue_addr(e, ir, cur_scope, scope_stack)
     else:
-        assert False
+        assert False, "unimplemented addrof_ir case"
 
 def generate_assignment(e, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
     out = []
-    if isinstance(e.lhs, DeclRefExpr):
-
-        if (g := ir.has_global(e.lhs.decl.name)) >= 0:
-            out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
+    if isinstance(e, DeclRefExpr):
+        if (g := ir.has_global(e.decl.name)) >= 0:
+            out += [IrInstr(IrInstrKind.DUP, None, None)]
             out += [IrInstr(IrInstrKind.PSH, 3, g)]
             out += [IrInstr(IrInstrKind.STA, 8, None)]
-            out += [IrInstr(IrInstrKind.PSH, 0, 0)]
         else:
-            var_id = scope_lookup(cur_scope, scope_stack, e.lhs.decl.name)
-            out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
+            var_id = scope_lookup(cur_scope, scope_stack, e.decl.name)
             out += [IrInstr(IrInstrKind.STV, var_id, None)]
             out += [IrInstr(IrInstrKind.PSH, 1, var_id)]
-    elif isinstance(e.lhs, MemberExpr) or isinstance(e.lhs, ArraySubscriptExpr):
-        out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
-        out += generate_addrof_ir(e.lhs, ir, cur_scope, scope_stack)
-        store_size = e.lhs.ty.get_size()
+    elif isinstance(e, MemberExpr):
+        out += [IrInstr(IrInstrKind.DUP, None, None)]
+        out += generate_member_expr_addr(e, ir, cur_scope, scope_stack)
+        store_size = e.ty.get_size()
         out += [IrInstr(IrInstrKind.STA, store_size, None)]
-        out += [IrInstr(IrInstrKind.PSH, 0, 0)] # TODO: push actual result
-    elif isinstance(e.lhs, UnaryExpr) and e.lhs.opc == UnaryOperatorKind.DEREF:
-        out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
-        out += generate_expr_ir(e.lhs.arg, ir, cur_scope, scope_stack)
-        store_size = e.lhs.ty.get_size()
+    elif isinstance(e, ArraySubscriptExpr):
+        out += [IrInstr(IrInstrKind.DUP, None, None)]
+        out += generate_array_subscript_addr(e, ir, cur_scope, scope_stack)
+        store_size = e.ty.get_size()
         out += [IrInstr(IrInstrKind.STA, store_size, None)]
-        out += [IrInstr(IrInstrKind.PSH, 0, 0)] # TODO: push actual result
+    elif isinstance(e, UnaryExpr) and e.opc == UnaryOperatorKind.DEREF:
+        out += [IrInstr(IrInstrKind.DUP, None, None)]
+        out += generate_expr_ir(e.arg, ir, cur_scope, scope_stack)
+        store_size = e.ty.get_size()
+        out += [IrInstr(IrInstrKind.STA, store_size, None)]
     else:
-        assert False, "assign only on var for now"
+        assert False, f"assignment case unimplemented: {e.__class__}"
     return out
 
+def generate_unary_expr_ir(e: UnaryExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    # TODO: decr / incr / deref
+    if e.opc == UnaryOperatorKind.ADDROF:
+        return generate_addrof_ir(e.arg, ir, cur_scope, scope_stack)
+    out = []
+    out += generate_expr_ir(e.arg, ir, cur_scope, scope_stack)
+    match e.opc:
+        case UnaryOperatorKind.DEREF:
+            out += [IrInstr(IrInstrKind.LDA, e.ty.get_size(), None)]
+        case UnaryOperatorKind.PLUS:
+            pass
+        case UnaryOperatorKind.MINUS:
+            out += [IrInstr(IrInstrKind.NEG, None, None)]
+        case UnaryOperatorKind.NOT:
+            out += [IrInstr(IrInstrKind.INV, None, None)]
+        case UnaryOperatorKind.LNOT:
+            out += [IrInstr(IrInstrKind.NOT, None, None)]
+        case _:
+            assert False, f"unhandled unary op: {e.opc}"
+    return out
+
+def generate_binary_expr_ir(e: BinaryExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    out = []
+    if e.opc == BinaryOperatorKind.ASSIGN:
+        out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
+        out += generate_assignment(e.lhs, ir, cur_scope, scope_stack)
+        return out
+    out += generate_expr_ir(e.lhs, ir, cur_scope, scope_stack)
+    out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
+    match e.opc:
+        case BinaryOperatorKind.ADD:
+            out.append(IrInstr(IrInstrKind.ADD, None, None))
+        case BinaryOperatorKind.SUB:
+            out.append(IrInstr(IrInstrKind.SUB, None, None))
+        case BinaryOperatorKind.MUL:
+            out.append(IrInstr(IrInstrKind.MUL, None, None))
+        case BinaryOperatorKind.DIV:
+            out.append(IrInstr(IrInstrKind.DIV, None, None))
+        case BinaryOperatorKind.REM:
+            out.append(IrInstr(IrInstrKind.REM, None, None))
+        case BinaryOperatorKind.SHL:
+            out.append(IrInstr(IrInstrKind.SHL, None, None))
+        case BinaryOperatorKind.SHR:
+            out.append(IrInstr(IrInstrKind.SHR, None, None))
+        case BinaryOperatorKind.LT:
+            out.append(IrInstr(IrInstrKind.LTH, None, None))
+        case BinaryOperatorKind.GT:
+            out.append(IrInstr(IrInstrKind.GTH, None, None))
+        case BinaryOperatorKind.LE:
+            out.append(IrInstr(IrInstrKind.LEQ, None, None))
+        case BinaryOperatorKind.GE:
+            out.append(IrInstr(IrInstrKind.GEQ, None, None))
+        case BinaryOperatorKind.EQ:
+            out.append(IrInstr(IrInstrKind.EQU, None, None))
+        case BinaryOperatorKind.NE:
+            out.append(IrInstr(IrInstrKind.NEQ, None, None))
+        case BinaryOperatorKind.AND:
+            out.append(IrInstr(IrInstrKind.AND, None, None))
+        case BinaryOperatorKind.XOR:
+            out.append(IrInstr(IrInstrKind.XOR, None, None))
+        case BinaryOperatorKind.OR:
+            out.append(IrInstr(IrInstrKind.IOR, None, None))
+        # Logical &&, || => branch for lazy evaluation
+        case _:
+            assert False, f"unimplemented binary op: {e.opc}"
+    return out
+
+def generate_compound_assign_expr_ir(e: CompoundAssignExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    out = []
+    # TODO: different kind of lhs
+    assert isinstance(e.lhs, DeclRefExpr), "compound assign only on var for now"
+    var_id = scope_lookup(cur_scope, scope_stack, e.lhs.decl.name)
+    out += [IrInstr(IrInstrKind.PSH, 1, var_id)]
+
+    out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
+    match e.opc:
+        case BinaryOperatorKind.ADDASSIGN:
+            out.append(IrInstr(IrInstrKind.ADD, None, None))
+        case BinaryOperatorKind.SUBASSIGN:
+            out.append(IrInstr(IrInstrKind.SUB, None, None))
+        case BinaryOperatorKind.MULASSIGN:
+            out.append(IrInstr(IrInstrKind.MUL, None, None))
+        case BinaryOperatorKind.DIVASSIGN:
+            out.append(IrInstr(IrInstrKind.DIV, None, None))
+        case BinaryOperatorKind.REMASSIGN:
+            out.append(IrInstr(IrInstrKind.REM, None, None))
+        case BinaryOperatorKind.SHLASSIGN:
+            out.append(IrInstr(IrInstrKind.SHL, None, None))
+        case BinaryOperatorKind.SHRASSIGN:
+            out.append(IrInstr(IrInstrKind.SHR, None, None))
+        case BinaryOperatorKind.ANDASSIGN:
+            out.append(IrInstr(IrInstrKind.AND, None, None))
+        case BinaryOperatorKind.XORASSIGN:
+            out.append(IrInstr(IrInstrKind.XOR, None, None))
+        case BinaryOperatorKind.ORASSIGN:
+            out.append(IrInstr(IrInstrKind.IOR, None, None))
+        case _:
+            assert False, f"unimplemented compassign op: {e.opc}"
+
+    # TODO: XXX: => lhs might be calculated twice => error if lhs or rhs changes value of lhs
+    out += generate_assignment(e.lhs, ir, cur_scope, scope_stack)
+    return out
+
+def generate_cast_expr_ir(e: CastExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    if e.kind == CastKind.NOOP:
+        return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
+    elif e.kind == CastKind.INTEGRAL_TO_BOOLEAN or e.kind == CastKind.POINTER_TO_BOOLEAN:
+        # DO NOTHING TO CONVERT TO BOOLEAN
+        return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
+    elif e.kind == CastKind.ARRAY_TO_POINTER_DECAY:
+        if isinstance(e.op, DeclRefExpr):
+            decl = e.op.decl
+            assert isinstance(e.op.decl.ty, ArrayType)
+            # TODO:
+            var_id = scope_lookup(cur_scope, scope_stack, decl.name)
+            return [IrInstr(IrInstrKind.PSH, 2, var_id)]
+        elif isinstance(e.op, StringLiteral):
+            global_id = len(ir.globs)
+            ir.globs.append(IrGlobal(e.op.value, False, True))
+            return [IrInstr(IrInstrKind.PSH, 3, global_id)]
+    elif e.kind == CastKind.LVALUE_TO_RVALUE:
+        if isinstance(e.op, DeclRefExpr):
+            if (g := ir.has_global(e.op.decl.name)) >= 0:
+                return [IrInstr(IrInstrKind.PSH, 4, g)]
+            else:
+                var_id = scope_lookup(cur_scope, scope_stack, e.op.decl.name)
+                return [IrInstr(IrInstrKind.PSH, 1, var_id)]
+        elif isinstance(e.op, ArraySubscriptExpr):
+            out = []
+            out += generate_array_subscript_addr(e.op, ir, cur_scope, scope_stack)
+            size = e.op.ty.get_size()
+            out += [IrInstr(IrInstrKind.LDA, size, None)]
+            return out
+        elif isinstance(e.op, MemberExpr):
+            out = []
+            out += generate_member_expr_addr(e.op, ir, cur_scope, scope_stack)
+            size = e.op.ty.get_size()
+            out += [IrInstr(IrInstrKind.LDA, size, None)]
+            return out
+        elif isinstance(e.op, BinaryExpr) and e.op.opc == BinaryOperatorKind.ASSIGN:
+            return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
+        elif isinstance(e.op, UnaryExpr) and e.op.opc == UnaryOperatorKind.DEREF:
+            out = []
+            out += generate_expr_ir(e.op.arg, ir, cur_scope, scope_stack)
+            size = e.op.ty.get_size()
+            out += [IrInstr(IrInstrKind.LDA, size, None)]
+            return out
+    elif e.kind == CastKind.INTEGRAL_CAST:
+        # TODO: what to do ? for now nothing in IR
+        return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
+    assert False, f"unhandled op kind {e.op.__class__} for cast kind: {e.kind}"
+
+def generate_call_expr_ir(e: CallExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    out = []
+    for a in e.args[::-1]:
+        out += generate_expr_ir(a, ir, cur_scope, scope_stack)
+    assert isinstance(e.fn, DeclRefExpr) and isinstance(e.fn.decl, FnDecl), "fn of callexpr is not a function"
+    name = e.fn.decl.name
+    return out + [IrInstr(IrInstrKind.CAL, name, len(e.args))]
+
+def generate_conditional_expr_ir(e: ConditionalExpr, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
+    _, _, _, _ = e, ir, cur_scope, scope_stack # UNUSED
+    assert False, "ConditionalExpr to ir not implemented"
+
 def generate_expr_ir(e, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
-    if isinstance(e, DeclRefExpr):
-        if isinstance(e.decl, EnumVariantDecl):
-            return [IrInstr(IrInstrKind.PSH, 0, e.decl.val)]
-        print(e)
-        diag(e.get_range()[0], "ASSERT FALSE", Diag.ERROR)
-        assert False, "Raw DeclRefExpr encountered in ast"
-    if isinstance(e, MemberExpr):
-        print(e)
-        diag(e.get_range()[0], "ASSERT FALSE", Diag.ERROR)
-        assert False, "Raw MemberExpr encountered in ast"
-    elif isinstance(e, BuiltinExpr):
+    if isinstance(e, DeclRefExpr) and isinstance(e.decl, EnumVariantDecl):
+        return [IrInstr(IrInstrKind.PSH, 0, e.decl.val)]
+    if isinstance(e, ParenExpr):
+        return generate_expr_ir(e.val, ir, cur_scope, scope_stack)
+    if isinstance(e, BuiltinExpr):
         out = []
         for a in e.args[::-1]:
             out += generate_expr_ir(a, ir, cur_scope, scope_stack)
         return out + [IrInstr(IrInstrKind.BUI, e.builtin_name, len(e.args))]
-    elif isinstance(e, IntegerLiteral):
-        return [IrInstr(IrInstrKind.PSH, 0, e.value)]
-    elif isinstance(e, UnaryExpr):
-        # TODO: decr / incr / deref
-        if e.opc == UnaryOperatorKind.ADDROF:
-            return generate_addrof_ir(e.arg, ir, cur_scope, scope_stack)
-        out = []
-        out += generate_expr_ir(e.arg, ir, cur_scope, scope_stack)
-        match e.opc:
-            case UnaryOperatorKind.DEREF:
-                out += [IrInstr(IrInstrKind.LDA, e.ty.get_size(), None)]
-            case UnaryOperatorKind.PLUS:
-                pass
-            case UnaryOperatorKind.MINUS:
-                out += [IrInstr(IrInstrKind.NEG, None, None)]
-            case UnaryOperatorKind.NOT:
-                out += [IrInstr(IrInstrKind.INV, None, None)]
-            case UnaryOperatorKind.LNOT:
-                out += [IrInstr(IrInstrKind.NOT, None, None)]
-            case _:
-                assert False, f"unhandled unary op: {e.opc}"
-        return out
-    elif isinstance(e, BinaryExpr):
-        if e.opc == BinaryOperatorKind.ASSIGN:
-            return generate_assignment(e, ir, cur_scope, scope_stack)
-        out = []
-        out += generate_expr_ir(e.lhs, ir, cur_scope, scope_stack)
-        out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
-        match e.opc:
-            case BinaryOperatorKind.ADD:
-                out.append(IrInstr(IrInstrKind.ADD, None, None))
-            case BinaryOperatorKind.SUB:
-                out.append(IrInstr(IrInstrKind.SUB, None, None))
-            case BinaryOperatorKind.MUL:
-                out.append(IrInstr(IrInstrKind.MUL, None, None))
-            case BinaryOperatorKind.DIV:
-                out.append(IrInstr(IrInstrKind.DIV, None, None))
-            case BinaryOperatorKind.REM:
-                out.append(IrInstr(IrInstrKind.REM, None, None))
-            case BinaryOperatorKind.SHL:
-                out.append(IrInstr(IrInstrKind.SHL, None, None))
-            case BinaryOperatorKind.SHR:
-                out.append(IrInstr(IrInstrKind.SHR, None, None))
-            case BinaryOperatorKind.LT:
-                out.append(IrInstr(IrInstrKind.LTH, None, None))
-            case BinaryOperatorKind.GT:
-                out.append(IrInstr(IrInstrKind.GTH, None, None))
-            case BinaryOperatorKind.LE:
-                out.append(IrInstr(IrInstrKind.LEQ, None, None))
-            case BinaryOperatorKind.GE:
-                out.append(IrInstr(IrInstrKind.GEQ, None, None))
-            case BinaryOperatorKind.EQ:
-                out.append(IrInstr(IrInstrKind.EQU, None, None))
-            case BinaryOperatorKind.NE:
-                out.append(IrInstr(IrInstrKind.NEQ, None, None))
-            case BinaryOperatorKind.AND:
-                out.append(IrInstr(IrInstrKind.AND, None, None))
-            case BinaryOperatorKind.XOR:
-                out.append(IrInstr(IrInstrKind.XOR, None, None))
-            case BinaryOperatorKind.OR:
-                out.append(IrInstr(IrInstrKind.IOR, None, None))
-            # Logical &&, || => branch for lazy evaluation
-            case _:
-                assert False, e.opc
-        return out
-    elif isinstance(e, CompoundAssignExpr):
-        assert isinstance(e.lhs, DeclRefExpr), "compound assign only on var for now"
-        var_id = scope_lookup(cur_scope, scope_stack, e.lhs.decl.name)
-        out = []
-        out += [IrInstr(IrInstrKind.PSH, 1, var_id)]
-        out += generate_expr_ir(e.rhs, ir, cur_scope, scope_stack)
-        match e.opc:
-            case BinaryOperatorKind.ADDASSIGN:
-                out.append(IrInstr(IrInstrKind.ADD, None, None))
-            case BinaryOperatorKind.SUBASSIGN:
-                out.append(IrInstr(IrInstrKind.SUB, None, None))
-            case BinaryOperatorKind.MULASSIGN:
-                out.append(IrInstr(IrInstrKind.MUL, None, None))
-            case BinaryOperatorKind.DIVASSIGN:
-                out.append(IrInstr(IrInstrKind.DIV, None, None))
-            case BinaryOperatorKind.REMASSIGN:
-                out.append(IrInstr(IrInstrKind.REM, None, None))
-            case BinaryOperatorKind.SHLASSIGN:
-                out.append(IrInstr(IrInstrKind.SHL, None, None))
-            case BinaryOperatorKind.SHRASSIGN:
-                out.append(IrInstr(IrInstrKind.SHR, None, None))
-            case BinaryOperatorKind.ANDASSIGN:
-                out.append(IrInstr(IrInstrKind.AND, None, None))
-            case BinaryOperatorKind.XORASSIGN:
-                out.append(IrInstr(IrInstrKind.XOR, None, None))
-            case BinaryOperatorKind.ORASSIGN:
-                out.append(IrInstr(IrInstrKind.IOR, None, None))
-            case _:
-                assert False, e.opc
-        out += [IrInstr(IrInstrKind.STV, var_id, None)]
-        out += [IrInstr(IrInstrKind.PSH, 1, var_id)]
-        return out
-    elif isinstance(e, SizeofExpr):
-        val = e.ty_of_sizeof.get_size()
-        return [IrInstr(IrInstrKind.PSH, 0, val)]
-    # elif isinstance(e, AlignofExpr):
-    #     val = e.ty_of_sizeof.get_align()
-    #     return [IrInstr(IrInstrKind.PSH, 0, val)]
-    elif isinstance(e, CastExpr):
-        if e.kind == CastKind.NOOP:
-            return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
-        if e.kind == CastKind.INTEGRAL_TO_BOOLEAN or e.kind == CastKind.POINTER_TO_BOOLEAN:
-            # DO NOTHING TO CONVERT TO BOOLEAN
-            return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
-        if e.kind == CastKind.ARRAY_TO_POINTER_DECAY:
-            if isinstance(e.op, DeclRefExpr):
-                decl = e.op.decl
-                assert isinstance(e.op.decl.ty, ArrayType)
-                # TODO:
-                var_id = scope_lookup(cur_scope, scope_stack, decl.name)
-                return [IrInstr(IrInstrKind.PSH, 2, var_id)]
-            elif isinstance(e.op, StringLiteral):
-                global_id = len(ir.globs)
-                ir.globs.append(IrGlobal(e.op.value, False, True))
-                return [IrInstr(IrInstrKind.PSH, 3, global_id)]
-            assert False, "TODO: ARRAY_TO_POINTER_DECAY"
-        if e.kind == CastKind.LVALUE_TO_RVALUE:
-            if isinstance(e.op, DeclRefExpr):
-                if (g := ir.has_global(e.op.decl.name)) >= 0:
-                    return [IrInstr(IrInstrKind.PSH, 4, g)]
-                else:
-                    var_id = scope_lookup(cur_scope, scope_stack, e.op.decl.name)
-                    return [IrInstr(IrInstrKind.PSH, 1, var_id)]
-            elif isinstance(e.op, ArraySubscriptExpr):
-                out = []
-                out += generate_array_subscript_addr(e.op, ir, cur_scope, scope_stack)
-                size = e.op.ty.get_size()
-                out += [IrInstr(IrInstrKind.LDA, size, None)]
-                return out
-            elif isinstance(e.op, MemberExpr):
-                out = []
-                out += generate_member_expr_addr(e.op, ir, cur_scope, scope_stack)
-                size = e.op.ty.get_size()
-                out += [IrInstr(IrInstrKind.LDA, size, None)]
-                return out
-            elif isinstance(e.op, BinaryExpr) and e.op.opc == BinaryOperatorKind.ASSIGN:
-                return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
-            elif isinstance(e.op, UnaryExpr) and e.op.opc == UnaryOperatorKind.DEREF:
-                out = []
-                out += generate_expr_ir(e.op.arg, ir, cur_scope, scope_stack)
-                size = e.op.ty.get_size()
-                out += [IrInstr(IrInstrKind.LDA, size, None)]
-                return out
-            else:
-                diag(e.get_range()[0], "ASSERT FALSE", Diag.ERROR)
-                assert False, "TODO: LVALUE_TO_RVALUE"
-        if e.kind == CastKind.INTEGRAL_CAST:
-            # TODO: what to do ? for now nothing in IR
-            return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
-        assert False, "TODO: other cast not implemented"
-    elif isinstance(e, ArraySubscriptExpr):
-        assert False, "TODO: implement array subscript"
-    elif isinstance(e, CallExpr):
-        out = []
-        for a in e.args[::-1]:
-            out += generate_expr_ir(a, ir, cur_scope, scope_stack)
-        assert isinstance(e.fn, DeclRefExpr) and isinstance(e.fn.decl, FnDecl)
-        name = e.fn.decl.name
-        return out + [IrInstr(IrInstrKind.CAL, name, len(e.args))]
-    else:
-        assert False, e.__class__
-
+    if isinstance(e, IntegerLiteral) or isinstance(e, BoolLiteral):
+        try:
+            return [IrInstr(IrInstrKind.PSH, 0, int(e.value))]
+        except:
+            assert False, "int conversion failed" 
+    if isinstance(e, UnaryExpr):
+        return generate_unary_expr_ir(e, ir, cur_scope, scope_stack)
+    if isinstance(e, ConditionalExpr):
+        return generate_conditional_expr_ir(e, ir, cur_scope, scope_stack)
+    if isinstance(e, CompoundAssignExpr):
+        return generate_compound_assign_expr_ir(e, ir, cur_scope, scope_stack)
+    if isinstance(e, BinaryExpr):
+        return generate_binary_expr_ir(e, ir, cur_scope, scope_stack)
+    if isinstance(e, SizeofExpr):
+        return [IrInstr(IrInstrKind.PSH, 0, e.ty_of_sizeof.get_size())]
+    # if isinstance(e, AlignofExpr):
+    #     return [IrInstr(IrInstrKind.PSH, 0, e.ty_of_sizeof.get_align())]
+    if isinstance(e, CastExpr):
+        return generate_cast_expr_ir(e, ir, cur_scope, scope_stack)
+    if isinstance(e, CallExpr):
+        return generate_call_expr_ir(e, ir, cur_scope, scope_stack)
+    if isinstance(e, VAArgExpr):
+        return [IrInstr(IrInstrKind.VAA, False, None)] # TODO: handle is_float = True
+    assert False, f"Raw {e.__class__} encountered in ast"
 
 def generate_stmt_ir(s: Stmt, ir: FullIr, cur_scope, scope_stack, stmt_gen_info) -> List[IrInstr]:
     out = []
-    if s is None:
+    if isinstance(s, NullStmt):
         return out
-    if isinstance(s, CompoundStmt):
+    elif isinstance(s, CompoundStmt):
         for i in s.inner:
             g = generate_stmt_ir(i, ir, cur_scope, scope_stack, stmt_gen_info)
             out += g
@@ -381,24 +429,29 @@ def generate_stmt_ir(s: Stmt, ir: FullIr, cur_scope, scope_stack, stmt_gen_info)
         d = s.decl
         if isinstance(d, TypeDecl):
             return []
-        assert isinstance(d, VarDecl), "Only var decl are supported for now"
+        if not isinstance(d, VarDecl):
+            print(s)
+            diag(s.get_range()[0], "Only var decl are supported for now", Diag.UNIMPLEMENTED, [s.get_range()])
+            assert False
         cur_scope[d.name] = len(stmt_gen_info.stack_frame)
-        stmt_gen_info.stack_frame.append(d.ty.get_size())
+        stmt_gen_info.stack_frame.append(StackFrameEntry(d.ty.get_size(), d.ty.get_align(), d.name))
     else:
-        assert False, s.__class__
+        print(s)
+        diag(s.get_range()[0], f"Unimplemented: {s.__class__}", Diag.UNIMPLEMENTED, [s.get_range()])
+        assert False
     return out
-
 
 def generate_function_ir(f: FnDecl, ir: FullIr):
     fn_scope = {}
     out_instrs = []
     stmt_gen_info = StmtGenInfo()
-    stack_frame = []
+    params = []
+    assert isinstance(f.ty, FunctionType)
     if len(f.param_decls) > 0:
-        out_instrs.append(IrInstr(IrInstrKind.PRM, len(f.param_decls), None))
         for i, p in enumerate(f.param_decls):
             fn_scope[p.name] = i
-            stmt_gen_info.stack_frame.append(p.ty.get_size())
+            stmt_gen_info.stack_frame.append(StackFrameEntry(p.ty.get_size(), p.ty.get_align(), p.name))
+            params.append(ParamEntry(p.ty.get_size(), False)) # is float
     scope_stack = [fn_scope]
     body_instrs = generate_stmt_ir(f.body, ir, {}, scope_stack, stmt_gen_info)
     out_instrs += body_instrs
@@ -410,14 +463,14 @@ def generate_function_ir(f: FnDecl, ir: FullIr):
             out_instrs.append(IrInstr(IrInstrKind.RET, None, None))
     returns_value = out_instrs[-1].opcode == IrInstrKind.RTV
 
-    return FunctionIr(returns_value, out_instrs, stmt_gen_info.stack_frame, f.is_lib)
-
+    return FunctionIr(returns_value, out_instrs, stmt_gen_info.stack_frame, params, f.is_vararg, f.is_lib)
 
 def generate_lib_function_proto(f: FnDecl, ir: FullIr):
-    assert f.is_lib
+    _ = ir # UNUSED
+    assert f.is_lib, "lib function proto not marked as lib"
+    assert isinstance(f.ty, FunctionType)
     returns_value = f.ty.return_type is not None and f.ty.return_type != Type()
-    return FunctionIr(returns_value, [], [], f.is_lib)
-
+    return FunctionIr(returns_value, [], [], [], f.is_vararg, f.is_lib)
 
 def generate_ir(ast) -> FullIr:
     ir = FullIr()

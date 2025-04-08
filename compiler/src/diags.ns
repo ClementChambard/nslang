@@ -1,0 +1,119 @@
+#include diags.nsh
+#include io.nsh
+#include str.nsh
+#include opened_file.nsh
+
+fn fatal_error(msg: i8*) {
+    print("\x1b[1;32mfatal error: \x1b[0;1m%s\x1b[0m\n", msg);
+    __builtin_syscall(60, 1);
+}
+
+let __last_loc: Loc;
+let __last_level: i64;
+let __had_errors: bool;
+
+fn push_level_color(os: String*, level: i64, bold: bool) {
+    string_push_cstr(os, "\x1b[");
+    if (bold) string_push_cstr(os, "1;");
+    if (level == DIAG_WARNING) string_push_cstr(os, "35m");
+    else if (level == DIAG_NOTE) string_push_cstr(os, "34m");
+    else if (level == DIAG_ERROR) string_push_cstr(os, "31m");
+    else if (level == DIAG_UNIMPLEMENTED) string_push_cstr(os, "31m");
+    else string_push_cstr(os, "37m");
+}
+
+fn push_diagnostic_level(os: String*, level: i64, show_colors: bool) {
+    if (show_colors) push_level_color(os, level, true);
+    if (level == DIAG_WARNING) string_push_cstr(os, "warning: ");
+    else if (level == DIAG_NOTE) string_push_cstr(os, "note: ");
+    else if (level == DIAG_ERROR) string_push_cstr(os, "error: ");
+    else if (level == DIAG_UNIMPLEMENTED) string_push_cstr(os, "unimplemented: ");
+    else string_push_cstr(os, "UNKDIAG: ");
+    if (show_colors) string_push_cstr(os, "\x1b[0m");
+}
+
+fn push_diagnostic_message(os: String*, is_supplemental: bool, message: i8*, current_column: i64, columns: i64, show_colors: bool) {
+    let bold: bool;
+    bold = false;
+    if (show_colors) if (!is_supplemental) {
+        string_push_cstr(os, "\x1b[1m");
+        bold = true;
+    }
+    if (columns != 0) {
+        // TODO:
+        // push_word_wrapped(os, message, columns, current_column, bold);
+    } else {
+        string_push_cstr(os, message);
+    }
+    if (show_colors) string_push_cstr(os, "\x1b[0m");
+    string_push(os, '\n');
+}
+
+fn push_filename(os: String*, filename: i8*) {
+    string_push_cstr(os, filename);
+}
+
+fn push_diagnostic_loc(os: String*, loc: Loc, level: i64) {
+    let complete_loc: CompleteLoc;
+    opened_file_get_loc(&complete_loc, loc);
+    push_level_color(os, level, true);
+    push_filename(os, complete_loc.filename);
+    string_push_format(os, ":%i:%i: ", complete_loc.line, complete_loc.col);
+}
+
+fn emit_diagnostic_message(loc: Loc, level: i64, msg: i8*) {
+    let os: String;
+    string_init(&os);
+    if (loc != 0) {
+        push_diagnostic_loc(&os, loc, level);
+    }
+    push_diagnostic_level(&os, level, true);
+    push_diagnostic_message(&os, level == DIAG_NOTE, msg, 0, 0, true);
+    print("%s", os.inner.data);
+    string_destroy(&os);
+}
+
+fn emit_code_context(loc: Loc, level: i64, ranges: LocRge*, ranges_count: i64, hints: void*, hint_count: i64) {
+    print("Code ctx\n");
+}
+
+fn diag_emit(d: Diag*) {
+    emit_diagnostic_message(d->loc, d->level, d->msg);
+    emit_code_context(d->loc, d->level, cast<LocRge*>(d->ranges.data), d->ranges.len / 2, d->hints.data, d->hints.len);
+    __last_loc = d->loc;
+    __last_level = d->level;
+    if (__last_level == DIAG_ERROR) __had_errors = true;
+}
+
+fn reset_errors() {
+    __had_errors = false;
+}
+
+fn compilation_had_errors() -> bool {
+    return __had_errors;
+}
+
+fn diag_init(d: Diag*, loc: Loc, msg: i8*, level: i64) {
+    d->loc = loc;
+    d->msg = msg;
+    d->level = level;
+    darray_init(&d->ranges);
+    darray_init(&d->hints);
+}
+
+fn diag_add_range(d: Diag*, rge: LocRge*) {
+    darray_push(&d->ranges, cast<void*>(rge->start));
+    darray_push(&d->ranges, cast<void*>(rge->end));
+}
+
+fn diag_destroy(d: Diag*) {
+    darray_destroy(&d->ranges);
+    darray_destroy(&d->hints);
+}
+
+fn diag(loc: Loc, msg: i8*, level: i64) {
+    let d: Diag;
+    diag_init(&d, loc, msg, level);
+    diag_emit(&d);
+    diag_destroy(&d);
+}

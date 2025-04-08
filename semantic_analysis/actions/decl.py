@@ -3,7 +3,7 @@ from ns_ast.nodes import FnDecl, Type
 from utils.diagnostic import diag, Diag
 from . import state
 
-def check_fn_decl_compat(old_decl: FnDecl, name, params, return_type, fn_loc, body: bool = False) -> bool:
+def check_fn_decl_compat(old_decl: FnDecl, name, params, return_type, fn_loc, body: bool = False, is_vararg = False) -> bool:
     if return_type is None:
         return_type = Type()
     if not isinstance(old_decl, FnDecl):
@@ -19,12 +19,15 @@ def check_fn_decl_compat(old_decl: FnDecl, name, params, return_type, fn_loc, bo
         if cur_param.ty != prev_param.ty:
             diag(fn_loc, f"function '{name}' already declared with different parameters", Diag.ERROR)
             return True
+    if is_vararg != old_decl.is_vararg:
+        diag(fn_loc, f"function '{name}' already declared with different parameters", Diag.ERROR)
+        return True
     if return_type != old_decl.ty.return_type:
         diag(fn_loc, f"function '{name}' already declared with different return type", Diag.ERROR)
         return True
     return False
 
-def act_on_fn_decl(scope, name, params, return_type, fn_loc, semi_loc):
+def act_on_fn_decl(scope, name, params, return_type, fn_loc, semi_loc, is_vararg = False):
     old_decl = scope.lookup_named_decl(name)
     is_lib = False
     if old_decl is not None:
@@ -32,20 +35,20 @@ def act_on_fn_decl(scope, name, params, return_type, fn_loc, semi_loc):
             return None
         scope.remove_decl(old_decl)
         is_lib = old_decl.is_lib
-    decl = FnDecl((fn_loc, semi_loc), name, params, return_type)
+    decl = FnDecl((fn_loc, semi_loc), name, params, return_type, is_vararg)
     decl.is_lib = is_lib
     scope.add_decl(decl)
     return decl
 
-def act_on_start_fn_definition(scope, name, params, return_type, fn_loc):
+def act_on_start_fn_definition(scope, name, params, return_type, fn_loc, is_vararg = False):
     old_decl = scope.lookup_named_decl(name)
     is_lib = False
     if old_decl is not None:
-        if check_fn_decl_compat(old_decl, name, params, return_type, fn_loc, True):
+        if check_fn_decl_compat(old_decl, name, params, return_type, fn_loc, True, is_vararg):
             return None
         scope.remove_decl(old_decl)
         is_lib = old_decl.is_lib
-    decl = FnDecl((fn_loc, 0), name, params, return_type)
+    decl = FnDecl((fn_loc, 0), name, params, return_type, is_vararg)
     decl.is_lib = is_lib
     scope.add_decl(decl)
     state.CUR_FN_DECL = decl

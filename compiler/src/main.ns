@@ -1,0 +1,41 @@
+#include io.nsh
+#include opened_file.nsh
+#include tok.nsh
+#include token.nsh
+#include ident_info.nsh
+#include lexer.nsh
+#include mem.nsh
+#include diags.nsh
+
+fn init() {
+    ident_info_add_keywords();
+}
+
+fn cleanup() {
+    opened_file_close_all();
+    ident_info_remove_all();
+}
+
+fn main() {
+    init();
+
+    let lexer: Lexer;
+
+    lexer_init(&lexer);
+
+    lexer_enter_source_file(&lexer, "example.ns");
+    lexer_add_include_path(&lexer, "/home/clement/dev/nslang/stdlib/include");
+
+    let out_token: Token*;
+    out_token = lexer_lex(&lexer);
+    while (out_token->ty != TOK_EOF) {
+        token_dump(out_token);
+        free(out_token);
+        out_token = lexer_lex(&lexer);
+    }
+    free(out_token);
+
+    lexer_delete(&lexer);
+
+    cleanup();
+}

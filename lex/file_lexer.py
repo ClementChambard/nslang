@@ -1,10 +1,13 @@
+from dataclasses import dataclass
 from . import OpenedFile, Token, Tok, IdentInfo
 from .lex_utils import ident_continue
 
+
+@dataclass
 class FileLexer:
     f: OpenedFile
     pos: int
-    the_lexer: "Lexer"
+    the_lexer: "Lexer | None"
 
     def __init__(self, filename: str, the_lexer: "Lexer | None" = None):
         f = OpenedFile.find(filename)
@@ -49,7 +52,7 @@ class FileLexer:
 
     def handle_directive(self, token: Token):
         if self.the_lexer is None:
-            self.construct_token(token, cur_pos, Tok.EOF)
+            self.construct_token(token, self.pos, Tok.EOF)
             return
         self.the_lexer.handle_directive(token)
 
@@ -100,7 +103,6 @@ class FileLexer:
             cur_pos += 1
 
     def lex_char_literal(self, token: Token, cur_pos: int):
-        # Only single char literal
         c = self.f.source[cur_pos]
         while c != "'":
             if c == "\\":
@@ -271,9 +273,9 @@ class FileLexer:
                 else:
                     self.construct_token(token, cur_pos, Tok.PERIOD)
         elif c == "'":
-            self.lex_char_literal(token, cur_pos + 1)
+            self.lex_char_literal(token, cur_pos)
         elif c == "\"":
-            self.lex_str_literal(token, cur_pos + 1)
+            self.lex_str_literal(token, cur_pos)
         else:
             diag(self.pos + self.f.pos_offset, f"Unknown character {c} in source file", Diag.ERROR)
             self.pos = cur_pos

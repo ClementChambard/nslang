@@ -1,11 +1,11 @@
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import List, Self, Tuple
 from . import Loc, LOC_INVALID
 
-
-OPENED_FILES = []
-
-
+@dataclass
 class OpenedFile:
+    opened_files = []
+
     filename: str
     source: str
     src_len: int
@@ -17,11 +17,11 @@ class OpenedFile:
         with open(filename, "r") as f:
             self.source = f.read() + "\0"
         self.src_len = len(self.source)
-        if len(OPENED_FILES) == 0:
+        if len(self.opened_files) == 0:
             self.pos_offset = 1
         else:
-            self.pos_offset = OPENED_FILES[-1].pos_offset + OPENED_FILES[-1].src_len
-        OPENED_FILES.append(self)
+            self.pos_offset = self.opened_files[-1].pos_offset + self.opened_files[-1].src_len
+        self.opened_files.append(self)
         self.make_lines_cache()
 
     def make_lines_cache(self):
@@ -47,24 +47,24 @@ class OpenedFile:
             return 0
         return self.line_cache[line-2]
 
-    @staticmethod
-    def find(filename: str):  # ->
-        for f in OPENED_FILES:
+    @classmethod
+    def find(cls, filename: str) -> Self | None: 
+        for f in cls.opened_files:
             if f.filename == filename:
                 return f
         return None
 
-    @staticmethod
-    def find_by_loc(loc: Loc):  # ->
-        if loc == LOC_INVALID or len(OPENED_FILES) == 0:
+    @classmethod
+    def find_by_loc(cls, loc: Loc) -> Self | None:
+        if loc == LOC_INVALID or len(cls.opened_files) == 0:
             return None
         file_i = 0
-        while (file_i + 1 < len(OPENED_FILES) and loc >= OPENED_FILES[file_i + 1].pos_offset):
+        while (file_i + 1 < len(cls.opened_files) and loc >= cls.opened_files[file_i + 1].pos_offset):
             file_i += 1
-        return OPENED_FILES[file_i]
+        return cls.opened_files[file_i]
 
-    @staticmethod
-    def get_loc(location: Loc) -> Tuple[str, int, int] | None:
+    @classmethod
+    def get_loc(cls, location: Loc) -> Tuple[str, int, int] | None:
         f = OpenedFile.find_by_loc(location)
         if f is None:
             return None

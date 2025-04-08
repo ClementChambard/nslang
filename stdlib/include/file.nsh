@@ -1,3 +1,9 @@
+////////////////////////////////////////
+/// File Standard Library for NSLang ///
+////////////////////////////////////////
+
+/// constants
+///   Flags for 'open'
 enum : i64 {
     O_ACCMODE   = 0x000003,
     O_RDONLY    = 0x000000,
@@ -24,7 +30,33 @@ enum : i64 {
     O_TMPFILE   = 0x410000,
 };
 
+/// constants SeekWhence
+///   Seek location
+enum SeekWhence : i64 {
+    SEEK_SET = 0,   //< seek from start of file
+    SEEK_CUR = 1,   //< seek from current position in file
+    SEEK_END = 2,   //< seek from end of file
+};
 
+
+/// function open
+///   Opens a file
+///   @param filename the name of the file to open
+///   @param flags open flags (see constants above)
+///   @param mode the mode of the new file if called with 'O_CREAT'
+///   @returns a new file descriptor, or -ERRNO on error
 lib fn open(filename: i8*, flags: i64, mode: i64) -> i64;
 
+/// function close
+///   Closes a file
+///   @param fd the file descriptor
+///   @returns 0, or -ERRNO on error
 lib fn close(fd: i64) -> i64;
+
+/// function lseek
+///   Changes the cursor location in the file
+///   @param fd the file descriptor
+///   @param offset the offset in bytes from 'whence'
+///   @param whence @see 'SeekWhence'
+///   @returns the new offset in bytes from start of file
+lib fn lseek(fd: i64, offset: i64, whence: SeekWhence) -> i64;

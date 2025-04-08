@@ -1,0 +1,48 @@
+#include token.nsh
+#include io.nsh
+#include opened_file.nsh
+#include mem.nsh
+#include ident_info.nsh
+
+fn token_dump(self: Token*) {
+    // TODO: value
+    let loc: CompleteLoc;
+    opened_file_get_loc(&loc, self->loc);
+    print("%s:%i:%i: %s", loc.filename, loc.line, loc.col, tok_get_name(self->ty));
+    let has_val: bool;
+    let val: i8*;
+    if (self->ty == TOK_IDENT) {
+        val = cast<IdentInfo*>(self->value)->val;
+        has_val = true;
+    } else if (self->ty == TOK_NUM) {
+        val = self->value;
+        has_val = true;
+    } else if (self->ty == TOK_CHR) {
+        val = self->value;
+        has_val = true;
+    } else if (self->ty == TOK_STR) {
+        val = self->value;
+        has_val = true;
+    }
+    if (has_val) {
+        // STRDUP
+        let buf: i8*;
+        buf = malloc(self->len + 1);
+        memcpy(buf, val, self->len);
+        buf[self->len] = 0;
+        print(" %s", buf);
+        free(buf);
+    }
+    print("\n");
+}
+
+fn token_copy_from(self: Token*, other: Token*) {
+    self->ty = other->ty;
+    self->loc = other->loc;
+    self->value = other->value;
+    self->len = other->len;
+}
+
+fn token_get_end_loc(self: Token*) -> Loc {
+    return self->loc + self->len;
+}

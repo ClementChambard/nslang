@@ -1,5 +1,12 @@
 #include io.nsh
+#include mem.nsh
+
+fn add(a1: i64, a2: i64) -> bool {
+    return a1 == a2;
+}
 
 fn main() {
-    print("Hello, World\n");
+    if (0) {  1; 2; } else { 3; 4; }
+    print("Hello, World!\n");
+    print("%X %x %i %i %u %c %s\n", 30, 30, 3, -3, 4, 'a', "test");
 }

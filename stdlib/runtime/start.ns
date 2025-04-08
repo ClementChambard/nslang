@@ -1,0 +1,5 @@
+lib fn main();
+lib fn _start() {
+    main();
+    __builtin_syscall(231, 0);
+}

@@ -1,0 +1,80 @@
+#include ident_info.nsh
+#include darray.nsh
+#include mem.nsh
+
+let IDENTIFIERS: DArray;
+
+fn ident_info_add(ty: Tok, val: i8*, len: i64) -> IdentInfo* {
+    let self: IdentInfo*;
+    self = malloc(sizeof(IdentInfo));
+    self->ty = ty;
+    self->val = val;
+    self->len = len;
+    darray_push(&IDENTIFIERS, self);
+    return self;
+}
+
+fn ident_info_remove_all() {
+    let i: i64;
+    i = 0;
+    while (i < IDENTIFIERS.len) {
+        free(IDENTIFIERS.data[i]);
+        i += 1;
+    }
+    darray_destroy(&IDENTIFIERS);
+}
+
+fn ident_info_add_keywords() {
+    ident_info_add(TOK_KW_FN, "fn", 2);
+    ident_info_add(TOK_KW_LET, "let", 3);
+    ident_info_add(TOK_KW_LIB, "lib", 3);
+    ident_info_add(TOK_KW_TYPE, "type", 4);
+    ident_info_add(TOK_KW_STRUCT, "struct", 6);
+    ident_info_add(TOK_KW_ENUM, "enum", 4);
+    ident_info_add(TOK_KW_I8, "i8", 2);
+    ident_info_add(TOK_KW_I16, "i16", 3);
+    ident_info_add(TOK_KW_I32, "i32", 3);
+    ident_info_add(TOK_KW_I64, "i64", 3);
+    ident_info_add(TOK_KW_U8, "u8", 2);
+    ident_info_add(TOK_KW_U16, "u16", 3);
+    ident_info_add(TOK_KW_U32, "u32", 3);
+    ident_info_add(TOK_KW_U64, "u64", 3);
+    ident_info_add(TOK_KW_BOOL, "bool", 4);
+    ident_info_add(TOK_KW_VOID, "void", 4);
+    ident_info_add(TOK_KW_SIZEOF, "sizeof", 6);
+    ident_info_add(TOK_KW_CAST, "cast", 4);
+    ident_info_add(TOK_KW_IF, "if", 2);
+    ident_info_add(TOK_KW_ELSE, "else", 4);
+    ident_info_add(TOK_KW_TRUE, "true", 4);
+    ident_info_add(TOK_KW_FALSE, "false", 5);
+    ident_info_add(TOK_KW_NULLPTR, "nullptr", 7);
+    ident_info_add(TOK_KW_VAARG, "vaarg", 5);
+    ident_info_add(TOK_KW_CASE, "case", 4);
+    ident_info_add(TOK_KW_DEFAULT, "default", 7);
+    ident_info_add(TOK_KW_SWITCH, "switch", 6);
+    ident_info_add(TOK_KW_WHILE, "while", 5);
+    ident_info_add(TOK_KW_DO, "do", 2);
+    ident_info_add(TOK_KW_FOR, "for", 3);
+    ident_info_add(TOK_KW_CONTINUE, "continue", 8);
+    ident_info_add(TOK_KW_BREAK, "break", 5);
+    ident_info_add(TOK_KW_RETURN, "return", 6);
+    ident_info_add(TOK_BUILTIN_SYSCALL, "__builtin_syscall", 17);
+}
+
+fn ident_info_needs_handling(self: IdentInfo *) -> bool {
+    return false;
+}
+
+fn ident_info_find(name: i8*, len: i64) -> IdentInfo* {
+    let i: i64;
+    i = 0;
+    while (i < IDENTIFIERS.len) {
+        let cur_ii: IdentInfo*;
+        cur_ii = cast<IdentInfo*>(IDENTIFIERS.data[i]);
+        if (cur_ii->len == len) {
+            if (memcmp(name, cur_ii->val, len) == 0) return cur_ii;
+        }
+        i += 1;
+    }
+    return ident_info_add(TOK_IDENT, name, len);
+}
