@@ -1,5 +1,5 @@
 from ns_ast.nodes.stmt import StmtChild
-from . import Stmt, ValueDecl, Type, BuiltinType, BuiltinTypeKind
+from . import Stmt, ValueDecl, Type, BuiltinType, BuiltinTypeKind, FnDecl
 from lex import Loc, LocRge, Tok, IdentInfo
 from dataclasses import dataclass
 from typing import List, Self
@@ -331,6 +331,12 @@ class CallExpr(Expr):
 
 
 @dataclass
+class MethodCallExpr(CallExpr):
+    def __init__(self, method: Expr, args: List[Expr], ty: Type, vk: ValueKind, rparen_loc: Loc):
+        super().__init__(method, args, ty, vk, rparen_loc)
+
+
+@dataclass
 class SizeofExpr(Expr):
     sizeof_loc: Loc
     rparen_loc: Loc
@@ -376,6 +382,28 @@ class MemberExpr(Expr):
 
     def children(self) -> List[StmtChild]:
         return [self.base]
+
+
+@dataclass
+class MethodExpr(Expr):
+    self_object: Expr
+    method_func: FnDecl
+    is_arrow: bool
+    oploc: Loc
+
+    def __init__(self, self_object, is_arrow, oploc, method: FnDecl):
+        self.ty = method.ty
+        self.value_kind = ValueKind.PRVALUE
+        self.oploc = oploc
+        self.is_arrow = is_arrow
+        self.method_func = method
+        self.self_object = self_object
+
+    def get_range(self) -> LocRge:
+        return (self.self_object.get_range()[0], self.oploc)
+
+    def children(self) -> List[StmtChild]:
+        return [self.self_object]
 
 
 @dataclass

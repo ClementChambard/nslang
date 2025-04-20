@@ -1,35 +1,139 @@
-"fn" @keyword
-"let" @keyword
-"lib" @keyword
-"enum" @keyword
-"type" @keyword
-"struct" @keyword
-"if" @keyword
-"else" @keyword
-"while" @keyword
-"do" @keyword
-"break" @keyword
-"continue" @keyword
-"return" @keyword
-"sizeof" @keyword
-"true" @literal
-"false" @literal
-"nullptr" @literal
-"i8" @type
-"i16" @type
-"i32" @type
-"i64" @type
-"u8" @type
-"u16" @type
-"u32" @type
-"u64" @type
-"void" @type
-"bool" @type
-"__builtin_syscall" @builtin
-(fn_decl name: (ident) @function)
-(param_decl name: (ident) @variable.parameter)
-(var_decl name: (ident) @variable)
-(include_pp file: (file_name) @string)
-(type name: (ident) @type)
-(num) @number
+[
+  "fn"
+  "let"
+  "lib"
+] @keyword
+
+[
+  "enum"
+  "type"
+  "struct"
+] @keyword.type
+
+[
+  "if"
+  "else"
+] @keyword.conditional
+
+[
+  "while"
+  "do" 
+  "break"
+  "continue"
+] @keyword.repeat
+
+"return" @keyword.return
+
+"sizeof" @keyword.operator
+
+"true" @boolean
+"false" @boolean
+"nullptr" @constant.builtin
+"vaarg" @constant.builtin
+
+"#include" @keyword.import
+
+[
+  ";"
+  ":"
+  ","
+  "."
+  "::"
+] @punctuation.delimiter
+
+"..." @punctuation.special
+
+[
+  "("
+  ")"
+  "["
+  "]"
+  "{"
+  "}"
+] @punctuation.bracket
+
+[
+  "="
+  "-"
+  "*"
+  "/"
+  "+"
+  "%"
+  "~"
+  "|"
+  "&"
+  "^"
+  "<<"
+  ">>"
+  "->"
+  "<"
+  "<="
+  ">="
+  ">"
+  "=="
+  "!="
+  "!"
+  "&&"
+  "||"
+  "-="
+  "+="
+  "*="
+  "/="
+  "%="
+  "|="
+  "&="
+  "^="
+  ">>="
+  "<<="
+  "--"
+  "++"
+] @operator
+
 (str) @string
+(chr) @character
+
+[
+  "i8"
+  "i16"
+  "i32"
+  "i64"
+  "u8"
+  "u16"
+  "u32"
+  "u64"
+  "void"
+  "bool" 
+] @type.builtin
+
+"__builtin_syscall" @function.builtin
+"cast" @function.builtin
+
+"super" @keyword.modifier
+
+(fn_decl name: (ident) @function)
+(fn_decl struct_scope: (ident) @type)
+
+(param_decl name: (ident) @variable.parameter)
+
+(var_decl name: (ident) @variable)
+
+(include_pp file: (file_name) @string)
+
+(type name: (ident) @type)
+
+(member_expr field: (ident) @variable.member)
+(call_expr func: (ident) @function.call)
+(call_expr func: (member_expr field: (ident) @function.method.call))
+(method_ident name: (ident) @function.method.call)
+(method_ident type: (ident) @type)
+
+(enum_variant_decl name: (ident) @constant)
+(field_decl name: (ident) @variable.member)
+
+(enum_decl name: (ident) @type.definition)
+(type_decl name: (ident) @type.definition)
+(struct_decl name: (ident) @type.definition)
+
+(num) @number
+
+(comment) @comment @spell

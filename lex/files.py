@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Self, Tuple
+from typing import ClassVar, List, Self, Tuple
 from . import Loc, LOC_INVALID
 
 @dataclass
 class OpenedFile:
-    opened_files = []
+    opened_files: ClassVar[List[Self]] = []
 
     filename: str
     source: str

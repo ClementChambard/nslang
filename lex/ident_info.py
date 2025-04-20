@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Self
+from typing import ClassVar, Dict, Self
 from . import Tok
 
 
 @dataclass
 class IdentInfo:
-    identifiers = {}
+    identifiers: ClassVar[Dict[str, Self]] = {}
     
     ty: Tok
     val: str

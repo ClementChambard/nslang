@@ -1,4 +1,3 @@
-
 from .nodes import *
 
 
@@ -117,6 +116,10 @@ def _optimize_call_expr(expr: CallExpr) -> OptimizeExprResult:
     expr.args = [_optimize_expr(a).result for a in expr.args]
     return OptimizeExprResult(expr, False)
 
+def _optimize_method_expr(expr: MethodExpr) -> OptimizeExprResult:
+    # TODO: 
+    return OptimizeExprResult(expr, False)
+
 def _optimize_expr(expr: Expr) -> OptimizeExprResult:
     if isinstance(expr, IntegerLiteral):
         return OptimizeExprResult(expr, True)
@@ -146,6 +149,8 @@ def _optimize_expr(expr: Expr) -> OptimizeExprResult:
         return _optimize_array_subscript_expr(expr)
     elif isinstance(expr, MemberExpr):
         return _optimize_member_expr(expr)
+    elif isinstance(expr, MethodExpr):
+        return _optimize_method_expr(expr)
     elif isinstance(expr, CallExpr):
         return _optimize_call_expr(expr)
     elif isinstance(expr, SizeofExpr):
@@ -268,8 +273,8 @@ def _optimize_stmt(stmt: Stmt) -> OptimizeStmtResult:
     return OptimizeStmtResult(stmt)
 
 
-def optimize_ast(translation_unit: List[Decl]):
-    for d in translation_unit:
+def optimize_ast(translation_unit: TranslationUnitDecl):
+    for d in translation_unit.decls:
         if isinstance(d, FnDecl) and d.body is not None:
             out_body = []
             for stmt in d.body.inner:

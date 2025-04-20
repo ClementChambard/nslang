@@ -22,6 +22,7 @@ class Tok(Enum):
     RSQUARE = auto()
     SEMI = auto()
     COLON = auto()
+    COLONCOLON = auto()
     PERIOD = auto()
     ARROW = auto()
     ELLIPSIS = auto()
@@ -127,6 +128,7 @@ class Tok(Enum):
             case self.RSQUARE: return "]"
             case self.SEMI: return ";"
             case self.COLON: return ":"
+            case self.COLONCOLON: return "::"
             case self.PERIOD: return "."
             case self.ARROW: return "->"
             case self.ELLIPSIS: return "..."

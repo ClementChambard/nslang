@@ -2,6 +2,7 @@ from ns_ast.nodes import Type
 from lex import Token, Tok
 from utils import HEX_DIGITS, OCTAL_DIGITS, DECIMAL_DIGITS
 
+
 class NumLiteralParser:
     res: int
     ty: Type
@@ -16,8 +17,8 @@ class NumLiteralParser:
             s = s[1:]
         try:
             self.res = int(n, base)
-        except:
-            print("error parsing number")
+        except Exception as e:
+            print(f"error parsing number {e}")
             self.res = 0
             self.had_error = True
         return s
@@ -36,6 +37,7 @@ class NumLiteralParser:
 
     def parse_suffix(self, s):
         from semantic_analysis import TYPES
+
         if s == "i8":
             self.ty = TYPES["i8"]
         elif s == "i16":
@@ -66,6 +68,7 @@ class NumLiteralParser:
 
     def __init__(self, tok: Token):
         from semantic_analysis import TYPES
+
         self.res = 0
         self.ty = TYPES["i64"]
         self.had_error = False

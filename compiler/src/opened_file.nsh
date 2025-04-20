@@ -10,16 +10,16 @@ struct OpenedFile {
 };
 
 
-lib fn opened_file_line_offset(self: OpenedFile*, line: i64) -> i64;
+lib fn OpenedFile::line_offset(self: OpenedFile*, line: i64) -> i64;
 
-lib fn opened_file_make_line_cache(self: OpenedFile*);
+lib fn OpenedFile::make_line_cache(self: OpenedFile*);
 
-lib fn opened_file_open(filename: i8*) -> OpenedFile*;
+lib fn OpenedFile::open(filename: i8*) -> OpenedFile*;
 
-lib fn opened_file_close_all();
+lib fn OpenedFile::close_all();
 
-lib fn opened_file_find(filename: i8*) -> OpenedFile*;
+lib fn OpenedFile::find(filename: i8*) -> OpenedFile*;
 
-lib fn opened_file_find_by_loc(loc: Loc) -> OpenedFile*;
+lib fn OpenedFile::find_by_loc(loc: Loc) -> OpenedFile*;
 
-lib fn opened_file_get_loc(out: CompleteLoc*, loc: Loc);
+lib fn OpenedFile::get_loc(out: CompleteLoc*, loc: Loc);

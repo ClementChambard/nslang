@@ -156,7 +156,11 @@ class FileLexer:
         elif c == ";":
             self.construct_token(token, cur_pos, Tok.SEMI)
         elif c == ":":
-            self.construct_token(token, cur_pos, Tok.COLON)
+            c = self.f.source[cur_pos]
+            if c == ":":
+                self.construct_token(token, cur_pos + 1, Tok.COLONCOLON)
+            else:
+                self.construct_token(token, cur_pos, Tok.COLON)
         elif c == ",":
             self.construct_token(token, cur_pos, Tok.COMMA)
         elif c == "?":

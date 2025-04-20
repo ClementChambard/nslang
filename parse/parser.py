@@ -1,8 +1,10 @@
 from lex import Lexer, Token, Loc, LocPtr, Tok
 from semantic_analysis import Scope, ScopeFlags
 from utils.diagnostic import diag, Diag
+from ns_ast.nodes import TranslationUnitDecl
 
 CUR_PARSER = None
+
 
 class Parser:
     lexer: Lexer
@@ -20,7 +22,7 @@ class Parser:
         self.paren_count = 0
         self.brace_count = 0
         self.bracket_count = 0
-        self.cur_scope = Scope(None, 0)
+        self.cur_scope = Scope(None, ScopeFlags.NO)
         global CUR_PARSER
         CUR_PARSER = self
 
@@ -31,7 +33,9 @@ class Parser:
         self.lexer.enter_token(next_tok, True)
 
     def consume_token(self) -> Loc:
-        assert not self.is_token_special(), "Should consume special tokens with consume_*_token"
+        assert not self.is_token_special(), (
+            "Should consume special tokens with consume_*_token"
+        )
         self.prev_tok_location = self.tok.loc
         self.tok = self.lexer.lex()
         return self.prev_tok_location
@@ -98,7 +102,9 @@ class Parser:
         self.tok = self.lexer.lex()
         return self.prev_tok_location
 
-    def expect_and_consume(self, expected: Tok, diag_id: str = "expected {}", msg: str = "") -> bool:
+    def expect_and_consume(
+        self, expected: Tok, diag_id: str = "expected {}", msg: str = ""
+    ) -> bool:
         if self.tok.ty == expected:
             self.consume_any_token()
             return False
@@ -116,15 +122,25 @@ class Parser:
             diag_msg = diag_id.format(expected, msg)
         else:
             diag_msg = diag_id.format(msg)
-        loc = self.tok.loc # should get loc of end of previous token
+        loc = self.tok.loc  # should get loc of end of previous token
         diag(loc, diag_msg, Diag.ERROR)
         return True
 
-    def expect_and_consume_semi(self, diag_id: str = "expected ';'", token_used: str = "") -> bool:
+    def next_token(self) -> Token:
+        assert False, "METHOD NOT IMPLEMENTED"
+
+    def expect_and_consume_semi(
+        self, diag_id: str = "expected ';'", token_used: str = ""
+    ) -> bool:
         if self.try_consume_token(Tok.SEMI):
             return False
-        if self.tok.ty in [Tok.RPAREN, Tok.RSQUARE] and self.next_token().ty == Tok.SEMI:
-            diag(self.tok.loc, f"extraneous '{self.tok.ty}' before ';'", Diag.ERROR) #fixit
+        if (
+            self.tok.ty in [Tok.RPAREN, Tok.RSQUARE]
+            and self.next_token().ty == Tok.SEMI
+        ):
+            diag(
+                self.tok.loc, f"extraneous '{self.tok.ty}' before ';'", Diag.ERROR
+            )  # fixit
             self.consume_any_token()
             self.consume_token()
             return False
@@ -196,8 +212,9 @@ class Parser:
         assert old_scope.parent_scope is not None
         self.cur_scope = old_scope.parent_scope
 
-    def parse(self) -> []:
+    def parse(self) -> TranslationUnitDecl:
         from .decl import parse_translation_unit
+
         return parse_translation_unit()
 
 
@@ -207,6 +224,7 @@ def is_common_typo(expected: Tok, actual: Tok) -> bool:
             return actual == Tok.COLON or actual == Tok.COMMA
         case _:
             return False
+
 
 def parser() -> Parser:
     assert CUR_PARSER is not None

@@ -1,6 +1,7 @@
 import enum
 from lex import Tok
 
+
 class Prec(enum.Enum):
     UNKNOWN = enum.auto()
     COMMA = enum.auto()

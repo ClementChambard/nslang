@@ -50,21 +50,21 @@ lib fn strcat(str_1: CStr, str_2: CStr) -> CStr;
 /// type Str
 ///   String reference type.
 struct Str {
-    data: char*;   //< contents of the string. May not be null terminated.
+    super data: char*;   //< contents of the string. May not be null terminated.
     len: i64;      //< length of the string in bytes.
 };
 
 
-/// method str_strip
+/// method[Str] strip
 ///   Removes whitespace at the start and end of the string.
 ///   @object self
-lib fn str_strip(self: Str*);
+lib fn Str::strip(self: Str*);
 
-/// constructor str_from_cstr
+/// constructor[Str] from_cstr
 ///   Creates a string reference from a C-String.
 ///   @object self
 ///   @param[in] cstr the string to reference
-lib fn str_from_cstr(self: Str*, cstr: CStr);
+lib fn Str::from_cstr(self: Str*, cstr: CStr);
 
 //////////////////////////////////////////////////////////////////////
 
@@ -72,138 +72,138 @@ lib fn str_from_cstr(self: Str*, cstr: CStr);
 /// type String
 ///   Owned string type.
 struct String {
-    inner: Str;     //< contents of the string
+    super inner: Str;     //< contents of the string
     capacity: i64;  //< capacity of the allocated inner memory
 };
 
 
-/// constructor string_init
+/// constructor[String] init
 ///   Initializes a String object.
 ///   @object self
-lib fn string_init(self: String*);
+lib fn String::init(self: String*);
 
-/// constructor string_from_str
+/// constructor[String] from_str
 ///   Inititializes a String object with the contents of a string reference
 ///   @object self
 ///   @param[in] cstr the string reference to use
-lib fn string_from_str(self: String*, str: Str*);
+lib fn String::from_str(self: String*, str: Str*);
 
-/// constructor string_from_cstr
+/// constructor[String] from_cstr
 ///   Inititializes a String object with the contents of a C-String
 ///   @object self
 ///   @param[in] cstr the C-String to use
-lib fn string_from_cstr(self: String*, cstr: CStr);
+lib fn String::from_cstr(self: String*, cstr: CStr);
 
-/// constructor string_from_raw_parts
+/// constructor[String] from_raw_parts
 ///   Inititializes a String object with raw data
 ///   @object self
 ///   @param[in] data the string data
 ///   @param len the string length
 ///   @param capacity the string capacity
-lib fn string_from_raw_parts(self: String*, data: char*, len: i64, capacity: i64);
+lib fn String::from_raw_parts(self: String*, data: char*, len: i64, capacity: i64);
 
-/// destructor string_destroy
+/// destructor[String] destroy
 ///   Destroys a String object.
 ///   @object self
-lib fn string_destroy(self: String*);
+lib fn String::destroy(self: String*);
 
-/// method string_reserve
+/// method[String] reserve
 ///   Reserves some capacity in a string.
 ///   @object self
 ///   @param count the number of bytes the string will be able to contain
-lib fn string_reserve(self: String*, count: i64);
+lib fn String::reserve(self: String*, count: i64);
 
-/// method string_shrink_to_fit
+/// method[String] shrink_to_fit
 ///   Reduces the capacity of the string to fit the length
 ///   @object self
-lib fn string_shrink_to_fit(self: String*);
+lib fn String::shrink_to_fit(self: String*);
 
-/// method string_truncate
+/// method[String] truncate
 ///   Shortens the string to the specifier length (no effect if 'length' > string.len)
 ///   @object self
 ///   @param length the new length
-lib fn string_truncate(self: String*, count: i64);
+lib fn String::truncate(self: String*, count: i64);
 
-/// method string_pop
+/// method[String] pop
 ///   Pops the last character of the string
 ///   @object self
 ///   @returns the popped character
-lib fn string_pop(self: String*) -> char;
+lib fn String::pop(self: String*) -> char;
 
-/// method string_remove
+/// method[String] remove
 ///   Remove a character from the string
 ///   @object self
 ///   @param idx the index of the character to remove
 ///   @returns the removed character
-lib fn string_remove(self: String*, idx: i64) -> char;
+lib fn String::remove(self: String*, idx: i64) -> char;
 
-/// method string_push
+/// method[String] push
 ///   Adds a character at the end of a string.
 ///   @object self
 ///   @param c the character to push
-lib fn string_push(self: String*, c: char);
+lib fn String::push(self: String*, c: char);
 
-/// method string_push_str
+/// method[String] push_str
 ///   Appends a string at the end of a string.
 ///   @object self
 ///   @param s the string to append
-lib fn string_push_str(self: String*, s: Str*);
+lib fn String::push_str(self: String*, s: Str*);
 
-/// method string_push_cstr
+/// method[String] push_cstr
 ///   Appends a C-String at the end of a string.
 ///   @object self
 ///   @param s the C-String to append
-lib fn string_push_cstr(self: String*, s: CStr);
+lib fn String::push_cstr(self: String*, s: CStr);
 
-/// method string_push_format
+/// method[String] push_format
 ///   Appends formatted content at the end of a string.
 ///   @object self
 ///   @param fmt the format string
 ///   @vararg the format parameters
-lib fn string_push_format(self: String*, fmt: CStr, ...);
+lib fn String::push_format(self: String*, fmt: CStr, ...);
 
-/// constructor string_push_format
+/// constructor[String] format
 ///   Creates a string from formatted data.
 ///   @object self
 ///   @param fmt the format string
 ///   @vararg the format parameters
-lib fn string_format(self: String*, fmt: CStr, ...);
+lib fn String::format(self: String*, fmt: CStr, ...);
 
-/// method string_insert
+/// method[String] insert
 ///   Inserts a character in the string
 ///   @object self
 ///   @param idx the location to insert
 ///   @param c the character to insert
-lib fn string_insert(self: String*, idx: i64, c: char);
+lib fn String::insert(self: String*, idx: i64, c: char);
 
-/// method string_insert_str
+/// method[String] insert_str
 ///   Inserts a string in the string
 ///   @object self
 ///   @param idx the location to insert
 ///   @param str the string to insert
-lib fn string_insert_str(self: String*, idx: i64, str: Str*);
+lib fn String::insert_str(self: String*, idx: i64, str: Str*);
 
-/// method string_insert_cstr
+/// method[String] insert_cstr
 ///   Inserts a C-String in the string
 ///   @object self
 ///   @param idx the location to insert
 ///   @param cstr the C-String to insert
-lib fn string_insert_cstr(self: String*, idx: i64, str: CStr);
+lib fn String::insert_cstr(self: String*, idx: i64, str: CStr);
 
-/// method string_split_off
+/// method[String] split_off
 ///   Splits a string into two at an offset
 ///   @object self
 ///   @param idx the index at which to split the string
 ///   @param[out] out the output string
-lib fn string_split_off(self: String*, idx: i64, out: String*);
+lib fn String::split_off(self: String*, idx: i64, out: String*);
 
-/// method string_clear
+/// method[String] clear
 ///   Clears the contents of a string. Does not change the capacity.
 ///   @object self
-lib fn string_clear(self: String*);
+lib fn String::clear(self: String*);
 
-/// constructor string_clone_from
+/// constructor[String] clone_from
 ///   Copies a string into another
 ///   @object self
 ///   @param[in] clone_from the string to copy
-lib fn string_clone_from(self: String*, clone_from: String*);
+lib fn String::clone_from(self: String*, clone_from: String*);

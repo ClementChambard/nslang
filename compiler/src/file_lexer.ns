@@ -5,11 +5,11 @@
 #include ident_info.nsh
 #include diags.nsh
 
-fn file_lexer_create(filename: i8*, the_lexer: void*) -> FileLexer* {
+fn FileLexer::create(filename: i8*, the_lexer: void*) -> FileLexer* {
     let f: OpenedFile*;
-    f = opened_file_find(filename);
+    f = OpenedFile::find(filename);
     if (f == nullptr) {
-        f = opened_file_open(filename);
+        f = OpenedFile::open(filename);
     }
     let self: FileLexer*;
     self = malloc(sizeof(FileLexer));
@@ -19,7 +19,7 @@ fn file_lexer_create(filename: i8*, the_lexer: void*) -> FileLexer* {
     return self;
 }
 
-fn file_lexer_construct_token(self: FileLexer*, token: Token*, end_pos: i64, ty: Tok) {
+fn FileLexer::construct_token(self: FileLexer*, token: Token*, end_pos: i64, ty: Tok) {
     token->ty = ty;
     token->loc = self->f->pos_offset + self->pos;
     token->len = end_pos - self->pos;
@@ -27,22 +27,22 @@ fn file_lexer_construct_token(self: FileLexer*, token: Token*, end_pos: i64, ty:
     self->pos = end_pos;
 }
 
-fn file_lexer_handle_end_of_file(self: FileLexer*, token: Token*, cur_pos: i64) {
+fn FileLexer::handle_end_of_file(self: FileLexer*, token: Token*, cur_pos: i64) {
     if (self->the_lexer != nullptr) {
-        lexer_end_source_file(cast<Lexer*>(self->the_lexer), token);
+        cast<Lexer*>(self->the_lexer)->end_source_file(token);
     } else {
-        file_lexer_construct_token(self, token, cur_pos, TOK_EOF);
+        self->construct_token(token, cur_pos, TOK_EOF);
     }
 }
 
-fn file_lexer_read_to_whitespace(self: FileLexer*, out: Str*) {
+fn FileLexer::read_to_whitespace(self: FileLexer*, out: Str*) {
     out->data = &self->f->source.data[self->pos];
     out->len = self->pos;
     while (!isspace(self->f->source.data[self->pos])) self->pos = self->pos + 1;
     out->len = self->pos - out->len;
 }
 
-fn file_lexer_read_to_end_of_line(self: FileLexer*, out: Str*) {
+fn FileLexer::read_to_end_of_line(self: FileLexer*, out: Str*) {
     out->data = &self->f->source.data[self->pos];
     out->len = self->pos;
     let end_pos: i64;
@@ -64,11 +64,11 @@ fn file_lexer_read_to_end_of_line(self: FileLexer*, out: Str*) {
     out->len = end_pos - out->len;
 }
 
-fn file_lexer_handle_directive(self: FileLexer*, token: Token*) {
+fn FileLexer::handle_directive(self: FileLexer*, token: Token*) {
     if (self->the_lexer != nullptr) {
-        lexer_handle_directive(cast<Lexer*>(self->the_lexer), token);
+        cast<Lexer*>(self->the_lexer)->handle_directive(token);
     } else {
-        file_lexer_construct_token(self, token, self->pos + 1, TOK_EOF);
+        self->construct_token(token, self->pos + 1, TOK_EOF);
     }
 }
 
@@ -85,7 +85,7 @@ fn ident_continue(c: i8) -> bool {
     return c == '_';
 }
 
-fn file_lexer_lex_ident(self: FileLexer*, token: Token*, cur_pos: i64) {
+fn FileLexer::lex_ident(self: FileLexer*, token: Token*, cur_pos: i64) {
     let c: i8;
     c = self->f->source.data[cur_pos];
     while (ident_continue(c)) {
@@ -93,15 +93,15 @@ fn file_lexer_lex_ident(self: FileLexer*, token: Token*, cur_pos: i64) {
         c = self->f->source.data[cur_pos];
     }
     let ii: IdentInfo*;
-    ii = ident_info_find(&self->f->source.data[self->pos], cur_pos - self->pos);
-    if (self->the_lexer != nullptr) if (ident_info_needs_handling(ii)) {
-        lexer_handle_ident(cast<Lexer*>(self->the_lexer), token, ii);
+    ii = IdentInfo::find(&self->f->source.data[self->pos], cur_pos - self->pos);
+    if (self->the_lexer != nullptr) if (ii->needs_handling()) {
+        cast<Lexer*>(self->the_lexer)->handle_ident(token, ii);
     }
-    file_lexer_construct_token(self, token, cur_pos, ii->ty);
+    self->construct_token(token, cur_pos, ii->ty);
     token->value = ii;
 }
 
-fn file_lexer_lex_number(self: FileLexer*, token: Token*, cur_pos: i64) {
+fn FileLexer::lex_number(self: FileLexer*, token: Token*, cur_pos: i64) {
     let c: i8;
     while (true) {
         c = self->f->source.data[cur_pos];
@@ -131,10 +131,10 @@ fn file_lexer_lex_number(self: FileLexer*, token: Token*, cur_pos: i64) {
         }
         break;
     }
-    file_lexer_construct_token(self, token, cur_pos, TOK_NUM);
+    self->construct_token(token, cur_pos, TOK_NUM);
 }
 
-fn file_lexer_skip_to_end_of_line_comment(self: FileLexer*, cur_pos: i64) -> i64 {
+fn FileLexer::skip_to_end_of_line_comment(self: FileLexer*, cur_pos: i64) -> i64 {
     let c: i8;
     while (true) {
         c = self->f->source.data[cur_pos];
@@ -145,7 +145,7 @@ fn file_lexer_skip_to_end_of_line_comment(self: FileLexer*, cur_pos: i64) -> i64
     }
 }
 
-fn file_lexer_skip_to_end_of_multiline_comment(self: FileLexer*, cur_pos: i64) -> i64 {
+fn FileLexer::skip_to_end_of_multiline_comment(self: FileLexer*, cur_pos: i64) -> i64 {
     let c: i8;
     while (true) {
         c = self->f->source.data[cur_pos];
@@ -164,7 +164,7 @@ fn file_lexer_skip_to_end_of_multiline_comment(self: FileLexer*, cur_pos: i64) -
     }
 }
 
-fn file_lexer_lex_char_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
+fn FileLexer::lex_char_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
     let c: i8;
     c = self->f->source.data[cur_pos];
     while (c != '\'') {
@@ -172,10 +172,10 @@ fn file_lexer_lex_char_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
         cur_pos += 1;
         c = self->f->source.data[cur_pos];
     }
-    file_lexer_construct_token(self, token, cur_pos + 1, TOK_CHR);
+    self->construct_token(token, cur_pos + 1, TOK_CHR);
 }
 
-fn file_lexer_lex_str_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
+fn FileLexer::lex_str_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
     let c: i8;
     c = self->f->source.data[cur_pos];
     while (c != '"') {
@@ -183,227 +183,226 @@ fn file_lexer_lex_str_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
         cur_pos += 1;
         c = self->f->source.data[cur_pos];
     }
-    file_lexer_construct_token(self, token, cur_pos + 1, TOK_STR);
+    self->construct_token(token, cur_pos + 1, TOK_STR);
 }
 
-fn file_lexer_lex_internal(self: FileLexer*, token: Token*) {
+fn FileLexer::lex_internal(self: FileLexer*, token: Token*) {
     let c: i8;
     let cur_pos: i64;
     while (isspace(self->f->source.data[self->pos])) self->pos = self->pos + 1;
     c = self->f->source.data[self->pos];
     cur_pos = self->pos + 1;
     if (c == '\0') {
-        if (cur_pos == self->f->source.len) file_lexer_handle_end_of_file(self, token, cur_pos);
+        if (cur_pos == self->f->source.len) self->handle_end_of_file(token, cur_pos);
         else {
             diag(self->pos + self->f->pos_offset, "NULL in file", DIAG_WARNING);
             self->pos = cur_pos;
-            file_lexer_lex_internal(self, token);
+            self->lex_internal(token);
         }
         return;
     }
     if (c == '#') {
         token->loc = self->f->pos_offset + self->pos;
         self->pos = self->pos + 1;
-        file_lexer_handle_directive(self, token);
+        self->handle_directive(token);
         return;
     }
     if (c <= '9') {
         if (c >= '0') {
-            file_lexer_lex_number(self, token, cur_pos);
+            self->lex_number(token, cur_pos);
             return;
         }
     }
     if (c <= 'z') {
         if (c >= 'a') {
-            file_lexer_lex_ident(self, token, cur_pos);
+            self->lex_ident(token, cur_pos);
             return;
         }
     }
     if (c <= 'Z') {
         if (c >= 'A') {
-            file_lexer_lex_ident(self, token, cur_pos);
+            self->lex_ident(token, cur_pos);
             return;
         }
     }
     if (c == '_') {
-        file_lexer_lex_ident(self, token, cur_pos);
+        self->lex_ident(token, cur_pos);
         return;
     }
     if (c == '(') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_LPAREN);
+        self->construct_token(token, cur_pos, TOK_LPAREN);
         return;
     }
     if (c == ')') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_RPAREN);
+        self->construct_token(token, cur_pos, TOK_RPAREN);
         return;
     }
     if (c == '{') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_LBRACE);
+        self->construct_token(token, cur_pos, TOK_LBRACE);
         return;
     }
     if (c == '}') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_RBRACE);
+        self->construct_token(token, cur_pos, TOK_RBRACE);
         return;
     }
     if (c == '[') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_LSQUARE);
+        self->construct_token(token, cur_pos, TOK_LSQUARE);
         return;
     }
     if (c == ']') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_RSQUARE);
+        self->construct_token(token, cur_pos, TOK_RSQUARE);
         return;
     }
     if (c == ';') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_SEMI);
+        self->construct_token(token, cur_pos, TOK_SEMI);
         return;
     }
     if (c == ':') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_COLON);
+        self->construct_token(token, cur_pos, TOK_COLON);
         return;
     }
     if (c == ',') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_COMMA);
+        self->construct_token(token, cur_pos, TOK_COMMA);
         return;
     }
     if (c == '?') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_QUESTION);
+        self->construct_token(token, cur_pos, TOK_QUESTION);
         return;
     }
     if (c == '~') {
-        file_lexer_construct_token(self, token, cur_pos, TOK_TILDE);
+        self->construct_token(token, cur_pos, TOK_TILDE);
         return;
     }
     if (c == '<') {
         c = self->f->source.data[cur_pos];
         if (c == '<') {
             c = self->f->source.data[cur_pos + 1];
-            if (c == '=') file_lexer_construct_token(self, token, cur_pos + 2, TOK_LESSLESSEQUAL);
-            else file_lexer_construct_token(self, token, cur_pos + 1, TOK_LESSLESS);
+            if (c == '=') self->construct_token(token, cur_pos + 2, TOK_LESSLESSEQUAL);
+            else self->construct_token(token, cur_pos + 1, TOK_LESSLESS);
         }
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_LESSEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_LESS);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_LESSEQUAL);
+        else self->construct_token(token, cur_pos, TOK_LESS);
         return;
     }
     if (c == '>') {
         c = self->f->source.data[cur_pos];
         if (c == '>') {
             c = self->f->source.data[cur_pos + 1];
-            if (c == '=') file_lexer_construct_token(self, token, cur_pos + 2, TOK_GREATERGREATEREQUAL);
-            else file_lexer_construct_token(self, token, cur_pos + 1, TOK_GREATERGREATER);
+            if (c == '=') self->construct_token(token, cur_pos + 2, TOK_GREATERGREATEREQUAL);
+            else self->construct_token(token, cur_pos + 1, TOK_GREATERGREATER);
         }
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_GREATEREQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_GREATER);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_GREATEREQUAL);
+        else self->construct_token(token, cur_pos, TOK_GREATER);
         return;
     }
     if (c == '=') {
         c = self->f->source.data[cur_pos];
-        if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_EQUALEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_EQUAL);
+        if (c == '=') self->construct_token(token, cur_pos + 1, TOK_EQUALEQUAL);
+        else self->construct_token(token, cur_pos, TOK_EQUAL);
         return;
     }
     if (c == '+') {
         c = self->f->source.data[cur_pos];
-        if (c == '+') file_lexer_construct_token(self, token, cur_pos + 1, TOK_PLUSPLUS);
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_PLUSEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_PLUS);
+        if (c == '+') self->construct_token(token, cur_pos + 1, TOK_PLUSPLUS);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_PLUSEQUAL);
+        else self->construct_token(token, cur_pos, TOK_PLUS);
         return;
     }
     if (c == '-') {
         c = self->f->source.data[cur_pos];
-        if (c == '-') file_lexer_construct_token(self, token, cur_pos + 1, TOK_MINUSMINUS);
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_MINUSEQUAL);
-        else if (c == '>') file_lexer_construct_token(self, token, cur_pos + 1, TOK_ARROW);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_MINUS);
+        if (c == '-') self->construct_token(token, cur_pos + 1, TOK_MINUSMINUS);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_MINUSEQUAL);
+        else if (c == '>') self->construct_token(token, cur_pos + 1, TOK_ARROW);
+        else self->construct_token(token, cur_pos, TOK_MINUS);
         return;
     }
     if (c == '*') {
         c = self->f->source.data[cur_pos];
-        if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_STAREQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_STAR);
+        if (c == '=') self->construct_token(token, cur_pos + 1, TOK_STAREQUAL);
+        else self->construct_token(token, cur_pos, TOK_STAR);
         return;
     }
     if (c == '%') {
         c = self->f->source.data[cur_pos];
-        if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_PERCENTEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_PERCENT);
+        if (c == '=') self->construct_token(token, cur_pos + 1, TOK_PERCENTEQUAL);
+        else self->construct_token(token, cur_pos, TOK_PERCENT);
         return;
     }
     if (c == '!') {
         c = self->f->source.data[cur_pos];
-        if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_EXCLAIMEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_EXCLAIM);
+        if (c == '=') self->construct_token(token, cur_pos + 1, TOK_EXCLAIMEQUAL);
+        else self->construct_token(token, cur_pos, TOK_EXCLAIM);
         return;
     }
     if (c == '^') {
         c = self->f->source.data[cur_pos];
-        if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_CARETEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_CARET);
+        if (c == '=') self->construct_token(token, cur_pos + 1, TOK_CARETEQUAL);
+        else self->construct_token(token, cur_pos, TOK_CARET);
         return;
     }
     if (c == '&') {
         c = self->f->source.data[cur_pos];
-        if (c == '&') file_lexer_construct_token(self, token, cur_pos + 1, TOK_AMPAMP);
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_AMPEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_AMP);
+        if (c == '&') self->construct_token(token, cur_pos + 1, TOK_AMPAMP);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_AMPEQUAL);
+        else self->construct_token(token, cur_pos, TOK_AMP);
         return;
     }
     if (c == '|') {
         c = self->f->source.data[cur_pos];
-        if (c == '|') file_lexer_construct_token(self, token, cur_pos + 1, TOK_PIPEPIPE);
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_PIPEEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_PIPE);
+        if (c == '|') self->construct_token(token, cur_pos + 1, TOK_PIPEPIPE);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_PIPEEQUAL);
+        else self->construct_token(token, cur_pos, TOK_PIPE);
         return;
     }
     if (c == '/') {
         c = self->f->source.data[cur_pos];
         if (c == '/') {
-            self->pos = file_lexer_skip_to_end_of_line_comment(self, cur_pos + 1);
-            file_lexer_lex_internal(self, token);
+            self->pos = self->skip_to_end_of_line_comment(cur_pos + 1);
+            self->lex_internal(token);
         } else if (c == '*') {
-            self->pos = file_lexer_skip_to_end_of_multiline_comment(self, cur_pos + 1);
-            file_lexer_lex_internal(self, token);
+            self->pos = self->skip_to_end_of_multiline_comment(cur_pos + 1);
+            self->lex_internal(token);
         }
-        else if (c == '=') file_lexer_construct_token(self, token, cur_pos + 1, TOK_SLASHEQUAL);
-        else file_lexer_construct_token(self, token, cur_pos, TOK_SLASH);
+        else if (c == '=') self->construct_token(token, cur_pos + 1, TOK_SLASHEQUAL);
+        else self->construct_token(token, cur_pos, TOK_SLASH);
         return;
     }
     if (c == '.') {
         c = self->f->source.data[cur_pos];
         if (c <= '9') {
             if (c >= '0') {
-                file_lexer_lex_number(self, token, cur_pos + 1);
+                self->lex_number(token, cur_pos + 1);
                 return;
             }
         }
         if (c == '.') {
             if (self->f->source.data[cur_pos + 1] == '.') {
-                file_lexer_construct_token(self, token, cur_pos + 2, TOK_ELLIPSIS);
+                self->construct_token(token, cur_pos + 2, TOK_ELLIPSIS);
                 return;
             }
         }
-        file_lexer_construct_token(self, token, cur_pos, TOK_PERIOD);
+        self->construct_token(token, cur_pos, TOK_PERIOD);
         return;
     }
     if (c == '\'') {
-        file_lexer_lex_char_literal(self, token, cur_pos);
+        self->lex_char_literal(token, cur_pos);
         return;
     }
     if (c == '"') {
-        file_lexer_lex_str_literal(self, token, cur_pos);
+        self->lex_str_literal(token, cur_pos);
         return;
     }
     let diag_msg: String;
-    string_init(&diag_msg);
-    string_format(&diag_msg, "Unknown character '%c' in source file", c);
+    diag_msg.format("Unknown character '%c' in source file", c);
     diag(self->pos + self->f->pos_offset, diag_msg.inner.data, DIAG_ERROR);
-    string_destroy(&diag_msg);
+    diag_msg.destroy();
     self->pos = cur_pos;
-    file_lexer_lex_internal(self, token);
+    self->lex_internal(token);
 }
 
-fn file_lexer_lex(self: FileLexer*) -> Token* {
+fn FileLexer::lex(self: FileLexer*) -> Token* {
     let out: Token*;
     out = malloc(sizeof(Token));
-    file_lexer_lex_internal(self, out);
+    self->lex_internal(out);
     return out;
 }

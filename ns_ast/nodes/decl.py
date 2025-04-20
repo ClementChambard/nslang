@@ -29,6 +29,15 @@ class TranslationUnitDecl(Decl):
         self.decls = decls
         self.is_lib = False
 
+    def __len__(self) -> int:
+        return len(self.decls)
+
+    def __iter__(self):
+        return iter(self.decls)
+
+    def __getitem__(self, idx):
+        return self.decls[idx]
+
 
 @dataclass
 class NamedDecl(Decl):
@@ -81,9 +90,11 @@ class FieldDecl(ValueDecl):
 @dataclass
 class StructDecl(TypeDecl):
     fields: List[FieldDecl]
+    first_field_is_super: bool
     def __init__(self, src_range = (0, 0), name = "", ty = Type()):
         super().__init__(src_range, name, ty)
         self.fields = []
+        self.first_field_is_super = False
 
 
 @dataclass

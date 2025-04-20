@@ -8,7 +8,7 @@
         "required": true,
         "types": [
           {
-            "type": "num",
+            "type": "expr",
             "named": true
           }
         ]
@@ -31,6 +31,40 @@
     "fields": {}
   },
   {
+    "type": "call_expr",
+    "named": true,
+    "fields": {
+      "func": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "ident",
+            "named": true
+          },
+          {
+            "type": "member_expr",
+            "named": true
+          },
+          {
+            "type": "method_ident",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "expr_list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "compound_stmt",
     "named": true,
     "fields": {},
@@ -43,6 +77,32 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "do_stmt",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "stmt",
+            "named": true
+          }
+        ]
+      },
+      "cond": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expr",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -120,6 +180,14 @@
       "required": false,
       "types": [
         {
+          "type": "call_expr",
+          "named": true
+        },
+        {
+          "type": "chr",
+          "named": true
+        },
+        {
           "type": "expr",
           "named": true
         },
@@ -129,6 +197,14 @@
         },
         {
           "type": "ident",
+          "named": true
+        },
+        {
+          "type": "member_expr",
+          "named": true
+        },
+        {
+          "type": "method_ident",
           "named": true
         },
         {
@@ -188,6 +264,21 @@
     }
   },
   {
+    "type": "field_decl_list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "field_decl",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "fn_decl",
     "named": true,
     "fields": {
@@ -235,6 +326,56 @@
           },
           {
             "type": "type",
+            "named": true
+          }
+        ]
+      },
+      "struct_scope": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "ident",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "if_stmt",
+    "named": true,
+    "fields": {
+      "cond": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expr",
+            "named": true
+          }
+        ]
+      },
+      "else_body": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "else",
+            "named": false
+          },
+          {
+            "type": "stmt",
+            "named": true
+          }
+        ]
+      },
+      "then_body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "stmt",
             "named": true
           }
         ]
@@ -294,7 +435,33 @@
     }
   },
   {
-    "type": "param_decl",
+    "type": "member_expr",
+    "named": true,
+    "fields": {
+      "field": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "ident",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "expr",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "method_ident",
     "named": true,
     "fields": {
       "name": {
@@ -310,6 +477,32 @@
       "type": {
         "multiple": false,
         "required": true,
+        "types": [
+          {
+            "type": "ident",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "param_decl",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "ident",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": false,
         "types": [
           {
             "type": "type",
@@ -394,66 +587,12 @@
     "type": "stmt",
     "named": true,
     "fields": {
-      "cond": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "expr",
-            "named": true
-          }
-        ]
-      },
-      "do_stmt": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "stmt",
-            "named": true
-          }
-        ]
-      },
-      "else_stmt": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "else",
-            "named": false
-          },
-          {
-            "type": "stmt",
-            "named": true
-          }
-        ]
-      },
       "return_value": {
         "multiple": false,
         "required": false,
         "types": [
           {
             "type": "expr",
-            "named": true
-          }
-        ]
-      },
-      "then_stmt": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "stmt",
-            "named": true
-          }
-        ]
-      },
-      "while_stmt": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "stmt",
             "named": true
           }
         ]
@@ -468,11 +607,19 @@
           "named": true
         },
         {
+          "type": "do_stmt",
+          "named": true
+        },
+        {
           "type": "enum_decl",
           "named": true
         },
         {
           "type": "expr",
+          "named": true
+        },
+        {
+          "type": "if_stmt",
           "named": true
         },
         {
@@ -486,6 +633,10 @@
         {
           "type": "var_decl",
           "named": true
+        },
+        {
+          "type": "while_stmt",
+          "named": true
         }
       ]
     }
@@ -495,20 +646,12 @@
     "named": true,
     "fields": {
       "fields": {
-        "multiple": true,
+        "multiple": false,
         "required": false,
         "types": [
           {
-            "type": "field_decl",
+            "type": "field_decl_list",
             "named": true
-          },
-          {
-            "type": "{",
-            "named": false
-          },
-          {
-            "type": "}",
-            "named": false
           }
         ]
       },
@@ -611,6 +754,32 @@
     }
   },
   {
+    "type": "while_stmt",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "stmt",
+            "named": true
+          }
+        ]
+      },
+      "cond": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expr",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "!",
     "named": false
   },
@@ -695,6 +864,10 @@
     "named": false
   },
   {
+    "type": "...",
+    "named": false
+  },
+  {
     "type": "/",
     "named": false
   },
@@ -704,6 +877,10 @@
   },
   {
     "type": ":",
+    "named": false
+  },
+  {
+    "type": "::",
     "named": false
   },
   {
@@ -781,6 +958,19 @@
   {
     "type": "break",
     "named": false
+  },
+  {
+    "type": "cast",
+    "named": false
+  },
+  {
+    "type": "chr",
+    "named": true
+  },
+  {
+    "type": "comment",
+    "named": true,
+    "extra": true
   },
   {
     "type": "continue",
@@ -867,6 +1057,10 @@
     "named": false
   },
   {
+    "type": "super",
+    "named": false
+  },
+  {
     "type": "true",
     "named": false
   },
@@ -888,6 +1082,10 @@
   },
   {
     "type": "u8",
+    "named": false
+  },
+  {
+    "type": "vaarg",
     "named": false
   },
   {

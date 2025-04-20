@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from lex import Token, Tok
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import enum
 
 
@@ -30,6 +30,9 @@ class Type:
     def __str__(self) -> str:
         return "void"
 
+    def get_pointer_type(self) -> "PointerType":
+        return PointerType(self)
+
 
 class BuiltinTypeKind(enum.Enum):
     I8 = enum.auto()
@@ -55,7 +58,9 @@ class AliasType(Type):
 
     def get_aliased_type(self) -> Type:
         t = self
-        while isinstance(t.aliased_type, AliasType) or isinstance(t.aliased_type, EnumType):
+        while isinstance(t.aliased_type, AliasType) or isinstance(
+            t.aliased_type, EnumType
+        ):
             t = t.aliased_type
         return t.aliased_type or self
 
@@ -67,6 +72,7 @@ class AliasType(Type):
 class EnumType(Type):
     name: str | None
     aliased_type: Type | None
+
     def get_size(self) -> int:
         return self.aliased_type.get_size() if self.aliased_type is not None else 8
 
@@ -75,39 +81,79 @@ class EnumType(Type):
 
     def get_aliased_type(self) -> Type:
         t = self
-        while isinstance(t.aliased_type, AliasType) or isinstance(t.aliased_type, EnumType):
+        while isinstance(t.aliased_type, AliasType) or isinstance(
+            t.aliased_type, EnumType
+        ):
             t = t.aliased_type
         return t.aliased_type or self
 
     def __str__(self) -> str:
-        return f"enum {self.name}" if self.aliased_type is None else f"{self.get_aliased_type()}"
+        return (
+            f"enum {self.name}"
+            if self.aliased_type is None
+            else f"{self.get_aliased_type()}"
+        )
 
 
 @dataclass
 class StructType(Type):
     name: str
-    fields: Dict[str, Type]
+    fields: List[Tuple[str, Type]]
+    methods: Dict[str, "FnDecl"]
+    first_field_is_super: bool
     is_incomplete: bool
+
+    def __init__(self, name: str):
+        self.name = name
+        self.fields = []
+        self.methods = {}
+        self.first_field_is_super = False
+        self.is_incomplete = True
 
     def __str__(self) -> str:
         return f"struct {self.name}"
 
     def get_align(self) -> int:
         cur_align = 1
-        for _, ty in self.fields.items():
+        for _, ty in self.fields:
             f_align = ty.get_align()
             if f_align > cur_align:
                 cur_align = f_align
         return cur_align
 
+    def field_type(self, name: str) -> Type | None:
+        for n, ty in self.fields:
+            if n == name:
+                return ty
+        return None
+
     def get_size(self) -> int:
         cur_size = 0
-        for _, ty in self.fields.items():
+        for _, ty in self.fields:
             needs_align = ty.get_align()
             if (a := (cur_size % needs_align)) != 0:
                 cur_size += needs_align - a
             cur_size += ty.get_size()
         return cur_size
+
+    def super_type(self) -> Type | None:
+        if not self.first_field_is_super:
+            return None
+        assert len(self.fields) > 0
+        return self.fields[0][1]
+
+    def deepest_super_field(self) -> Tuple[str, Type] | None:
+        if len(self.fields) == 0:
+            return None
+        if self.first_field_is_super and isinstance(self.fields[0][1], StructType):
+            return self.fields[0][1].deepest_super_field()
+        if self.first_field_is_super:
+            return self.fields[0][0], self.fields[0][1]
+        return None
+
+    def add_method(self, name: str, decl: "FnDecl"):
+        if name not in self.methods.keys():
+            self.methods[name] = decl
 
 
 @dataclass
@@ -140,46 +186,92 @@ class BuiltinType(Type):
 
     def get_size(self) -> int:
         match self.kind:
-            case BuiltinTypeKind.I64 | BuiltinTypeKind.U64: return 8
-            case BuiltinTypeKind.I32 | BuiltinTypeKind.U32: return 4
-            case BuiltinTypeKind.I16 | BuiltinTypeKind.U16: return 2
-            case BuiltinTypeKind.I8 | BuiltinTypeKind.U8: return 1
-            case BuiltinTypeKind.BOOL: return 1
+            case BuiltinTypeKind.I64 | BuiltinTypeKind.U64:
+                return 8
+            case BuiltinTypeKind.I32 | BuiltinTypeKind.U32:
+                return 4
+            case BuiltinTypeKind.I16 | BuiltinTypeKind.U16:
+                return 2
+            case BuiltinTypeKind.I8 | BuiltinTypeKind.U8:
+                return 1
+            case BuiltinTypeKind.BOOL:
+                return 1
 
     def max_value(self) -> int:
         match self.kind:
-            case BuiltinTypeKind.I64: return 0x7FFFFFFFFFFFFFFF
-            case BuiltinTypeKind.U64: return 0xFFFFFFFFFFFFFFFF
-            case BuiltinTypeKind.I32: return 0x7FFFFFFF
-            case BuiltinTypeKind.U32: return 0xFFFFFFFF
-            case BuiltinTypeKind.I16: return 0x7FFF
-            case BuiltinTypeKind.U16: return 0xFFFF
-            case BuiltinTypeKind.I8: return 0x7F
-            case BuiltinTypeKind.U8: return 0xFF
-            case BuiltinTypeKind.BOOL: return 1
+            case BuiltinTypeKind.I64:
+                return 0x7FFFFFFFFFFFFFFF
+            case BuiltinTypeKind.U64:
+                return 0xFFFFFFFFFFFFFFFF
+            case BuiltinTypeKind.I32:
+                return 0x7FFFFFFF
+            case BuiltinTypeKind.U32:
+                return 0xFFFFFFFF
+            case BuiltinTypeKind.I16:
+                return 0x7FFF
+            case BuiltinTypeKind.U16:
+                return 0xFFFF
+            case BuiltinTypeKind.I8:
+                return 0x7F
+            case BuiltinTypeKind.U8:
+                return 0xFF
+            case BuiltinTypeKind.BOOL:
+                return 1
 
     def get_bit_width(self) -> int:
         match self.kind:
-            case BuiltinTypeKind.I64 | BuiltinTypeKind.U64 | BuiltinTypeKind.I32 | BuiltinTypeKind.U32 | BuiltinTypeKind.I16 | BuiltinTypeKind.U16 | BuiltinTypeKind.I8 | BuiltinTypeKind.U8:
+            case (
+                BuiltinTypeKind.I64
+                | BuiltinTypeKind.U64
+                | BuiltinTypeKind.I32
+                | BuiltinTypeKind.U32
+                | BuiltinTypeKind.I16
+                | BuiltinTypeKind.U16
+                | BuiltinTypeKind.I8
+                | BuiltinTypeKind.U8
+            ):
                 return self.get_size() * 8
-            case BuiltinTypeKind.BOOL: return 1
+            case BuiltinTypeKind.BOOL:
+                return 1
 
     def is_signed(self) -> bool:
         match self.kind:
-            case BuiltinTypeKind.I64 | BuiltinTypeKind.I32 | BuiltinTypeKind.I16 | BuiltinTypeKind.I8: return True
-            case BuiltinTypeKind.U64 | BuiltinTypeKind.U32 | BuiltinTypeKind.U16 | BuiltinTypeKind.U8 | BuiltinTypeKind.BOOL: return False
+            case (
+                BuiltinTypeKind.I64
+                | BuiltinTypeKind.I32
+                | BuiltinTypeKind.I16
+                | BuiltinTypeKind.I8
+            ):
+                return True
+            case (
+                BuiltinTypeKind.U64
+                | BuiltinTypeKind.U32
+                | BuiltinTypeKind.U16
+                | BuiltinTypeKind.U8
+                | BuiltinTypeKind.BOOL
+            ):
+                return False
 
     def get_align(self) -> int:
         return self.get_size()
 
     def is_arithmetic_type(self) -> bool:
-        return self.kind.value >= BuiltinTypeKind.I8.value and self.kind.value <= BuiltinTypeKind.BOOL.value
+        return (
+            self.kind.value >= BuiltinTypeKind.I8.value
+            and self.kind.value <= BuiltinTypeKind.BOOL.value
+        )
 
     def is_integer_type(self) -> bool:
-        return self.kind.value >= BuiltinTypeKind.I8.value and self.kind.value <= BuiltinTypeKind.BOOL.value
+        return (
+            self.kind.value >= BuiltinTypeKind.I8.value
+            and self.kind.value <= BuiltinTypeKind.BOOL.value
+        )
 
     def is_scalar_type(self) -> bool:
-        return self.kind.value >= BuiltinTypeKind.I8.value and self.kind.value <= BuiltinTypeKind.BOOL.value
+        return (
+            self.kind.value >= BuiltinTypeKind.I8.value
+            and self.kind.value <= BuiltinTypeKind.BOOL.value
+        )
 
     def __str__(self) -> str:
         return self.kind.name.lower()

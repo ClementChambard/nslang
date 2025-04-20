@@ -8,12 +8,12 @@
 #include diags.nsh
 
 fn init() {
-    ident_info_add_keywords();
+    IdentInfo::add_keywords();
 }
 
 fn cleanup() {
-    opened_file_close_all();
-    ident_info_remove_all();
+    OpenedFile::close_all();
+    IdentInfo::remove_all();
 }
 
 fn main() {
@@ -21,21 +21,21 @@ fn main() {
 
     let lexer: Lexer;
 
-    lexer_init(&lexer);
+    lexer.init();
+    lexer.add_include_path("/home/clement/dev/nslang/stdlib/include");
 
-    lexer_enter_source_file(&lexer, "example.ns");
-    lexer_add_include_path(&lexer, "/home/clement/dev/nslang/stdlib/include");
+    lexer.enter_source_file("example.ns");
 
     let out_token: Token*;
-    out_token = lexer_lex(&lexer);
+    out_token = lexer.lex();
     while (out_token->ty != TOK_EOF) {
-        token_dump(out_token);
+        out_token->dump();
         free(out_token);
-        out_token = lexer_lex(&lexer);
+        out_token = lexer.lex();
     }
     free(out_token);
 
-    lexer_delete(&lexer);
+    lexer.delete();
 
     cleanup();
 }

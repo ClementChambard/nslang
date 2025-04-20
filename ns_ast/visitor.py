@@ -57,7 +57,9 @@ class StmtVisitor:
         elif isinstance(s, ConditionalExpr):       return self.visit_conditional_expr    (s, *args, **kwargs)
         elif isinstance(s, ArraySubscriptExpr):    return self.visit_array_subscript_expr(s, *args, **kwargs)
         elif isinstance(s, MemberExpr):            return self.visit_member_expr         (s, *args, **kwargs)
+        elif isinstance(s, MethodExpr):            return self.visit_method_expr         (s, *args, **kwargs)
         elif isinstance(s, SizeofExpr):            return self.visit_sizeof_expr         (s, *args, **kwargs)
+        elif isinstance(s, MethodCallExpr):        return self.visit_method_call_expr    (s, *args, **kwargs)
         elif isinstance(s, CallExpr):              return self.visit_call_expr           (s, *args, **kwargs)
         elif isinstance(s, ParenExpr):             return self.visit_paren_expr          (s, *args, **kwargs)
         elif isinstance(s, StringLiteral):         return self.visit_string_literal      (s, *args, **kwargs)
@@ -182,10 +184,14 @@ class StmtVisitor:
         return self.visit_expr(s, *args, **kwargs)
     def visit_member_expr(self, s: MemberExpr, *args, **kwargs):
         return self.visit_expr(s, *args, **kwargs)
+    def visit_method_expr(self, s: MethodExpr, *args, **kwargs):
+        return self.visit_expr(s, *args, **kwargs)
     def visit_sizeof_expr(self, s: SizeofExpr, *args, **kwargs):
         return self.visit_expr(s, *args, **kwargs)
     def visit_call_expr(self, s: CallExpr, *args, **kwargs):
         return self.visit_expr(s, *args, **kwargs)
+    def visit_method_call_expr(self, s: MethodCallExpr, *args, **kwargs):
+        return self.visit_call_expr(s, *args, **kwargs)
     def visit_paren_expr(self, s: ParenExpr, *args, **kwargs):
         return self.visit_expr(s, *args, **kwargs)
     def visit_string_literal(self, s: StringLiteral, *args, **kwargs):

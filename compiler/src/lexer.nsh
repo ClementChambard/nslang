@@ -11,20 +11,20 @@ struct Lexer {
     already_included_files: DArray;
 };
 
-lib fn lexer_init(self: Lexer*);
+lib fn Lexer::init(self: Lexer*);
 
-lib fn lexer_delete(self: Lexer*);
+lib fn Lexer::delete(self: Lexer*);
 
-lib fn lexer_add_include_path(self: Lexer*, path: i8*);
+lib fn Lexer::add_include_path(self: Lexer*, path: i8*);
 
-lib fn lexer_enter_token(self: Lexer*, token: Token*);
+lib fn Lexer::enter_token(self: Lexer*, token: Token*);
 
-lib fn lexer_enter_source_file(self: Lexer*, filename: i8*);
+lib fn Lexer::enter_source_file(self: Lexer*, filename: i8*);
 
-lib fn lexer_end_source_file(self: Lexer*, token: Token*);
+lib fn Lexer::end_source_file(self: Lexer*, token: Token*);
 
-lib fn lexer_handle_directive(self: Lexer*, token: Token*);
+lib fn Lexer::handle_directive(self: Lexer*, token: Token*);
 
-lib fn lexer_handle_ident(self: Lexer*, token: Token*, ident_info: IdentInfo*);
+lib fn Lexer::handle_ident(self: Lexer*, token: Token*, ident_info: IdentInfo*);
 
-lib fn lexer_lex(self: Lexer*) -> Token*;
+lib fn Lexer::lex(self: Lexer*) -> Token*;

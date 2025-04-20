@@ -154,6 +154,10 @@ class StmtPrinter(StmtVisitor):
         self.print_expr(s.base)
         self.os += "->" if s.is_arrow else "."
         self.os += s.name
+    def visit_method_expr(self, s: MethodExpr, *args, **kwargs):
+        self.print_expr(s.self_object)
+        self.os += "->" if s.is_arrow else "."
+        self.os += s.method_func.name.split("::")[1]
     def visit_sizeof_expr(self, s: SizeofExpr, *args, **kwargs):
         self.os += "sizeof("
         if s.expr is not None: self.print_expr(s.expr)
@@ -456,6 +460,10 @@ class TextNodeDumper(StmtVisitor, DeclVisitor, TextTreeStructure):
         # case NOUR_Constant: OS << " non_odr_use_constant"; break;
         # case NOUR_Discarded: OS << " non_odr_use_discarded"; break;
         # }
+
+    def visit_method_expr(self, e: MethodExpr, *args, **kwargs):
+        arrow_str = [".", "->"][e.is_arrow]
+        self.p(f" {arrow_str}({e.method_func.name})")
 
     def visit_unary_expr(self, e: UnaryExpr, *args, **kwargs):
         self.p(f" '{e.opc}'")

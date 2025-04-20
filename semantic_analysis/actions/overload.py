@@ -1,6 +1,16 @@
-from ns_ast.nodes import *
 from dataclasses import dataclass
 from typing import List, Any
+from ns_ast.nodes.expr import Expr, ValueKind
+from ns_ast.nodes.types import (
+    ArrayType,
+    BuiltinType,
+    BuiltinTypeKind,
+    FunctionType,
+    PointerType,
+    StructType,
+    Type,
+    type_is_void,
+)
 from semantic_analysis import TYPES
 import enum
 
@@ -29,26 +39,28 @@ class ImplicitConversionKind(enum.Enum):
     NUM_CONVERSION_KINDS = enum.auto()
 
     def get_rank(self):
-        return [ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.PROMOTION,
-                ImplicitConversionRank.PROMOTION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.CONVERSION,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.EXACT_MATCH,
-                ImplicitConversionRank.C_CONVERSION_EXTENSION,
-                ImplicitConversionRank.CONVERSION][self.value]
+        return [
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.PROMOTION,
+            ImplicitConversionRank.PROMOTION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.CONVERSION,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.EXACT_MATCH,
+            ImplicitConversionRank.C_CONVERSION_EXTENSION,
+            ImplicitConversionRank.CONVERSION,
+        ][self.value]
 
 
 class ImplicitConversionRank(enum.Enum):
@@ -80,8 +92,8 @@ class StandardConversionSequence:
     BindsToRvalue: bool
     BindsImplicitObjectArgumentWithoutRefQualifier: bool
     from_type_ptr: Type
-    to_type_ptrs: List[Type] # 3
-    # CXXConstructorDecl *CopyConstructor;
+    to_type_ptrs: List[Type]  # 3
+    copy_constructor: None
     # DeclAccessPair FoundCopyConstructor;
 
     def __init__(self):
@@ -96,8 +108,8 @@ class StandardConversionSequence:
         self.BindsToFunctionLvalue = False
         self.BindsToRvalue = False
         self.BindsImplicitObjectArgumentWithoutRefQualifier = False
-        self.from_type_ptr = None
-        self.to_type_ptrs = [None, None, None]
+        self.from_type_ptr = Type()
+        self.to_type_ptrs = [Type(), Type(), Type()]
         # ...
 
     def set_from_type(self, t: Type):
@@ -127,24 +139,28 @@ class StandardConversionSequence:
         self.DeprecatedStringLiteralToCharPtr = False
         self.ReferenceBinding = False
         self.DirectBinding = False
-        self.IsLvalueReference = True;
+        self.IsLvalueReference = True
         self.BindsToFunctionLvalue = False
         self.BindsToRvalue = False
         self.BindsImplicitObjectArgumentWithoutRefQualifier = False
         # self.CopyConstructor = nullptr;
 
     def is_identity_conversion(self) -> bool:
-        return self.second == ICK_Identity and self.dimension == ICK_Identity and self.third == ICK_Identity
+        return (
+            self.second == ImplicitConversionKind.IDENTITY
+            and self.dimension == ImplicitConversionKind.IDENTITY
+            and self.third == ImplicitConversionKind.IDENTITY
+        )
 
     def get_rank(self) -> ImplicitConversionRank:
         rank = ImplicitConversionRank.EXACT_MATCH
-        if (r := self.first.get_rank()) > rank:
+        if (r := self.first.get_rank()).value > rank.value:
             rank = r
-        if (r := self.second.get_rank()) > rank:
+        if (r := self.second.get_rank()).value > rank.value:
             rank = r
-        if (r := self.dimension.get_rank()) > rank:
+        if (r := self.dimension.get_rank()).value > rank.value:
             rank = r
-        if (r := self.third.get_rank()) > rank:
+        if (r := self.third.get_rank()).value > rank.value:
             rank = r
         return rank
 
@@ -153,16 +169,22 @@ class StandardConversionSequence:
         # TODO:
         return NarrowingKind.NOT_NARROWING
 
-
     def is_pointer_conversion_to_bool(self) -> bool:
-        return self.get_to_type(1) == TYPES["bool"] and (isinstance(self.get_from_type(), PointerType) or self.first == ImplicitConversionKind.ARRAY_TO_POINTER or self.first == ImplicitConversionKind.FUNCTION_TO_POINTER)
+        return self.get_to_type(1) == TYPES["bool"] and (
+            isinstance(self.get_from_type(), PointerType)
+            or self.first == ImplicitConversionKind.ARRAY_TO_POINTER
+            or self.first == ImplicitConversionKind.FUNCTION_TO_POINTER
+        )
 
     def is_pointer_conversion_to_void_pointer(self) -> bool:
         from_type = self.get_from_type()
         to_type = self.get_to_type(1)
         if self.first == ImplicitConversionKind.ARRAY_TO_POINTER:
+            assert isinstance(from_type, ArrayType)
             from_type = PointerType(from_type.subtype)
-        if self.second == ImplicitConversionKind.POINTER_CONVERSION and isinstance(from_type, PointerType):
+        if self.second == ImplicitConversionKind.POINTER_CONVERSION and isinstance(
+            from_type, PointerType
+        ):
             if isinstance(to_type, PointerType):
                 return type_is_void(to_type.subtype)
         return False
@@ -204,6 +226,7 @@ class UserDefinedConversionSequence:
 @dataclass
 class AmbiguousConversionSequence:
     a: int
+
     def destruct(self):
         pass
 
@@ -215,7 +238,9 @@ class BadConversionSequence:
 
 @dataclass
 class ImplicitConversionSequence:
-    conversion_kind: int # standard, static_obj_arg, user_def, ambig, ellips, bad, uninit
+    conversion_kind: (
+        int  # standard, static_obj_arg, user_def, ambig, ellips, bad, uninit
+    )
     initializer_list_of_incomplete_array: bool
     initializer_list_container_type: Type
     val: Any
@@ -225,13 +250,13 @@ class ImplicitConversionSequence:
         self.conversion_kind = k
 
     def destruct(self):
-        if conversion_kind == 3: # ambig
+        if self.conversion_kind == 3:  # ambig
             self.val.destruct()
 
     def __init__(self):
         self.conversion_kind = 6
         self.initializer_list_of_incomplete_array = False
-        self.initializer_list_container_type = None
+        self.initializer_list_container_type = Type()
         self.val = StandardConversionSequence()
         self.val.set_as_identity_conversion()
 
@@ -259,15 +284,22 @@ class ImplicitConversionSequence:
         out = ""
         # if (hasInitializerListContainerType()) OS << "Worst list element conversion: ";
         match self.conversion_kind:
-            case 0: out = out + f"Standard conversion: {self.val}"
-            case 2: out = out + f"User-defined conversion: {self.val}"
-            case 3: out = out + f"Ambiguous conversion"
-            case 4: out = out + f"Ellipsis conversion"
-            case 5: out = out + f"Bad conversion"
+            case 0:
+                out = out + f"Standard conversion: {self.val}"
+            case 2:
+                out = out + f"User-defined conversion: {self.val}"
+            case 3:
+                out = out + "Ambiguous conversion"
+            case 4:
+                out = out + "Ellipsis conversion"
+            case 5:
+                out = out + "Bad conversion"
         return out
 
 
-def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionSequence, is_explicit: bool):
+def is_standard_conversion(
+    from_e: Expr, to_type: Type, scs: StandardConversionSequence, is_explicit: bool
+):
     from_type = from_e.ty
     scs.set_as_identity_conversion()
     scs.set_from_type(from_type)
@@ -276,7 +308,9 @@ def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionS
     # if from_type.is_record_type() or to_type.is_record_type(): return False
 
     arg_is_lvalue = from_e.value_kind != ValueKind.PRVALUE
-    if arg_is_lvalue and not (isinstance(from_type, FunctionType) or isinstance(from_type, ArrayType)):
+    if arg_is_lvalue and not (
+        isinstance(from_type, FunctionType) or isinstance(from_type, ArrayType)
+    ):
         scs.first = ImplicitConversionKind.LVALUE_TO_RVALUE
         from_type = from_type.get_unqualified()
     elif isinstance(from_type, ArrayType):
@@ -296,8 +330,8 @@ def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionS
     else:
         scs.first = ImplicitConversionKind.IDENTITY
     scs.set_to_type(0, from_type)
-    second_ick = ImplicitConversionKind.IDENTITY
-    dimension_ick = ImplicitConversionKind.IDENTITY
+    # second_ick = ImplicitConversionKind.IDENTITY
+    # dimension_ick = ImplicitConversionKind.IDENTITY
     if from_type.get_unqualified() == to_type.get_unqualified():
         scs.second = ImplicitConversionKind.IDENTITY
     elif is_integral_promotion(from_e, from_type, to_type):
@@ -306,10 +340,14 @@ def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionS
     elif is_floating_promotion(from_type, to_type):
         scs.second = ImplicitConversionKind.FLOATING_PROMOTION
         from_type = to_type.get_unqualified()
-    elif to_type == TYPES["bool"] and from_type.is_arithmetic_type(): # || FromType->isAnyPointerType() || FromType->isBlockPointerType() || FromType->isMemberPointerType())):
+    elif (
+        to_type == TYPES["bool"] and from_type.is_arithmetic_type()
+    ):  # || FromType->isAnyPointerType() || FromType->isBlockPointerType() || FromType->isMemberPointerType())):
         scs.second = ImplicitConversionKind.BOOLEAN_CONVERSION
         from_type = TYPES["bool"]
-    elif from_type == TYPES["i64"] and to_type == TYPES["i8"]: # from_type.is_integral_or_unscoped_enumeration_type() and to_type.is_integral_type():
+    elif (
+        from_type == TYPES["i64"] and to_type == TYPES["i8"]
+    ):  # from_type.is_integral_or_unscoped_enumeration_type() and to_type.is_integral_type():
         scs.second = ImplicitConversionKind.INTEGRAL_CONVERSION
         from_type = to_type.get_unqualified()
     elif is_floating_conversion(from_type, to_type):
@@ -341,7 +379,9 @@ def is_standard_conversion(from_e: Expr, to_type: Type, scs: StandardConversionS
     scs.set_to_type(2, from_type)
     return from_type == to_type
 
+
 def is_integral_promotion(from_e: Expr, from_type: Type, to_type: Type) -> bool:
+    _ = from_e  # UNUSED
     if not isinstance(to_type, BuiltinType):
         return False
 
@@ -359,7 +399,7 @@ def is_integral_promotion(from_e: Expr, from_type: Type, to_type: Type) -> bool:
         return True
     if from_type == TYPES["u64"] and to_type.kind == BuiltinTypeKind.I64:
         return True
-    #if (Context.isPromotableIntegerType(FromType) and from_type != TYPES["bool"] and !FromType->isEnumeralType()) {
+    # if (Context.isPromotableIntegerType(FromType) and from_type != TYPES["bool"] and !FromType->isEnumeralType()) {
     #    if ((FromType->isSignedIntegerType() || Context.getTypeSize(FromType) < Context.getTypeSize(ToType))) {
     #        return To->getKind() == BuiltinType::Int;
     #    }
@@ -372,15 +412,21 @@ def is_integral_promotion(from_e: Expr, from_type: Type, to_type: Type) -> bool:
         return True
     return False
 
+
 def is_floating_promotion(from_type, to_type) -> bool:
     # TODO:
+    _ = from_type, to_type  # UNUSED
     return False
+
 
 def is_floating_conversion(from_type, to_type) -> bool:
     # TODO:
+    _ = from_type, to_type  # UNUSED
     return False
 
+
 def is_pointer_conversion(from_e, from_type, to_type, is_explicit) -> bool:
+    _ = from_e  # UNUSED
     # TODO: cast ptr to int
     if isinstance(from_type, PointerType) and to_type == TYPES["i64"] and is_explicit:
         return True
@@ -392,31 +438,48 @@ def is_pointer_conversion(from_e, from_type, to_type, is_explicit) -> bool:
     if is_explicit:
         # TODO: always allow explicit pointer conversion ?
         return True
-    # TODO: define what 'compatible pointer' mean
+    # Check struct supertype
+    if isinstance(from_type, StructType):
+        f_ty = from_type
+        found = False
+        while isinstance(f_ty, StructType) and f_ty.super_type() is not None:
+            super_type = f_ty.super_type()
+            if super_type == to_type.subtype:
+                found = True
+                break
+            f_ty = super_type
+        if found:
+            return True
+    # Convert to or from void* is always allowed
     return type_is_void(from_type.subtype) or type_is_void(to_type.subtype)
+
 
 def is_function_conversion(from_type, to_type, result_ty) -> bool:
     # TODO:
+    _ = from_type, to_type, result_ty  # UNUSED
     return False
+
 
 def is_qualification_conversion(from_type: Type, to_type: Type, c_style: bool):
     # TODO:
+    _ = from_type, to_type, c_style  # UNUSED
     return False
 
-def try_implicit_conversion(f: Expr, to_type: Type, is_explicit: bool = False): #...
+
+def try_implicit_conversion(f: Expr, to_type: Type, is_explicit: bool = False):  # ...
     ics = ImplicitConversionSequence()
     if is_standard_conversion(f, to_type, ics.val, is_explicit):
         ics.conversion_kind = 0
         return ics
-    from_type = f.ty
+    # from_type = f.ty
 
     # if (ToType->getAs<RecordType>() && FromType->getAs<RecordType>() && (S.Context.hasSameUnqualifiedType(FromType, ToType) || S.IsDerivedFrom(From->getBeginLoc(), FromType, ToType))) {
     #   ICS.setStandard(); ICS.Standard.setAsIdentityConversion(); ICS.Standard.setFromType(FromType); ICS.Standard.setAllToTypes(ToType); ICS.Standard.CopyConstructor = nullptr;
     #   if (!S.Context.hasSameUnqualifiedType(FromType, ToType)) ICS.Standard.Second = ICK_Derived_To_Base;
     #   return ICS;
     # }
-    #return TryUserDefinedConversion(S, From, ToType, SuppressUserConversions, AllowExplicit, InOverloadResolution, CStyle, AllowObjCWritebackConversion, AllowObjCConversionOnExplicit);
-    ics.conversion_kind = 5 # bad
+    # return TryUserDefinedConversion(S, From, ToType, SuppressUserConversions, AllowExplicit, InOverloadResolution, CStyle, AllowObjCWritebackConversion, AllowObjCConversionOnExplicit);
+    ics.conversion_kind = 5  # bad
     return ics
 
 
@@ -427,8 +490,8 @@ def try_contextually_convert_to_bool(f: Expr):
 
 def perform_contextually_convert_to_bool(f: Expr) -> Expr | None:
     from .expr import perform_implicit_conversion
-    ics = try_contextually_convert_to_bool(f)
-    if ics.conversion_kind == 5: #.is_bad()
-        return None
-    return perform_implicit_conversion(f, TYPES["bool"], ics) #, AA_CONVERTING)
 
+    ics = try_contextually_convert_to_bool(f)
+    if ics.conversion_kind == 5:  # .is_bad()
+        return None
+    return perform_implicit_conversion(f, TYPES["bool"], ics)  # , AA_CONVERTING)

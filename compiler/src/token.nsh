@@ -8,6 +8,6 @@ struct Token {
     loc: Loc;
 };
 
-lib fn token_dump(self: Token*);
-lib fn token_copy_from(self: Token*, other: Token*);
-lib fn token_get_end_loc(self: Token*) -> Loc;
+lib fn Token::dump(self: Token*);
+lib fn Token::copy_from(self: Token*, other: Token*);
+lib fn Token::get_end_loc(self: Token*) -> Loc;

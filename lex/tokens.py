@@ -1,6 +1,9 @@
+from dataclasses import dataclass
 from typing import Self
 from . import Loc, LOC_INVALID, OpenedFile, Tok, IdentInfo
 
+
+@dataclass
 class Token:
     ty: Tok
     value: str | IdentInfo | None
@@ -31,4 +34,10 @@ class Token:
     def ident(self) -> IdentInfo:
         assert self.ty == Tok.IDENT, "ident method can only be called on identifiers"
         assert isinstance(self.value, IdentInfo)
+        return self.value
+
+    def value_str(self) -> str:
+        if isinstance(self.value, IdentInfo):
+            return self.value.val
+        assert isinstance(self.value, str)
         return self.value

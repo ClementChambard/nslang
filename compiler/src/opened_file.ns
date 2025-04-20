@@ -7,29 +7,29 @@
 
 let OPENED_FILES: DArray;
 
-fn opened_file_line_offset(self: OpenedFile*, line: i64) -> i64 {
+fn OpenedFile::line_offset(self: OpenedFile*, line: i64) -> i64 {
     if (line == 0) return 0;
     return self->line_cache[line - 2];
 }
 
-fn opened_file_make_line_cache(self: OpenedFile*) {
+fn OpenedFile::make_line_cache(self: OpenedFile*) {
     let cache: DArray;
-    darray_init(&cache);
+    cache.init();
 
     let i: i64;
     self->line_cache_len = 0;
     i = 0;
     while (i < self->source.len) {
-        if (self->source.data[i] == '\r') {
+        if (self->source[i] == '\r') {
             i += 1;
-            if (self->source.data[i] == '\n') i += 1;
-            darray_push(&cache, cast<void*>(i));
+            if (self->source[i] == '\n') i += 1;
+            cache.push(cast<void*>(i));
             continue;
         }
-        if (self->source.data[i] == '\n') {
+        if (self->source[i] == '\n') {
             i += 1;
-            if (self->source.data[i] == '\r') i += 1;
-            darray_push(&cache, cast<void*>(i));
+            if (self->source[i] == '\r') i += 1;
+            cache.push(cast<void*>(i));
             continue;
         }
         i += 1;
@@ -40,14 +40,14 @@ fn opened_file_make_line_cache(self: OpenedFile*) {
     // don't destroy 'cache' since data has been transfered
 }
 
-fn opened_file_open(filename: i8*) -> OpenedFile* {
+fn OpenedFile::open(filename: i8*) -> OpenedFile* {
     let self: OpenedFile*;
     self = malloc(sizeof(OpenedFile));
     self->filename = filename;
     let fd: i64;
     fd = open(filename, O_RDONLY, 0);
     if (fd <= 0) {
-        print("opened_file_open: INVALID FILE NAME '%s'\n", filename);
+        print("OpenedFile::open: INVALID FILE NAME '%s'\n", filename);
         return nullptr;
     }
     self->source.len = lseek(fd, 0, SEEK_END) + 1;
@@ -57,65 +57,65 @@ fn opened_file_open(filename: i8*) -> OpenedFile* {
     let tst_a: i8*;
     tst_a = filename;
     close(fd);
-    self->source.data[self->source.len - 1] = 0;
-    opened_file_make_line_cache(self);
+    self->source[self->source.len - 1] = 0;
+    self->make_line_cache();
 
     if (OPENED_FILES.len == 0) {
         self->pos_offset = 1;
     } else {
         let last_opened_file: OpenedFile*;
-        last_opened_file = cast<OpenedFile*>(OPENED_FILES.data[OPENED_FILES.len - 1]);
+        last_opened_file = cast<OpenedFile*>(OPENED_FILES[OPENED_FILES.len - 1]);
         self->pos_offset = last_opened_file->pos_offset + last_opened_file->source.len;
     }
-    darray_push(&OPENED_FILES, self);
+    OPENED_FILES.push(self);
     return self;
 }
 
-fn opened_file_delete(self: OpenedFile*) {
+fn OpenedFile::delete(self: OpenedFile*) {
     free(self->source.data);
     free(self->line_cache);
 }
 
-fn opened_file_close_all() {
+fn OpenedFile::close_all() {
     let i: i64;
     i = 0;
     while (i < OPENED_FILES.len) {
         let cur_f: OpenedFile*;
-        cur_f = cast<OpenedFile*>(OPENED_FILES.data[i]);
-        opened_file_delete(cur_f);
+        cur_f = cast<OpenedFile*>(OPENED_FILES[i]);
+        cur_f->delete();
         free(cur_f);
         i += 1;
     }
-    darray_destroy(&OPENED_FILES);
+    OPENED_FILES.destroy();
 }
 
-fn opened_file_find(filename: i8*) -> OpenedFile* {
+fn OpenedFile::find(filename: i8*) -> OpenedFile* {
     let i: i64;
     i = 0;
     while (i < OPENED_FILES.len) {
         let this_opened_file: OpenedFile*;
-        this_opened_file = cast<OpenedFile*>(OPENED_FILES.data[i]);
+        this_opened_file = cast<OpenedFile*>(OPENED_FILES[i]);
         if (strcmp(this_opened_file->filename, filename) == 0) return this_opened_file;
         i += 1;
     }
     return nullptr;
 }
 
-fn opened_file_find_by_loc(loc: Loc) -> OpenedFile* {
+fn OpenedFile::find_by_loc(loc: Loc) -> OpenedFile* {
     if (loc == 0) return nullptr;
     if (OPENED_FILES.len == 0) return nullptr;
     let file_i: i64;
     file_i = 0;
     while (file_i + 1 < OPENED_FILES.len) {
-        if (loc < cast<OpenedFile*>(OPENED_FILES.data[file_i + 1])->pos_offset) break;
+        if (loc < cast<OpenedFile*>(OPENED_FILES[file_i + 1])->pos_offset) break;
         file_i += 1;
     }
-    return cast<OpenedFile*>(OPENED_FILES.data[file_i]);
+    return cast<OpenedFile*>(OPENED_FILES[file_i]);
 }
 
-fn opened_file_get_loc(out: CompleteLoc*, loc: Loc) {
+fn OpenedFile::get_loc(out: CompleteLoc*, loc: Loc) {
     let f: OpenedFile*;
-    f = opened_file_find_by_loc(loc);
+    f = OpenedFile::find_by_loc(loc);
     if (f == nullptr) return;
     let offset: i64;
     offset = loc - f->pos_offset;

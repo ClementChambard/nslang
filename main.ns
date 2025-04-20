@@ -1,12 +1,23 @@
 #include io.nsh
-#include mem.nsh
+#include str.nsh
 
-fn add(a1: i64, a2: i64) -> bool {
-    return a1 == a2;
+struct my_namespace;
+
+fn my_namespace::test() {
+    let s: String;
+    s.from_cstr("Hello");
+    s.push_format(", %s", "World");
+    s.push('!');
+    print("%S\n", &s);
+}
+
+fn add(a1: i64, a2: i64) -> i64 {
+    return a1 + a2; 
 }
 
 fn main() {
     if (0) {  1; 2; } else { 3; 4; }
     print("Hello, World!\n");
     print("%X %x %i %i %u %c %s\n", 30, 30, 3, -3, 4, 'a', "test");
+    my_namespace::test();
 }

@@ -101,6 +101,7 @@ enum Tok: i64 {
     TOK_BUILTIN_SYSCALL,
 };
 
+// TODO: methods for named enums
 lib fn tok_is_keyword(self: Tok) -> bool;
 lib fn tok_is_builtin(self: Tok) -> bool;
 lib fn tok_is_builtin_type(self: Tok) -> bool;

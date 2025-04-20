@@ -4,10 +4,10 @@
 #include mem.nsh
 #include ident_info.nsh
 
-fn token_dump(self: Token*) {
+fn Token::dump(self: Token*) {
     // TODO: value
     let loc: CompleteLoc;
-    opened_file_get_loc(&loc, self->loc);
+    OpenedFile::get_loc(&loc, self->loc);
     print("%s:%i:%i: %s", loc.filename, loc.line, loc.col, tok_get_name(self->ty));
     let has_val: bool;
     let val: i8*;
@@ -36,13 +36,13 @@ fn token_dump(self: Token*) {
     print("\n");
 }
 
-fn token_copy_from(self: Token*, other: Token*) {
+fn Token::copy_from(self: Token*, other: Token*) {
     self->ty = other->ty;
     self->loc = other->loc;
     self->value = other->value;
     self->len = other->len;
 }
 
-fn token_get_end_loc(self: Token*) -> Loc {
+fn Token::get_end_loc(self: Token*) -> Loc {
     return self->loc + self->len;
 }

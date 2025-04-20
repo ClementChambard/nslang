@@ -18,13 +18,13 @@ struct Diag {
 
 lib fn fatal_error(msg: i8*);
 
-lib fn diag_init(d: Diag*, loc: Loc, msg: i8*, level: i64);
+lib fn Diag::init(d: Diag*, loc: Loc, msg: i8*, level: i64);
 
-lib fn diag_destroy(d: Diag*);
+lib fn Diag::destroy(d: Diag*);
 
-lib fn diag_add_range(d: Diag*, rge: LocRge*);
+lib fn Diag::add_range(d: Diag*, rge: LocRge*);
 
-lib fn diag_emit(d: Diag*);
+lib fn Diag::emit(d: Diag*);
 
 lib fn diag(loc: Loc, msg: i8*, level: i64); // equivalent to diag_init diag_emit diag_destroy (cant add range)
 
