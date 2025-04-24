@@ -1,6 +1,7 @@
 #include diags.nsh
 #include io.nsh
 #include str.nsh
+#include mem.nsh
 #include opened_file.nsh
 
 fn fatal_error(msg: i8*) {
@@ -73,8 +74,193 @@ fn emit_diagnostic_message(loc: Loc, level: i64, msg: i8*) {
     os.destroy();
 }
 
+fn get_num_display_width(n: i64) -> i64 {
+    let l: i64;
+    let m: i64;
+    l = 1;
+    m = 10;
+    while (m <= n) {
+        l += 1;
+        if (l == 9) break;
+        m = m * 10;
+    }
+    return l;
+}
+
+fn emit_parseable_fixits(hint_count: i64, hints: void*) {
+    // TODO:
+}
+
+fn make_caret_line(out: String*, line: Str*, cur_line: i64, ranges_count: i64, ranges: LocRge*) -> bool {
+    // TODO: handle non printable characters
+    out->push_repeat(' ', line->len);
+    let res: bool;
+    let i: i64;
+    res = true;
+    i = 0;
+    while (i < ranges_count) {
+        let cloc: CompleteLoc;
+        OpenedFile::get_loc(&cloc, ranges[i].start);
+        let start_line: i64;
+        let start_col: i64;
+        start_line = cloc.line;
+        start_col = cloc.col;
+        OpenedFile::get_loc(&cloc, ranges[i].end);
+        let end_line: i64;
+        let end_col: i64;
+        end_line = cloc.line;
+        end_col = cloc.col;
+        if (start_line == cur_line) {
+            let count: i64;
+            if (end_line == cur_line) {
+                count = end_col - start_col + 1;
+            } else {
+                count = line->len - start_col + 1;
+            }
+            memset(&out->data[start_col - 1], '~', count);
+            res = false;
+        } else if (end_line == cur_line) {
+            memset(out->data, '~', end_col);
+            res = false;
+        } else if (start_line > cur_line) {
+        } else if (end_line < cur_line) {
+        } else {
+            memset(out->data, '~', line->len);
+            res = false;
+            break;
+        }
+        i += 1;
+    }
+    return res;
+}
+
+fn push_snippet(os: String*, src_line: Str*, max_line_no_display_width: i64, line_no: i64, styles: void*) {
+    if (max_line_no_display_width > 0) {
+        os->push_repeat(' ', max_line_no_display_width - get_num_display_width(line_no) + 1);
+        os->push_format("%i | ", line_no);
+    }
+    // TODO: non printable characters and styles
+    os->push_str(src_line);
+    os->push('\n');
+}
+
+fn prepare_and_filter_ranges(ranges_count: i64, ranges: LocRge*, line_start: i64, line_end: i64, cur_file: OpenedFile*) -> i64* {
+
+}
+
+fn emit_snippet_and_carret(loc: Loc, level: i64, ranges: LocRge*, ranges_count: i64, hints: void*, hint_count: i64) {
+    // assert loc != 0 "must have a valid source location here"
+    let os: String;
+    os.init();
+
+    if (loc == __last_loc) if (ranges_count == 0) if (hint_count == 0) {
+        if (__last_level != DIAG_NOTE) {
+            return
+        }
+        if (__last_level == level) {
+            return
+        }
+    }
+
+    let cur_file: OpenedFile*;
+    cur_file = OpenedFile::find_by_loc(loc);
+    if (cur_file == nullptr) return;
+
+    let buf_data: Str;
+    buf_data.len = cur_file->source.len;
+    buf_data.data = cur_file->source.data;
+
+    let buf_start_off: i64;
+    let buf_end_off: i64;
+    buf_start_off = 0;
+    buf_end_off = buf_data.len;
+
+    let cloc: CompleteLoc;
+    OpenedFile::get_loc(&cloc, loc);
+    // caret_col_no, caret_line_no
+    if (cloc.col > 4096) return;
+
+    let lines_start: i64;
+    let lines_end: i64;
+    let display_line_no: i64;
+
+    lines_start = cloc.line;
+    lines_end = cloc.line;
+
+    let i: i64;
+    i = 0;
+    while (i < ranges_count) {
+        let r_cloc: CompleteLoc;
+        OpenedFile::get_loc(&r_cloc, ranges[i].start);
+        if (r_cloc.line < lines_start) lines_start = r_cloc.line;
+        OpenedFile::get_loc(&r_cloc, ranges[i].end);
+        if (r_cloc.line > lines_end) lines_end = r_cloc.line;
+        i += 1;
+    }
+    display_line_no = lines_start;
+
+    let max_line_no_display_width: i64;
+    max_line_no_display_width = get_num_display_width(display_line_no + 16);
+    if (max_line_no_display_width < 4) max_line_no_display_width = 4;
+    
+    // source_styles = DiagRenderer.highlight_lines(buf_data, lines[0], lines[1], True, cur_file)
+
+    let caret_line: String;
+    caret_line.init();
+    
+    while (display_line_no <= lines_end) {
+        let line_offset: i64;
+        line_offset = cur_file->line_offset(display_line_no);
+        let line: Str;
+        line.data = &buf_data.data[line_offset];
+        line.len = buf_data.len - line_offset;
+        if (line.len == 0) break;
+        line_offset = 0;
+        while (true) {
+            if (line.len == line_offset) break;
+            if (line[line_offset] == '\n') break;
+            if (line[line_offset] == '\r') break;
+            line_offset += 1;
+        }
+        if (line_offset > 4096) return; // Line too long
+        line.len = line_offset;
+
+        caret_line.clear();
+    
+        let caret_line_is_empty: bool;
+        caret_line_is_empty = make_caret_line(&caret_line, &line, display_line_no, ranges_count, ranges);
+    
+        if (cloc.line == display_line_no) {
+            caret_line[cloc.col - 1] = '^';
+            caret_line_is_empty = false;
+        }
+    
+        push_snippet(&os, &line, max_line_no_display_width, display_line_no, nullptr); // source_styles[display_line_no - lines[0]]
+    
+        if (!caret_line_is_empty) {
+            os.push_repeat(' ', max_line_no_display_width);
+            os.push_format("  | \x1b[1;32m%S\n\x1b[0m", &caret_line);
+        }
+    
+        // fixit_insertion_line = build_fixit_insertion_line(cur_file, display_line_no, source_col_map, hints)
+        // if !fixit_insertion_line.is_empty() {
+        //     os.push_str(&" ".repeat(max_line_no_display_width + 2));
+        //     os.push_str("| \x1b[1;32m");
+        //     os.push_str(&fixit_insertion_line);
+        //     os.push_str("\n\x1b[0m");
+        // }
+    
+        display_line_no += 1;
+    }
+    
+    print("%S", &os);
+    caret_line.destroy();
+    os.destroy();
+    emit_parseable_fixits(hint_count, hints);
+}
+
 fn emit_code_context(loc: Loc, level: i64, ranges: LocRge*, ranges_count: i64, hints: void*, hint_count: i64) {
-    print("Code ctx\n");
+    emit_snippet_and_carret(loc, level, ranges, ranges_count, hints, hint_count);
 }
 
 fn Diag::emit(self: Diag*) {

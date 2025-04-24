@@ -2,6 +2,6 @@
 
 fn main() {
     1 + !2.0;
-    let i: bool*;
+    let i: @bool*;
     return '\'' - "abcde";
 }@
