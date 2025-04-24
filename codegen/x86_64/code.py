@@ -1,6 +1,17 @@
-from typing import List, Tuple
+from typing import Any, List, Tuple
+from .x86_ir import (
+    X86_Address,
+    X86_Body,
+    X86_Instr,
+    X86_Label,
+    X86_LabelPoint,
+    X86_Memory,
+    X86_Register,
+)
 from ir import IrInstrKind, IrInstr, FunctionIr, FullIr
 from dataclasses import dataclass
+from .optimize import optimize_function_code
+from .abi import Abi
 
 from ir.data import ParamEntry, StackFrameEntry
 
@@ -11,7 +22,7 @@ def create_label(name):
     global CUR_LABEL_ID
     a = f".{name}_{CUR_LABEL_ID}"
     CUR_LABEL_ID += 1
-    return a
+    return X86_Label(a)
 
 
 @dataclass
@@ -48,18 +59,43 @@ class StackVariables:
         self.variable_names = []
         for item in stack_frame:
             if self.stack_size % item.align != 0:
-                self.stack_size = self.stack_size - self.stack_size % item.align + item.align
+                self.stack_size = (
+                    self.stack_size - self.stack_size % item.align + item.align
+                )
             self.variable_sizes.append(item.size)
-            self.variable_offsets.append(- self.stack_size - item.size)
+            self.variable_offsets.append(-self.stack_size - item.size)
             self.variable_names.append(item.name)
             self.stack_size += item.size
-        if self.stack_size % 16 != 0: # For some reason, the stack must be 16B aligned
+        if self.stack_size % 16 != 0:  # For some reason, the stack must be 16B aligned
             self.stack_size = self.stack_size - self.stack_size % 16 + 16
+
 
 CUR_STACK_VARS: StackVariables = StackVariables([], False)
 
-def fn_params(params: List[ParamEntry]) -> Tuple[str, int, int, int]:
-    out = ""
+
+def var_size(var_id: int):
+    return CUR_STACK_VARS.variable_sizes[var_id]
+
+
+def get_variable_address(var_id: int, stack_param: bool = False) -> X86_Address:
+    i = 0
+    if stack_param:
+        i = 16 + var_id * 8
+    else:
+        i = CUR_STACK_VARS.variable_offsets[var_id]
+    return X86_Address(X86_Register.get("rbp"), offset=i)
+
+
+def get_variable_memory(
+    var_id: int, stack_param: bool = False, size: int | None = None
+) -> X86_Memory:
+    if size is None:
+        size = var_size(var_id)
+    return X86_Memory(size, get_variable_address(var_id, stack_param))
+
+
+def fn_params(params: List[ParamEntry]) -> Tuple[X86_Body, int, int, int]:
+    out = []
     int_param_i = 0
     float_param_i = 0
     stack_param_i = 0
@@ -68,25 +104,27 @@ def fn_params(params: List[ParamEntry]) -> Tuple[str, int, int, int]:
             # for floats: xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, then stack
             # after: stack
             assert False, "float not implemented"
-        if int_param_i < 6:
-            register = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"][int_param_i]
-            store_reg, store_kind = get_reg_kind(register, p.size)
-            out += f"    mov {store_kind}{var_addr(i)}, {store_reg}\n"
+        arg_memory = get_variable_memory(i, size=p.size)
+        if int_param_i < Abi.PARAM_INT_MAX_REGISTER:
+            param_reg = Abi.param_int_register(int_param_i, size=p.size)
+            out.append(X86_Instr("mov", arg_memory, param_reg))
             int_param_i += 1
         else:
-            out += f"    mov rdi, QWORD{var_addr(stack_param_i, True)}\n"
-            out += f"    mov QWORD{var_addr(i)}, rdi\n"
+            arg_stack_loc = get_variable_memory(stack_param_i, True, size=8)
+            out.append(X86_Instr("mov", "rdi", arg_stack_loc))
+            out.append(X86_Instr("mov", arg_memory, "rdi"))
             stack_param_i += 1
     return out, int_param_i, float_param_i, stack_param_i
 
-def fn_start(f: FunctionIr) -> str:
+
+def fn_start(f: FunctionIr) -> X86_Body:
     global CUR_STACK_VARS
     CUR_STACK_VARS = StackVariables(f.stack_frame, f.is_vararg)
-    out = ""
-    out +=  "    push rbp\n"
-    out +=  "    mov rbp, rsp\n"
+    out = []
+    out.append(X86_Instr("push", "rbp"))
+    out.append(X86_Instr("mov", "rbp", "rsp"))
     if CUR_STACK_VARS.stack_size > 0:
-        out += f"    sub rsp, {CUR_STACK_VARS.stack_size}\n"
+        out.append(X86_Instr("sub", "rsp", CUR_STACK_VARS.stack_size))
     int_i = 0
     float_i = 0
     stack_i = 0
@@ -95,390 +133,345 @@ def fn_start(f: FunctionIr) -> str:
         out += a
     if f.is_vararg:
         for i in range(6):
-            register = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"][i]
-            out += f"    mov QWORD[rbp-{CUR_STACK_VARS.vararg_int_loc - 8 * i}], {register}\n"
+            register = Abi.param_int_register(i)
+            out.append(
+                X86_Instr(
+                    "mov",
+                    f"QWORD[rbp-{CUR_STACK_VARS.vararg_int_loc - 8 * i}]",
+                    register,
+                )
+            )
         # TODO: same for floats
-        out += f"    mov rdi, {int_i * 8}\n"
-        out += f"    mov QWORD[rbp-{CUR_STACK_VARS.vararg_cur_int_loc}], rdi\n"
-        out += f"    lea rdi, {var_addr(stack_i, True)}\n"
-        out += f"    mov QWORD[rbp-{CUR_STACK_VARS.vararg_stack_loc}], rdi\n"
+        out.append(X86_Instr("mov", "rdi", int_i * 8))
+        out.append(
+            X86_Instr("mov", f"QWORD[rbp-{CUR_STACK_VARS.vararg_cur_int_loc}]", "rdi")
+        )
+        out.append(X86_Instr("lea", "rdi", get_variable_address(stack_i, True)))
+        out.append(
+            X86_Instr("mov", f"QWORD[rbp-{CUR_STACK_VARS.vararg_stack_loc}]", "rdi")
+        )
     return out
 
-def var_size(var_id: int):
-    return CUR_STACK_VARS.variable_sizes[var_id]
 
-def var_addr(var_id: int, stack_param: bool = False) -> str:
-    i = 0
-    if stack_param:
-        i = 16 + var_id * 8
-    else:
-        i = CUR_STACK_VARS.variable_offsets[var_id]
-    if i == 0:
-        return "[rbp]"
-    elif i < 0:
-        return f"[rbp - {abs(i)}]"
-    else:
-        return f"[rbp + {i}]"
-
-def value_get(operand1, operand2, operand_bytes = 64):
-    reg = "rsi"
-    op_reg = "rsi"
-    if operand_bytes == 8:
-        reg = "rcx"
-        op_reg = "cl"
+def value_get(operand1, operand2, operand_bits=64) -> Tuple[X86_Body, Any]:
+    reg = X86_Register.get("rsi")
+    op_reg = reg
+    if operand_bits == 8:
+        reg = X86_Register.get("rcx")
+        op_reg = reg.with_size(1)
     if operand1 is None:
-        return (f"    pop {reg}\n", op_reg)
+        return ([X86_Instr("pop", reg)], op_reg)
     elif operand1 == 0:
-        return ("", f"{operand2}")
+        return ([], operand2)
     elif operand1 == 1:
-        return ("", f"QWORD{var_addr(operand2)}")
+        return ([], get_variable_memory(operand2, size=8))
     elif operand1 == 2:
-        return (f"    lea rsi, {var_addr(operand2)}", op_reg)
+        return ([X86_Instr("lea", "rsi", get_variable_address(operand2))], op_reg)
     else:
         assert False
-
-def comp_code(operand1, operand2, kind):
-    out = ""
-    if operand1 is None:
-        out += "    pop rdi\n"
-        out += "    pop rsi\n"
-        out += "    cmp rsi, rdi\n"
-    else:
-        out += "    pop rdi\n"
-        pre_code, operand2 = value_get(operand1, operand2)
-        out += pre_code
-        out += f"    cmp rdi, {operand2}\n"
-    out += f"    set{kind} al\n"
-    out += f"    movzx rax, al\n"
-    out += f"    push rax\n"
-    return out
-
-def get_reg_kind(base, size):
-    reg = ""
-    if base == "rdi":
-        reg = ["dil", "di", "edi", "edi", "rdi", "rdi", "rdi", "rdi"][size - 1]
-    elif base == "rsi":
-        reg = ["sil", "si", "esi", "esi", "rsi", "rsi", "rsi", "rsi"][size - 1]
-    elif base == "rdx":
-        reg = ["dl", "dx", "edx", "edx", "rdx", "rdx", "rdx", "rdx"][size - 1]
-    elif base == "rcx":
-        reg = ["cl", "cx", "ecx", "ecx", "rcx", "rcx", "rcx", "rcx"][size - 1]
-    elif base == "rax":
-        reg = ["al", "ax", "eax", "eax", "rax", "rax", "rax", "rax"][size - 1]
-    elif base == "rbx":
-        reg = ["bl", "bx", "ebx", "ebx", "rbx", "rbx", "rbx", "rbx"][size - 1]
-    elif base == "r8":
-        reg = ["r8b", "r8w", "r8d", "r8d", "r8", "r8", "r8", "r8"][size - 1]
-    elif base == "r9":
-        reg = ["r9b", "r9w", "r9d", "r9d", "r9", "r9", "r9", "r9"][size - 1]
-    elif base == "r10":
-        reg = ["r10b", "r10w", "r10d", "r10d", "r10", "r10", "r10", "r10"][size - 1]
-    # TODO: all
-    return reg, ["BYTE", "WORD", "DWORD", "DWORD", "QWORD", "QWORD", "QWORD", "QWORD"][size - 1]
 
 
 COMMENT_IR_IN_ASM = False
 
-def instr_codegen(ins: IrInstr, ir: FullIr) -> str:
-    out = ""
-    if COMMENT_IR_IN_ASM:
-        out += f"                           ; {ins}\n"
+
+def instr_codegen(ins: IrInstr, ir: FullIr) -> X86_Body:
+    out = []
     match ins.opcode:
         case IrInstrKind.STV:
             var_id = ins.operand1
             size = var_size(var_id)
-            store_reg, store_kind = get_reg_kind("rdi", size)
-            out += f"    pop rdi\n"
-            out += f"    mov {store_kind}{var_addr(var_id)}, {store_reg}\n"
+            store_reg = X86_Register(size, "di")
+            store_to = get_variable_memory(var_id, size=size)
+            out.append(X86_Instr("pop", "rdi"))
+            out.append(X86_Instr("mov", store_to, store_reg))
         case IrInstrKind.STA:
-            store_reg, store_kind = get_reg_kind("rsi", ins.operand1)
-            out += f"    pop rdi\n"
-            out += f"    pop rsi\n"
-            out += f"    mov {store_kind}[rdi], {store_reg}\n"
+            size = ins.operand1
+            addr_reg = X86_Register.get("rdi")
+            data_reg = X86_Register.get("rsi")
+            store_to = X86_Memory(size, addr_reg)
+            out.append(X86_Instr("pop", addr_reg))
+            out.append(X86_Instr("pop", data_reg))
+            out.append(X86_Instr("mov", store_to, data_reg.with_size(size)))
         case IrInstrKind.LDA:
-            load_reg, load_kind = get_reg_kind("rsi", ins.operand1)
-            if ins.operand1 != 8:
-                out += f"    xor rsi, rsi\n"
-            out += f"    pop rdi\n"
-            out += f"    mov {load_reg}, {load_kind}[rdi]\n"
-            out += f"    push rsi\n"
+            size = ins.operand1
+            addr_reg = X86_Register.get("rdi")
+            data_reg = X86_Register.get("rsi")
+            load_from = X86_Memory(size, addr_reg)
+            if size != 8:
+                out.append(X86_Instr("mov", data_reg, 0))
+            out.append(X86_Instr("pop", addr_reg))
+            out.append(X86_Instr("mov", data_reg.with_size(size), load_from))
+            out.append(X86_Instr("push", data_reg))
         case IrInstrKind.PSH:
             if ins.operand1 == 0:
-                out += f"    push {ins.operand2}\n"
+                out.append(X86_Instr("push", int(ins.operand2)))
             elif ins.operand1 == 1:
                 size = var_size(ins.operand2)
-                load_reg, load_kind = get_reg_kind("rdi", size)
+                reg = X86_Register.get("rdi")
                 if size != 8:
-                    out += f"    xor rdi, rdi\n"
-                    out += f"    mov {load_reg}, {load_kind}{var_addr(ins.operand2)}\n"
-                    out += f"    push rdi\n"
+                    out.append(X86_Instr("mov", "rdi", 0))
+                    out.append(
+                        X86_Instr(
+                            "mov",
+                            reg.with_size(size),
+                            get_variable_memory(ins.operand2, size=size),
+                        )
+                    )
+                    out.append(X86_Instr("push", reg))
                 else:
-                    out += f"    push {load_kind}{var_addr(ins.operand2)}\n"
+                    out.append(
+                        X86_Instr("push", get_variable_memory(ins.operand2, size=size))
+                    )
             elif ins.operand1 == 2:
-                out += f"    lea rdi, {var_addr(ins.operand2)}\n"
-                out += f"    push rdi\n"
+                out.append(X86_Instr("lea", "rdi", get_variable_address(ins.operand2)))
+                out.append(X86_Instr("push", "rdi"))
             elif ins.operand1 == 3:
-                out += f"    lea rdi, [global_{ins.operand2}]\n"
-                out += f"    push rdi\n"
+                out.append(X86_Instr("lea", "rdi", f"[global_{ins.operand2}]"))
+                out.append(X86_Instr("push", "rdi"))
             elif ins.operand1 == 4:
                 # TODO: multiple sizes
-                out += f"    push QWORD[global_{ins.operand2}]\n"
+                out.append(X86_Instr("push", f"QWORD[global_{ins.operand2}]"))
             else:
                 assert False
         case IrInstrKind.DUP:
-            out += "    mov rdi, QWORD[rsp]\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("mov", "rdi", "QWORD[rsp]"))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.VAA:
             label_else = create_label("vaelse")
             label_end = create_label("vaend")
             non_stack_i = CUR_STACK_VARS.vararg_cur_int_loc
             non_stack_loc = CUR_STACK_VARS.vararg_int_loc
             non_stack_increment = 8
-            if ins.operand1 == True:
+            if ins.operand1:
                 assert False, "TODO: is_float = True"
                 non_stack_i = CUR_STACK_VARS.vararg_cur_float_loc
                 non_stack_loc = CUR_STACK_VARS.vararg_float_loc
                 non_stack_increment = 8
-            out += f"    mov rax, QWORD[rbp-{non_stack_i}]\n"
-            out += f"    cmp rax, 47\n"
-            out += f"    ja {label_else}\n"
-            out += f"    lea rdi, [rbp-{non_stack_loc}]\n"
-            out += f"    add rdi, rax\n"
-            out += f"    add rax, {non_stack_increment}\n"
-            out += f"    mov QWORD[rbp-{non_stack_i}], rax\n"
-            out += f"    jmp {label_end}\n"
-            out += f"{label_else}:\n"
-            out += f"    mov rdi, QWORD[rbp-{CUR_STACK_VARS.vararg_stack_loc}]\n"
-            out += f"    lea rax, [rdi + 8]\n"
-            out += f"    mov QWORD[rbp-{CUR_STACK_VARS.vararg_stack_loc}], rax\n"
-            out += f"{label_end}:\n"
+            out.append(X86_Instr("mov", "rax", f"QWORD[rbp-{non_stack_i}]"))
+            out.append(X86_Instr("cmp", "rax", 47))
+            out.append(X86_Instr("ja", label_else))
+            out.append(X86_Instr("lea", "rdi", f"[rbp-{non_stack_loc}]"))
+            out.append(X86_Instr("add", "rdi", "rax"))
+            out.append(X86_Instr("add", "rax", non_stack_increment))
+            out.append(X86_Instr("mov", f"QWORD[rbp-{non_stack_i}]", "rax"))
+            out.append(X86_Instr("jmp", label_end))
+            out.append(X86_LabelPoint(label_else))
+            out.append(
+                X86_Instr("mov", "rdi", f"QWORD[rbp-{CUR_STACK_VARS.vararg_stack_loc}]")
+            )
+            out.append(X86_Instr("lea", "rax", "[rdi + 8]"))
+            out.append(
+                X86_Instr("mov", f"QWORD[rbp-{CUR_STACK_VARS.vararg_stack_loc}]", "rax")
+            )
+            out.append(X86_LabelPoint(label_end))
             # TODO: different for float ?
-            out += f"    mov rdi, QWORD[rdi]\n"
-            out += f"    push rdi\n"
+            out.append(X86_Instr("mov", "rdi", "QWORD[rdi]"))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.ADD:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
             pre_code, operand2 = value_get(ins.operand1, ins.operand2)
             out += pre_code
-            out += f"    add rdi, {operand2}\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("add", "rdi", operand2))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.SUB:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
             if ins.operand1 is None:
-                out += "    pop rsi\n"
-                out += "    sub rsi, rdi\n"
-                out += "    push rsi\n"
+                out.append(X86_Instr("pop", "rsi"))
+                out.append(X86_Instr("sub", "rsi", "rdi"))
+                out.append(X86_Instr("push", "rsi"))
             else:
                 pre_code, operand2 = value_get(ins.operand1, ins.operand2)
                 out += pre_code
-                out += f"    sub rdi, {operand2}\n"
-                out += "    push rdi\n"
+                out.append(X86_Instr("sub", "rdi", operand2))
+                out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.MUL:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
             pre_code, operand2 = value_get(ins.operand1, ins.operand2)
             out += pre_code
-            out += f"    imul rdi, {operand2}\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("imul", "rdi", operand2))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.DIV:
             if ins.operand1 is None:
-                out += "    pop rdi\n"
-                out += "    pop rax\n"
-                out += "    cqo\n"
-                out += "    idiv rdi\n"
+                out.append(X86_Instr("pop", "rdi"))
+                out.append(X86_Instr("pop", "rax"))
+                out.append(X86_Instr("cqo"))
+                out.append(X86_Instr("idiv", "rdi"))
             else:
-                out += "    pop rax\n"
+                out.append(X86_Instr("pop", "rax"))
                 pre_code, operand2 = value_get(ins.operand1, ins.operand2)
                 out += pre_code
-                out += "    cqo\n"
+                out.append(X86_Instr("cqo"))
                 if operand2 != "rsi":
-                    out += f"    mov rsi, {operand2}\n"
+                    out.append(X86_Instr("mov", "rsi", operand2))
                     operand2 = "rsi"
-                out += f"    idiv {operand2}\n"
-            out += "    push rax\n"
+                out.append(X86_Instr("idiv", operand2))
+            out.append(X86_Instr("push", "rax"))
         case IrInstrKind.REM:
             if ins.operand1 is None:
-                out += "    pop rdi\n"
-                out += "    pop rax\n"
-                out += "    cqo\n"
-                out += "    idiv rdi\n"
+                out.append(X86_Instr("pop", "rdi"))
+                out.append(X86_Instr("pop", "rax"))
+                out.append(X86_Instr("cqo"))
+                out.append(X86_Instr("idiv", "rdi"))
             else:
-                out += "    pop rax\n"
+                out.append(X86_Instr("pop", "rax"))
                 pre_code, operand2 = value_get(ins.operand1, ins.operand2)
                 out += pre_code
-                out += "    cqo\n"
+                out.append(X86_Instr("cqo"))
                 if operand2 != "rsi":
-                    out += f"    mov rsi, {operand2}\n"
+                    out.append(X86_Instr("mov", "rsi", operand2))
                     operand2 = "rsi"
-                out += f"    idiv {operand2}\n"
-            out += "    push rdx\n"
+                out.append(X86_Instr("idiv", operand2))
+            out.append(X86_Instr("push", "rax"))
         case IrInstrKind.SHL:
             if ins.operand1 is None:
-                out += "    pop rcx\n"
-                out += "    pop rsi\n"
-                out += "    shl rsi, cl\n"
-                out += "    push rsi\n"
+                out.append(X86_Instr("pop", "rcx"))
+                out.append(X86_Instr("pop", "rsi"))
+                out.append(X86_Instr("shl", "rsi", "cl"))
+                out.append(X86_Instr("push", "rsi"))
             else:
-                out += "    pop rdi\n"
+                out.append(X86_Instr("pop", "rdi"))
                 pre_code, operand2 = value_get(ins.operand1, ins.operand2, 8)
                 out += pre_code
-                out += f"    shl rdi, {operand2}\n"
-                out += "    push rdi\n"
+                out.append(X86_Instr("shl", "rdi", operand2))
+                out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.SHR:
             if ins.operand1 is None:
-                out += "    pop rcx\n"
-                out += "    pop rsi\n"
-                out += "    shr rsi, cl\n"
-                out += "    push rsi\n"
+                out.append(X86_Instr("pop", "rcx"))
+                out.append(X86_Instr("pop", "rsi"))
+                out.append(X86_Instr("shr", "rsi", "cl"))
+                out.append(X86_Instr("push", "rsi"))
             else:
-                out += "    pop rdi\n"
+                out.append(X86_Instr("pop", "rdi"))
                 pre_code, operand2 = value_get(ins.operand1, ins.operand2, 8)
                 out += pre_code
-                out += f"    shr rdi, {operand2}\n"
-                out += "    push rdi\n"
+                out.append(X86_Instr("shr", "rdi", operand2))
+                out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.AND:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
             pre_code, operand2 = value_get(ins.operand1, ins.operand2)
             out += pre_code
-            out += f"    and rdi, {operand2}\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("and", "rdi", operand2))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.XOR:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
             pre_code, operand2 = value_get(ins.operand1, ins.operand2)
             out += pre_code
-            out += f"    xor rdi, {operand2}\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("xor", "rdi", operand2))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.IOR:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
             pre_code, operand2 = value_get(ins.operand1, ins.operand2)
             out += pre_code
-            out += f"    or rdi, {operand2}\n"
-            out += "    push rdi\n"
-        case IrInstrKind.LTH:
-            out += comp_code(ins.operand1, ins.operand2, "l")
-        case IrInstrKind.GTH:
-            out += comp_code(ins.operand1, ins.operand2, "g")
-        case IrInstrKind.LEQ:
-            out += comp_code(ins.operand1, ins.operand2, "le")
-        case IrInstrKind.GEQ:
-            out += comp_code(ins.operand1, ins.operand2, "ge")
-        case IrInstrKind.EQU:
-            out += comp_code(ins.operand1, ins.operand2, "e")
-        case IrInstrKind.NEQ:
-            out += comp_code(ins.operand1, ins.operand2, "ne")
+            out.append(X86_Instr("or", "rdi", operand2))
+            out.append(X86_Instr("push", "rdi"))
+        case (
+            IrInstrKind.LTH
+            | IrInstrKind.GTH
+            | IrInstrKind.GEQ
+            | IrInstrKind.LEQ
+            | IrInstrKind.EQU
+            | IrInstrKind.NEQ
+        ):
+            kind = {
+                IrInstrKind.LTH: "l",
+                IrInstrKind.GTH: "g",
+                IrInstrKind.LEQ: "le",
+                IrInstrKind.GEQ: "ge",
+                IrInstrKind.EQU: "e",
+                IrInstrKind.NEQ: "ne",
+            }[ins.opcode]
+            operand1 = ins.operand1
+            operand2 = ins.operand2
+            if operand1 is None:
+                out.append(X86_Instr("pop", "rdi"))
+                out.append(X86_Instr("pop", "rsi"))
+                out.append(X86_Instr("cmp", "rsi", "rdi"))
+            else:
+                out.append(X86_Instr("pop", "rdi"))
+                pre_code, operand2 = value_get(operand1, operand2)
+                out += pre_code
+                out.append(X86_Instr("cmp", "rdi", operand2))
+            out.append(X86_Instr(f"set{kind}", "al"))
+            out.append(X86_Instr("movzx", "rax", "al"))
+            out.append(X86_Instr("push", "rax"))
         case IrInstrKind.NEG:
-            out += "    pop rdi\n"
-            out += "    neg rdi\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
+            out.append(X86_Instr("neg", "rdi"))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.INV:
-            out += "    pop rdi\n"
-            out += "    not rdi\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
+            out.append(X86_Instr("not", "rdi"))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.NOT:
-            out += "    pop rdi\n"
-            out += "    xor rax, rax\n"
-            out += "    test rdi, rdi\n"
-            out += "    sete al\n"
-            out += "    mov rdi, rax\n"
-            out += "    push rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
+            out.append(X86_Instr("mov", "rax", 0))
+            out.append(X86_Instr("test", "rdi", "rdi"))
+            out.append(X86_Instr("sete", "al"))
+            out.append(X86_Instr("mov", "rdi", "rax"))
+            out.append(X86_Instr("push", "rdi"))
         case IrInstrKind.DRP:
-            out += "    pop rdi\n"
+            out.append(X86_Instr("pop", "rdi"))
         case IrInstrKind.RET:
-            out +=  "    leave\n"
-            out += f"    ret\n"
+            out.append(X86_Instr("leave"))
+            out.append(X86_Instr("ret"))
         case IrInstrKind.RTV:
-            out +=  "    pop rax\n"
-            out +=  "    leave\n"
-            out += f"    ret\n"
+            out.append(X86_Instr("pop", "rax"))
+            out.append(X86_Instr("leave"))
+            out.append(X86_Instr("ret"))
         case IrInstrKind.CAL:
             call_name = ins.operand1
-            pic_str = "" if len(ir.functions[call_name].instructions) != 0 else " wrt ..plt"
+            pic_str = (
+                "" if len(ir.functions[call_name].instructions) != 0 else " wrt ..plt"
+            )
             param_count = ins.operand2
             for i in range(min(param_count, 6)):
-                out += "    pop " + ["rdi", "rsi", "rdx", "rcx", "r8", "r9"][i] + "\n"
+                out.append(
+                    X86_Instr("pop", ["rdi", "rsi", "rdx", "rcx", "r8", "r9"][i])
+                )
             if ir.functions[call_name].is_vararg:
                 # TODO: number of float arguments
-                out += "    xor rax, rax\n"
-            out += f"    call {call_name}{pic_str}\n"
+                out.append(X86_Instr("mov", "rax", 0))
+            out.append(X86_Instr("call", X86_Label(f"{call_name}{pic_str}")))
             if (n := max(0, param_count) - 6) > 0:
-                out += "    add rsp, {}\n".format(n*8)
+                out.append(X86_Instr("add", "rsp", n * 8))
             if ir.functions[call_name].returns_value:
-                out += "    push rax\n"
+                out.append(X86_Instr("push", "rax"))
         case IrInstrKind.LBL:
-            label_name = ins.operand1
-            out += f".{label_name}:\n"
+            out.append(X86_LabelPoint(X86_Label("." + ins.operand1)))
         case IrInstrKind.JMP:
-            to_label = ins.operand1
-            out += f"    jmp .{to_label}\n"
+            out.append(X86_Instr("jmp", X86_Label("." + ins.operand1)))
         case IrInstrKind.JZO:
-            to_label = ins.operand1
-            out +=  "    pop rdi\n"
-            out +=  "    test rdi, rdi\n"
-            out += f"    je .{to_label}\n"
+            out.append(X86_Instr("pop", "rdi"))
+            out.append(X86_Instr("test", "rdi", "rdi"))
+            out.append(X86_Instr("je", X86_Label("." + ins.operand1)))
         case IrInstrKind.JNZ:
-            to_label = ins.operand1
-            out +=  "    pop rdi\n"
-            out +=  "    test rdi, rdi\n"
-            out += f"    jne .{to_label}\n"
+            out.append(X86_Instr("pop", "rdi"))
+            out.append(X86_Instr("test", "rdi", "rdi"))
+            out.append(X86_Instr("jne", X86_Label("." + ins.operand1)))
         case IrInstrKind.BUI:
             builtin_name = ins.operand1
             param_count = ins.operand2
             if builtin_name == "__builtin_syscall":
                 for i in range(param_count):
-                    out += "    pop " + ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"][i] + "\n"
-                out += "    syscall\n"
-                out += "    push rax\n"
+                    out.append(
+                        X86_Instr(
+                            "pop", ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"][i]
+                        )
+                    )
+                out.append(X86_Instr("syscall"))
+                out.append(X86_Instr("push", "rax"))
             else:
                 assert False, builtin_name
     return out
 
-def end_main() -> str:
-    out = ""
-    out += "    mov rax, 231\n"
-    out += "    mov rdi, 0\n" # TODO: return value
-    out += "    syscall\n\n"
-    return out
 
-def remove_push_pop(instrs: str) -> str:
-    return instrs
-    out_lines = []
-    lines = instrs.split('\n')
-    if len(lines) == 0:
-        return ""
-    skip_n = 0
-    for i in range(len(lines) - 1):
-        if skip_n > 0:
-            skip_n -= 1
-            continue
-        l = lines[i]
-        if l.startswith("    push "):
-            lp1 = lines[i+1]
-            if lp1.startswith("    pop "):
-                reg0 = l[9:]
-                reg1 = lp1[8:]
-                if reg0 == reg1:
-                    skip_n = 1
-                    continue
-                out_lines.append(f"    mov {reg1}, {reg0}")
-                skip_n = 1
-                continue
-        if l.startswith("    pop "):
-            lp1 = lines[i+1]
-            if lp1.startswith("    push "):
-                reg0 = l[8]
-                reg1 = lp1[9]
-                if reg0 == reg1:
-                    skip_n = 1
-                    continue
-
-        out_lines.append(l)
-    out_lines.append(lines[-1])
-    return '\n'.join(out_lines) + '\n'
-
-def function_code(f, ir) -> str:
-    out = ""
+def function_code(f, ir) -> X86_Body:
+    out = []
     out += fn_start(f)
     for i in f.instructions:
         out += instr_codegen(i, ir)
-    return out
+    return optimize_function_code(out)
+
 
 def gen_db_str(data: bytes) -> str:
     out = ""
@@ -487,11 +480,15 @@ def gen_db_str(data: bytes) -> str:
         if needs_comma:
             out += ", "
         printable_count = 0
-        while printable_count < len(data) and chr(data[printable_count]).isprintable() and chr(data[printable_count]) != '"':
+        while (
+            printable_count < len(data)
+            and chr(data[printable_count]).isprintable()
+            and chr(data[printable_count]) != '"'
+        ):
             printable_count += 1
         if printable_count > 0:
             data_str = str(data[:printable_count])[2:-1]
-            out += f"\"{data_str}\""
+            out += f'"{data_str}"'
             data = data[printable_count:]
             needs_comma = True
             continue
@@ -500,24 +497,21 @@ def gen_db_str(data: bytes) -> str:
         data = data[1:]
     return out
 
+
 def compile_ir(ir: FullIr, comment_ir_in_asm: bool = False) -> str:
     global COMMENT_IR_IN_ASM
     COMMENT_IR_IN_ASM = comment_ir_in_asm
     out = "default rel\n"
     out += "section .text\n"
     for n, f in ir.functions.items():
-        # if n == "main":
-        #     out += "global _start\n"
-        #     out += "_start:\n"
-        #     out += remove_push_pop(function_code(f, ir, True))
-        # el
         if len(f.instructions) == 0:
             out += f"extern {n}\n"
         else:
             if f.is_lib or n == "main":
                 out += f"global {n}\n"
             out += n + ":\n"
-            out += remove_push_pop(function_code(f, ir))
+            f_code = function_code(f, ir)
+            out += "\n".join([str(i) for i in f_code]) + "\n"
     cur = ".text"
     for i, g in enumerate(ir.globs):
         section = [".data", ".rodata"][g.is_ro]
