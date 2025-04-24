@@ -102,6 +102,13 @@ lib fn String::from_cstr(self: String*, cstr: CStr);
 ///   @param capacity the string capacity
 lib fn String::from_raw_parts(self: String*, data: char*, len: i64, capacity: i64);
 
+/// constructor[String] repeat
+///   Initializes a string with multiple instance of one character.
+///   @object self
+///   @param c the character to use
+///   @param n the number of character
+lib fn String::repeat(self: String*, c: char, n: i64);
+
 /// destructor[String] destroy
 ///   Destroys a String object.
 ///   @object self
@@ -142,6 +149,13 @@ lib fn String::remove(self: String*, idx: i64) -> char;
 ///   @object self
 ///   @param c the character to push
 lib fn String::push(self: String*, c: char);
+
+/// method[String] push_repeat
+///   Adds multiple instance of one character at the end of a string.
+///   @object self
+///   @param c the character to push
+///   @param n the number of character to push
+lib fn String::push_repeat(self: String*, c: char, n: i64);
 
 /// method[String] push_str
 ///   Appends a string at the end of a string.

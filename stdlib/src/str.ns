@@ -81,6 +81,14 @@ fn String::init(self: String*) {
     self->capacity = 0;
 }
 
+fn String::repeat(self: String*, c: char, n: i64) {
+    self->capacity = n;
+    self->len = n;
+    self->data = malloc(n + 1);
+    memset(self->data, c, n);
+    self->data[n] = 0;
+}
+
 fn String::destroy(self: String*) {
     if (self->data != nullptr) free(self->data);
     self->len = 0;
@@ -97,7 +105,18 @@ fn String::push(self: String*, c: char) {
     self->data[self->len] = 0;
 }
 
+fn String::push_repeat(self: String*, c: char, n: i64) {
+    if (n == 0) return;
+    while (self->len + n > self->capacity) {
+        self->__alloc_more();
+    }
+    memset(&self->data[self->len], c, n);
+    self->len = self->len + n;
+    self->data[self->len] = 0;
+}
+
 fn String::push_str(self: String*, s: Str*) {
+    if (s->len == 0) return;
     while (self->len + s->len > self->capacity) {
         self->__alloc_more();
     }
@@ -111,7 +130,6 @@ fn String::push_cstr(self: String*, s: CStr) {
     str.from_cstr(s);
     self->push_str(&str);
 }
-
 
 fn fmt_num(self: String*, num: i64, signed: bool) {
     let buf: char[22];
