@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import List
 from utils.diagnostic import fatal_error
 
+
 @dataclass
 class CompileSingleFileOptions:
     print_ast: bool
@@ -23,6 +24,8 @@ class CompileSingleFileOptions:
     link_libraries: List[str]
     use_tst_emit: bool
     no_runtime: bool
+    interpret: bool
+    debug: bool
     to_remove: List[str]
     clang_args: List[str]
 
@@ -35,8 +38,13 @@ class CompileSingleFileOptions:
         self.input_files = []
         self.output_files = []
         self.compile_only = False
+        self.interpret = False
+        self.debug = False
         self.include_paths = ["/home/clement/dev/nslang/stdlib/include"]
-        self.link_libraries = ["/home/clement/dev/nslang/stdlib/bin/stdlib.a", "/home/clement/dev/nslang/stdlib/bin/runtime.a"]
+        self.link_libraries = [
+            "/home/clement/dev/nslang/stdlib/bin/stdlib.a",
+            "/home/clement/dev/nslang/stdlib/bin/runtime.a",
+        ]
         self.nasm_args = []
         self.ld_args = []
         self.use_tst_emit = False
@@ -60,12 +68,19 @@ class CompileSingleFileOptions:
             return
 
         for i in self.input_files:
-            if not (i.endswith(".ns") or i.endswith(".o") or i.endswith(".a") or i.endswith(".so")):
+            if not (
+                i.endswith(".ns")
+                or i.endswith(".o")
+                or i.endswith(".a")
+                or i.endswith(".so")
+            ):
                 fatal_error(f"unknown input file '{i}'")
         if len(self.output_files) == 0:
             self.output_files = ["a.out"]
         if self.comment_ir_in_asm and not self.print_asm:
             fatal_error("cannot specify '-irinasm' without '-asm'")
+        if self.debug and not self.interpret:
+            fatal_error("cannot specify '-dbg' without '-interpret'")
 
     def read_from_args(self, args):
         i = 0
@@ -91,18 +106,26 @@ class CompileSingleFileOptions:
                 self.print_asm = True
             elif args[i] == "-ir":
                 self.print_ir = True
+            elif args[i] == "-interpret":
+                self.interpret = True
+            elif args[i] == "-dbg":
+                self.debug = True
             elif args[i] == "-tstllvm":
                 self.use_tst_emit = True
             elif args[i] == "-irinasm":
                 self.comment_ir_in_asm = True
             elif args[i] == "-noruntime":
                 self.no_runtime = True
-                self.link_libraries.remove("/home/clement/dev/nslang/stdlib/bin/runtime.a")
+                self.link_libraries.remove(
+                    "/home/clement/dev/nslang/stdlib/bin/runtime.a"
+                )
             elif args[i].startswith("-I"):
                 self.include_paths.append(args[i][2:])
             elif args[i] == "-nostdlib":
                 self.include_paths.remove("/home/clement/dev/nslang/stdlib/include")
-                self.link_libraries.remove("/home/clement/dev/nslang/stdlib/bin/stdlib.a")
+                self.link_libraries.remove(
+                    "/home/clement/dev/nslang/stdlib/bin/stdlib.a"
+                )
             elif args[i].startswith("-l"):
                 self.link_libraries.append(args[i])
             else:
@@ -119,6 +142,7 @@ def exec_compiler(args):
             compile(i, o, options)
         if len(options.to_remove) > 0:
             import subprocess
+
             subprocess.run(["rm"] + options.to_remove)
     else:
         to_compile = [f for f in options.input_files if f.endswith(".ns")]
@@ -130,13 +154,18 @@ def exec_compiler(args):
         if ANY_FILE_HAD_ERROR:
             fatal_error("compilation had error. aborted.")
         import subprocess
-        additional_ld_flags = [] # ["--dynamic-linker=/lib64/ld-linux-x86-64.so.2", "-pie"]
-        cmd = ["gcc", "-nostdlib", "-o", options.output_files[0]] + temporary_files + others + options.ld_args + additional_ld_flags
+
+        additional_ld_flags = []  # ["--dynamic-linker=/lib64/ld-linux-x86-64.so.2", "-pie"]
+        cmd = (
+            ["gcc", "-nostdlib", "-o", options.output_files[0]]
+            + temporary_files
+            + others
+            + options.ld_args
+            + additional_ld_flags
+        )
         subprocess.run(cmd)
         if len(temporary_files) > 0 or len(options.to_remove) > 0:
             subprocess.run(["rm"] + temporary_files + options.to_remove)
-
-
 
 
 def compile(input_file, output_file, options: CompileSingleFileOptions):
@@ -171,8 +200,11 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
             with open(output_file, "r") as f:
                 print(f.read())
         import subprocess
+
         if options.print_asm:
-            subprocess.run(["clang", "-S", output_file, "-o", ".tmp.S"] + options.clang_args)
+            subprocess.run(
+                ["clang", "-S", output_file, "-o", ".tmp.S"] + options.clang_args
+            )
             with open(".tmp.S", "r") as f:
                 print(f.read())
             subprocess.run(["rm", ".tmp.S"])
@@ -189,6 +221,17 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
     if options.optimize_ir:
         ir = optimize_ir(ir)
 
+    if options.interpret:
+        from ir import Interpreter
+
+        interp = Interpreter(ir)
+        if options.debug:
+            interp.debug()
+            exit(0)
+        else:
+            interp.run()
+            exit(interp.exit_code)
+
     if options.print_ir:
         print_ir(ir)
 
@@ -198,6 +241,7 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
         print(assembly)
 
     create_object_from_asm(assembly, output_file, options.nasm_args)
+
 
 def main():
     exec_compiler(sys.argv[1:])
@@ -211,6 +255,7 @@ def main():
     #
     #
     # link_executable(output_obj, outputfilename = output_exe)
+
 
 if __name__ == "__main__":
     main()

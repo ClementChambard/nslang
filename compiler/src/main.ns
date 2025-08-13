@@ -6,6 +6,7 @@
 #include lexer.nsh
 #include mem.nsh
 #include diags.nsh
+#include ir.nsh
 
 fn init() {
     IdentInfo::add_keywords();
@@ -38,4 +39,6 @@ fn main() {
     lexer.delete();
 
     cleanup();
+
+    test_ir();
 }

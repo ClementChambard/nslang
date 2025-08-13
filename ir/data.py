@@ -9,26 +9,20 @@ class IrInstrKind(Enum):
     STA = auto()  # STORE_ADDR    STA  store_size: int                   => pops address and value, then store at that address
     LDA = auto()  # LOAD_ADDR     LDA  load_size: int                    => pops address and pushes value found at that address
     PSH = auto()  # PUSH          PSH  v: thing                          => push value onto the stack
-    DUP = (
-        auto()
-    )  # DUP           DUP                                    => duplicates top of stack
+    DUP = auto()  # DUP           DUP                                    => duplicates top of stack
     DRP = auto()  # DROP          DRP                                    => drops the top of the stack
     VAA = auto()  # VAARG         VAA  is_float: bool                    => push the next va argument onto the stack
 
     # control
     LBL = auto()  # LABEL         LBL  lbl: str                          => creates a label to jump to
-    JMP = (
-        auto()
-    )  # JMP           JMP  lbl: str                          => jumps to a label
+    JMP = auto()  # JMP           JMP  lbl: str                          => jumps to a label
     JZO = auto()  # JZ            JZO  lbl: str                          => pops top of stack and jumps if zero
     JNZ = auto()  # JNZ           JNZ  lbl: str                          => pops top of stack and jumps if not zero
 
     # call
     CAL = auto()  # CALL          CAL  fn: str       nparams: int        => calls a function by name with nparams on the stack. puts the return value on the stack if it exists
     BUI = auto()  # BUILTIN       BUI  fn: str       nparams: int        => same as call but for builtins
-    RET = (
-        auto()
-    )  # RET           RET                                    => exits the function
+    RET = auto()  # RET           RET                                    => exits the function
     RTV = auto()  # RETVAL        RTV                                    => pops the top of the stack and returns it
 
     # Arithmetic
@@ -109,6 +103,8 @@ class IrInstr:
                 | IrInstrKind.JZO
                 | IrInstrKind.JNZ
                 | IrInstrKind.VAA
+                | IrInstrKind.LDA
+                | IrInstrKind.STA
             ):
                 operand_count = 1
             case IrInstrKind.CAL | IrInstrKind.BUI:

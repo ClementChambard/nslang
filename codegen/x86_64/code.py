@@ -164,7 +164,9 @@ def value_get(operand1, operand2, operand_bits=64) -> Tuple[X86_Body, Any]:
     elif operand1 == 0:
         return ([], operand2)
     elif operand1 == 1:
-        return ([], get_variable_memory(operand2, size=8))
+        if operand_bits == 8:
+            return ([X86_Instr("mov", op_reg, get_variable_memory(operand2, size=1))], op_reg)
+        return ([], get_variable_memory(operand2, size=operand_bits//8))
     elif operand1 == 2:
         return ([X86_Instr("lea", "rsi", get_variable_address(operand2))], op_reg)
     else:
@@ -321,7 +323,7 @@ def instr_codegen(ins: IrInstr, ir: FullIr) -> X86_Body:
                     out.append(X86_Instr("mov", "rsi", operand2))
                     operand2 = "rsi"
                 out.append(X86_Instr("idiv", operand2))
-            out.append(X86_Instr("push", "rax"))
+            out.append(X86_Instr("push", "rdx"))
         case IrInstrKind.SHL:
             if ins.operand1 is None:
                 out.append(X86_Instr("pop", "rcx"))
@@ -469,7 +471,11 @@ def function_code(f, ir) -> X86_Body:
     out = []
     out += fn_start(f)
     for i in f.instructions:
-        out += instr_codegen(i, ir)
+        try:
+            out += instr_codegen(i, ir)
+        except Exception: 
+            print(f"instruction '{i}' caused error (function {f})")
+            assert False
     return optimize_function_code(out)
 
 

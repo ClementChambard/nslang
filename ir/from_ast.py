@@ -312,6 +312,8 @@ def generate_cast_expr_ir(
             # TODO:
             var_id = scope_lookup(cur_scope, scope_stack, decl.name)
             return [IrInstr(IrInstrKind.PSH, 2, var_id)]
+        elif isinstance(e.op, MemberExpr):
+            return generate_member_expr_addr(e.op, ir, cur_scope, scope_stack)
         elif isinstance(e.op, StringLiteral):
             global_id = len(ir.globs)
             ir.globs.append(IrGlobal(e.op.value, False, True))
@@ -323,6 +325,9 @@ def generate_cast_expr_ir(
             else:
                 var_id = scope_lookup(cur_scope, scope_stack, e.op.decl.name)
                 return [IrInstr(IrInstrKind.PSH, 1, var_id)]
+        elif isinstance(e.op, ParenExpr):
+            return generate_cast_expr_ir(CastExpr(e.ty, e.value_kind, e.kind, e.op.val), ir, cur_scope, scope_stack)
+            pass
         elif isinstance(e.op, ArraySubscriptExpr):
             out = []
             out += generate_array_subscript_addr(e.op, ir, cur_scope, scope_stack)
@@ -346,6 +351,7 @@ def generate_cast_expr_ir(
     elif e.kind == CastKind.INTEGRAL_CAST:
         # TODO: what to do ? for now nothing in IR
         return generate_expr_ir(e.op, ir, cur_scope, scope_stack)
+    diag(e.get_range()[0], "ASSERT FALSE", Diag.ERROR, [e.get_range()])
     assert False, f"unhandled op kind {e.op.__class__} for cast kind: {e.kind}"
 
 

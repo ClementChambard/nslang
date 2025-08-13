@@ -1,0 +1,69 @@
+#include ir.nsh
+#include ir_interpreter.nsh
+
+#include mem.nsh
+#include io.nsh
+
+fn test_ir() {
+  let full_ir: FullIr;
+  full_ir.globs = malloc(sizeof(IrGlobal));
+  full_ir.globs_len = 1;
+  full_ir.functions = malloc(sizeof(IrFunc));
+  full_ir.functions_len = 1;
+
+  let glob: IrGlobal*;
+  glob = &full_ir.globs[0];
+  glob->data = strdup("Hello, World!\n");
+  glob->data_len = 15;
+  glob->is_lib = true;
+  glob->is_ro = true;
+  glob->name = strdup("####");
+
+  let func: IrFunc*;
+  func = &full_ir.functions[0];
+  func->name = strdup("main");
+  func->returns_value = false;
+  func->is_vararg = false;
+  func->is_lib = true;
+  func->stack_frame = nullptr;
+  func->stack_frame_len = 0;
+  func->params = nullptr;
+  func->params_len = 0;
+  func->instructions = malloc(sizeof(IrInstr) * 6);
+  func->instructions_len = 6;
+  memset(func->instructions, 0, sizeof(IrInstr) * func->instructions_len);
+
+  func->instructions[0].opcode = IR_PSH;
+  func->instructions[0].operand1 = IR_OPK_IMM;
+  func->instructions[0].operand2 = 14;
+  func->instructions[1].opcode = IR_PSH;
+  func->instructions[1].operand1 = IR_OPK_GLOB_ADDR;
+  func->instructions[1].operand2 = 0;
+  func->instructions[2].opcode = IR_PSH;
+  func->instructions[2].operand1 = IR_OPK_IMM;
+  func->instructions[2].operand2 = 1;
+  func->instructions[3].opcode = IR_PSH;
+  func->instructions[3].operand1 = IR_OPK_IMM;
+  func->instructions[3].operand2 = 1;
+  func->instructions[4].opcode = IR_BUI;
+  func->instructions[4].operand2 = 4;
+  func->instructions[4].operand_str = strdup("__builtin_syscall");
+  func->instructions[5].opcode = IR_RET;
+
+  print("\n\nfull ir:\n");
+  full_ir.print();
+
+  full_ir.optimize();
+
+  print("\n\nfull ir optimized:\n");
+  full_ir.print();
+
+  print("\nINTERPRETING!!\n\n======stdout=======\n");
+  let interp: Interpreter;
+  interp.init(&full_ir);
+  interp.debug();
+  interp.destroy();
+  print("===================\n\n");
+
+  full_ir.destroy();
+}

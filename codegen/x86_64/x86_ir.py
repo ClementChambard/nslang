@@ -25,6 +25,7 @@ class X86_InstrKind(Enum):
     JA = auto()
     JMP = auto()
     NEG = auto()
+    NOT = auto()
     IMUL = auto()
     IDIV = auto()
     INC = auto()
@@ -132,7 +133,7 @@ class X86_Size(Enum):
             case 8:
                 return cls.QWORD
             case _:
-                raise ValueError("Invalid size")
+                raise ValueError(f"Invalid size: {size}")
 
 
 @dataclass

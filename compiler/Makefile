@@ -6,7 +6,7 @@
 
 
 
-bin/compiler: src/darray.ns src/opened_file.ns src/main.ns src/tok.ns src/token.ns src/ident_info.ns src/file_lexer.ns src/lexer.ns src/diags.ns
+bin/compiler: src/darray.ns src/opened_file.ns src/main.ns src/tok.ns src/token.ns src/ident_info.ns src/file_lexer.ns src/lexer.ns src/diags.ns src/ir_data.ns src/ir_optimize.ns src/ir.ns src/ir_interpreter.ns
 	../nslang -o $@ $^
 
 clean:

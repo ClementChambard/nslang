@@ -1,0 +1,800 @@
+#include io.nsh
+#include str.nsh
+
+#include mem.nsh
+
+fn brk(addr: void*) -> i64 {
+    return __builtin_syscall(12, addr);
+}
+
+let __curbrk: void *;
+
+fn sbrk(size: i64) -> void* {
+    let update_brk: bool;
+    let oldbrk: void*;
+
+    update_brk = __curbrk == nullptr;
+
+    if (update_brk) {
+        __curbrk = brk(nullptr);
+        if (__curbrk < 0)
+            return -1;
+    }
+
+    if (size == 0)
+        return __curbrk;
+
+    oldbrk = __curbrk;
+
+    if (size > 0) {
+        if (oldbrk + size < oldbrk) {
+            // overflow
+            return -1;
+        }
+    }
+    if (size < 0) {
+        if (oldbrk < -size) {
+            return -1;
+        }
+    }
+
+    __curbrk = brk(oldbrk + size);
+    if (__curbrk < 0)
+        return -1;
+
+    return oldbrk;
+}
+
+fn memcpy(dst: void*, src: void*, size: i64) -> void* {
+    let i: i64;
+    let dst_as_i8: i8*;
+    let src_as_i8: i8*;
+    dst_as_i8 = dst;
+    src_as_i8 = src;
+    i = 0;
+    while (i < size) {
+        dst_as_i8[i] = src_as_i8[i];
+        i += 1;
+    }
+    return dst;
+}
+
+fn memset(dst: void*, byte: i8, size: i64) -> void* {
+    let i: i64;
+    let dst_as_i8: i8*;
+    dst_as_i8 = dst;
+    i = 0;
+    while (i < size) {
+        dst_as_i8[i] = byte;
+        i += 1;
+    }
+    return dst;
+}
+
+fn memcmp(mem1: void*, mem2: void*, size: i64) -> i64 {
+    let i: i64;
+    let mem1_as_i8: i8*;
+    let mem2_as_i8: i8*;
+    mem1_as_i8 = mem1;
+    mem2_as_i8 = mem2;
+    i = 0;
+    while (i < size) {
+        if (mem1_as_i8[i] != mem2_as_i8[i]) return mem1_as_i8[i] - mem2_as_i8[i];
+        i += 1;
+    }
+    return 0;
+}
+
+struct __malloc_block_meta {
+    size: i64;
+    next: __malloc_block_meta*;
+    is_free: i64;
+    magic: i64;
+};
+
+let __malloc_global_base: void *;
+
+fn __malloc_find_free_block(last: __malloc_block_meta**, size: i64) -> __malloc_block_meta* {
+    let current: __malloc_block_meta*;
+    current = __malloc_global_base;
+    while (true) {
+        if (current == nullptr) {
+            break;
+        }
+        if (current->is_free != 0) {
+            if (current->size >= size) break;
+        }
+        *last = current;
+        current = current->next;
+    }
+    return current;
+}
+
+fn __malloc_request_space(last: __malloc_block_meta*, size: i64) -> __malloc_block_meta* {
+    let block: __malloc_block_meta*;
+    block = sbrk(0);
+    let request: void*;
+    request = sbrk(size + sizeof(__malloc_block_meta));
+    if (request == -1) {
+        return nullptr;
+    }
+    if (request != block) {
+        return nullptr;
+    }
+    if (last != nullptr) {
+        last->next = block;
+    }
+    block->size = size;
+    block->next = nullptr;
+    block->is_free = 0;
+    block->magic = 0x12345678;
+    return block;
+}
+
+fn __malloc_block_to_data(block: __malloc_block_meta*) -> void* {
+    let block_voidptr: void*;
+    let block_bytes: i8*;
+    block_voidptr = block;
+    block_bytes = block_voidptr;
+    return &block_bytes[sizeof(__malloc_block_meta)];
+}
+
+fn __malloc_data_to_block(data: void*) -> __malloc_block_meta* {
+    let block_voidptr: void*;
+    let block_bytes: i8*;
+    block_voidptr = data;
+    block_bytes = block_voidptr;
+    return &block_bytes[-sizeof(__malloc_block_meta)];
+}
+
+fn malloc(size: i64) -> void* {
+    let block: __malloc_block_meta*;
+    if (size <= 0) {
+        return nullptr;
+    }
+
+    if (__malloc_global_base == nullptr) {
+        block = __malloc_request_space(nullptr, size);
+        if (block == nullptr) {
+            return nullptr;
+        }
+        __malloc_global_base = block;
+    } else {
+        let last: __malloc_block_meta*;
+        last = __malloc_global_base;
+        block = __malloc_find_free_block(&last, size);
+        if (block == nullptr) {
+            block = __malloc_request_space(last, size);
+            if (block == nullptr) {
+                return nullptr;
+            }
+        } else {
+            block->is_free = 0;
+            block->magic = 0x77777777;
+        }
+    }
+
+    return __malloc_block_to_data(block);
+}
+
+fn free(block: void*) {
+    if (block == nullptr) return;
+
+    let meta: __malloc_block_meta*;
+    meta = __malloc_data_to_block(block);
+    // assert(meta->is_free == 0)
+    // assert(meta->magic == 0x12345678 || meta->magic == 0x77777777)
+    meta->is_free = 1;
+    meta->magic = 0x55555555;
+}
+
+fn realloc(ptr: void*, size: i64) -> void* {
+    if (ptr == nullptr) {
+        return malloc(size);
+    }
+
+    let block_ptr: __malloc_block_meta*;
+    block_ptr = __malloc_data_to_block(ptr);
+    if (block_ptr->size >= size) {
+        return ptr;
+    }
+
+    let new_ptr: void*;
+    new_ptr = malloc(size);
+    if (new_ptr == nullptr) {
+        return nullptr;
+    }
+    memcpy(new_ptr, ptr, block_ptr->size);
+    free(ptr);
+    return new_ptr;
+}
+
+fn calloc(nelem: i64, elsize: i64) -> void* {
+    let size: i64;
+    size = nelem * elsize;
+    let ptr: void*;
+    ptr = malloc(size);
+    memset(ptr, 0, size);
+    return ptr;
+}
+
+fn read(fd: i64, buf: void*, count: i64) -> i64 {
+    return __builtin_syscall(0, fd, buf, count);
+}
+
+fn write(fd: i64, buf: void*, count: i64) -> i64 {
+    return __builtin_syscall(1, fd, buf, count);
+}
+
+fn print_str(str: i8*) {
+    let size: i64;
+
+    size = 0;
+    while (str[size] != 0) {
+        size += 1;
+    }
+    write(STDOUT, str, size);
+}
+
+fn print_num(num: i64, signed: bool) {
+    let buf: i8[22];
+    let p: i8*;
+    let digit: i64;
+    let neg: bool;
+
+    if (signed) {
+        neg = num < 0;
+        if (neg) num = -num; // technically, this could overflow
+    } else {
+        neg = false;
+    }
+
+    p = &buf[21];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num % 10; // TODO: this assumes signed integers => some chars are invalid
+        num /= 10;
+        *p = digit + '0';
+    } while (num != 0);
+
+    if (neg) {
+       p -= 1;
+       *p = '-';
+    }
+
+    print_str(p);
+}
+
+fn print_hex(num: i64, upper: bool) {
+    let buf: i8[19];
+    let p: i8*;
+    let digit: i64;
+    p = &buf[18];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num & 0xF;
+        num >>= 4;
+        if (digit <= 9) {
+            *p = digit + '0';
+        } else if (upper) {
+            *p = digit + (-10 + 'A');
+        } else {
+            *p = digit + (-10 + 'a');
+        }
+    } while (num != 0);
+    print_str(p);
+}
+
+// TODO: better formatting
+// TODO: print_file
+fn print(fmt: i8*, ...) {
+    let i: i64;
+    let last_i: i64;
+    let pc_buf: i8;
+    pc_buf = '%';
+
+    i = 0;
+    last_i = 0;
+
+    while (fmt[i] != 0) {
+        if (fmt[i] != '%') {
+            i += 1;
+            continue;
+        }
+        if (i != last_i) {
+            write(STDOUT, &fmt[last_i], i - last_i);
+            last_i = i;
+        }
+        i += 1;
+        if (fmt[i] == '%') {
+            write(STDOUT, &pc_buf, 1);
+        } else if (fmt[i] == 'i') {
+            print_num(vaarg<i64>, true);
+        } else if (fmt[i] == 'u') {
+            print_num(vaarg<i64>, false);
+        } else if (fmt[i] == 'x') {
+            print_hex(vaarg<i64>, false);
+        } else if (fmt[i] == 'X') {
+            print_hex(vaarg<i64>, true);
+        } else if (fmt[i] == 's') {
+            print_str(vaarg<i8*>);
+        } else if (fmt[i] == 'S') {
+            let s: Str*;
+            s = vaarg<Str*>;
+            write(STDOUT, s->data, s->len);
+        } else if (fmt[i] == 'c') {
+            let c: i8;
+            c = vaarg<i8>;
+            write(STDOUT, &c, 1);
+        }
+
+        i += 1;
+        last_i = i;
+    }
+    if (i != last_i) {
+        write(STDOUT, &fmt[last_i], i - last_i);
+    }
+}
+
+#include str.nsh
+#include mem.nsh
+
+fn isspace(c: char) -> bool {
+    if (c == ' ') return true;
+    if (c >= 0x9) if (c <= 0xd) return true;
+    if (c >= 0x1c) if (c <= 0x1f) return true;
+    return false;
+}
+
+fn strcmp(str_1: CStr, str_2: CStr) -> i64 {
+    if (str_1 == str_2) return 0;
+    while (*str_1 != 0) {
+        if (*str_1 != *str_2) return *str_1 - *str_2;
+        str_1 = &str_1[1];
+        str_2 = &str_2[1];
+    }
+    return *str_1 - *str_2;
+}
+
+fn strlen(str: CStr) -> i64 {
+    let len: i64;
+    len = 0;
+    while (str[len] != 0) len += 1;
+    return len;
+}
+
+fn strdup(str: CStr) -> CStr {
+    let len: i64;
+    let out: CStr;
+    len = strlen(str);
+    out = malloc(len + 1);
+    memcpy(out, str, len);
+    out[len] = 0;
+    return out;
+}
+
+fn strcat(str_1: CStr, str_2: CStr) -> CStr {
+    let len_1: i64;
+    let len_2: i64;
+    let out: CStr;
+    len_1 = strlen(str_1);
+    len_2 = strlen(str_2);
+    out = malloc(len_1 + len_2 + 1);
+    memcpy(out, str_1, len_1);
+    memcpy(&out[len_1], str_2, len_2);
+    out[len_1 + len_2] = 0;
+    return out;
+}
+
+
+
+
+fn Str::strip(self: Str*) {
+    while (isspace(self->data[0])) {
+        self->data = &self->data[1];
+        self->len = self->len - 1;
+    }
+    while (isspace(self->data[self->len - 1])) {
+        self->len = self->len - 1;
+    }
+}
+
+fn Str::from_cstr(self: Str*, cstr: CStr) {
+    self->len = strlen(cstr);
+    self->data = cstr;
+}
+
+fn String::__alloc_more(self: String*) {
+    if (self->capacity == 0) {
+        self->capacity = 8;
+    } else {
+        self->capacity = self->capacity * 2;
+    }
+    self->data = realloc(self->data, self->capacity + 1);
+}
+
+fn String::init(self: String*) {
+    self->len = 0;
+    self->data = 0;
+    self->capacity = 0;
+}
+
+fn String::repeat(self: String*, c: char, n: i64) {
+    self->capacity = n;
+    self->len = n;
+    self->data = malloc(n + 1);
+    memset(self->data, c, n);
+    self->data[n] = 0;
+}
+
+fn String::destroy(self: String*) {
+    if (self->data != nullptr) free(self->data);
+    self->len = 0;
+    self->data = nullptr;
+    self->capacity = 0;
+}
+
+fn String::push(self: String*, c: char) {
+    if (self->len + 1 > self->capacity) {
+        String::__alloc_more(self);
+    }
+    self->data[self->len] = c;
+    self->len = self->len + 1;
+    self->data[self->len] = 0;
+}
+
+fn String::push_repeat(self: String*, c: char, n: i64) {
+    if (n == 0) return;
+    while (self->len + n > self->capacity) {
+        self->__alloc_more();
+    }
+    memset(&self->data[self->len], c, n);
+    self->len = self->len + n;
+    self->data[self->len] = 0;
+}
+
+fn String::push_str(self: String*, s: Str*) {
+    if (s->len == 0) return;
+    while (self->len + s->len > self->capacity) {
+        self->__alloc_more();
+    }
+    memcpy(&self->data[self->len], s->data, s->len);
+    self->len = self->len + s->len;
+    self->data[self->len] = 0;
+}
+
+fn String::push_cstr(self: String*, s: CStr) {
+    let str: Str;
+    str.from_cstr(s);
+    self->push_str(&str);
+}
+
+fn fmt_num(self: String*, num: i64, signed: bool) {
+    let buf: char[22];
+    let p: char*;
+    let digit: i64;
+    let neg: bool;
+
+    if (signed) {
+        neg = num < 0;
+        if (neg) num = -num; // technically, this could overflow
+    } else {
+        neg = false;
+    }
+
+    p = &buf[21];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num % 10; // TODO: this assumes signed integers => some chars are invalid
+        num /= 10;
+        *p = digit + '0';
+    } while (num != 0);
+
+    if (neg) {
+       p -= 1;
+       *p = '-';
+    }
+    self->push_cstr(p);
+}
+
+fn fmt_hex(self: String*, num: i64, upper: bool) {
+    let buf: char[19];
+    let p: char*;
+    let digit: i64;
+    p = &buf[18];
+    *p = 0;
+    do {
+        p -= 1;
+        digit = num & 0xF;
+        num >>= 4;
+        if (digit <= 9) {
+            *p = digit + '0';
+        } else if (upper) {
+            *p = digit + (-10 + 'A');
+        } else {
+            *p = digit + (-10 + 'a');
+        }
+    } while (num != 0);
+    self->push_cstr(p);
+}
+
+fn String::format(self: String*, fmt: CStr, ...) { // TODO: forward varargs
+    let i: i64;
+    let last_i: i64;
+    let str_to_add: Str;
+    self->len = 0;
+    self->data = nullptr;
+    self->capacity = 0;
+
+    i = 0;
+    last_i = 0;
+
+    while (fmt[i] != 0) {
+        if (fmt[i] != '%') {
+            i += 1;
+            continue;
+        }
+        if (i != last_i) {
+            str_to_add.len = i - last_i;
+            str_to_add.data = &fmt[last_i];
+            self->push_str(&str_to_add);
+            last_i = i;
+        }
+        i += 1;
+        if (fmt[i] == '%') {
+            self->push('%');
+        } else if (fmt[i] == 'i') {
+            fmt_num(self, vaarg<i64>, true);
+        } else if (fmt[i] == 'u') {
+            fmt_num(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'x') {
+            fmt_hex(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'X') {
+            fmt_hex(self, vaarg<i64>, true);
+        } else if (fmt[i] == 's') {
+            self->push_cstr(vaarg<CStr>);
+        } else if (fmt[i] == 'S') {
+            self->push_str(vaarg<Str*>);
+        } else if (fmt[i] == 'c') {
+            self->push(vaarg<char>);
+        }
+
+        i += 1;
+        last_i = i;
+    }
+    if (i != last_i) {
+        str_to_add.len = i - last_i;
+        str_to_add.data = &fmt[last_i];
+        self->push_str(&str_to_add);
+    }
+}
+
+fn String::push_format(self: String*, fmt: CStr, ...) {
+    let i: i64;
+    let last_i: i64;
+    let str_to_add: Str;
+
+    i = 0;
+    last_i = 0;
+
+    while (fmt[i] != 0) {
+        if (fmt[i] != '%') {
+            i += 1;
+            continue;
+        }
+        if (i != last_i) {
+            str_to_add.len = i - last_i;
+            str_to_add.data = &fmt[last_i];
+            self->push_str(&str_to_add);
+            last_i = i;
+        }
+        i += 1;
+        if (fmt[i] == '%') {
+            self->push('%');
+        } else if (fmt[i] == 'i') {
+            fmt_num(self, vaarg<i64>, true);
+        } else if (fmt[i] == 'u') {
+            fmt_num(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'x') {
+            fmt_hex(self, vaarg<i64>, false);
+        } else if (fmt[i] == 'X') {
+            fmt_hex(self, vaarg<i64>, true);
+        } else if (fmt[i] == 's') {
+            self->push_cstr(vaarg<CStr>);
+        } else if (fmt[i] == 'S') {
+            self->push_str(vaarg<Str*>);
+        } else if (fmt[i] == 'c') {
+            self->push(vaarg<char>);
+        }
+
+        i += 1;
+        last_i = i;
+    }
+    if (i != last_i) {
+        str_to_add.len = i - last_i;
+        str_to_add.data = &fmt[last_i];
+        self->push_str(&str_to_add);
+    }
+}
+
+fn String::insert(self: String*, idx: i64, c: char) {
+    if (idx >= self->len) {
+        self->push(c);
+        return;
+    }
+    if (idx < 0) idx = 0;
+    if (self->len + 1 > self->capacity) {
+        self->__alloc_more();
+    }
+    let i: i64;
+    i = self->len;
+    while (i >= idx) {
+        self->data[i + 1] = self->data[i];
+        i -= 1;
+    }
+    self->data[idx] = c;
+    self->len = self->len + 1;
+}
+
+fn String::insert_str(self: String*, idx: i64, str: Str*) {
+    if (idx >= self->len) {
+        self->push_str(str);
+        return;
+    }
+    if (idx < 0) idx = 0;
+    while (self->len + str->len > self->capacity) {
+        self->__alloc_more();
+    }
+    let i: i64;
+    i = self->len;
+    while (i >= idx) {
+        self->data[i + str->len] = self->data[i];
+        i -= 1;
+    }
+    memcpy(&self->data[idx], str->data, str->len);
+    self->len = self->len + str->len;
+}
+
+fn String::insert_cstr(self: String*, idx: i64, cstr: CStr) {
+    let s: Str;
+    s.from_cstr(cstr);
+    self->insert_str(idx, &s);
+}
+
+fn String::split_off(self: String*, idx: i64, out: String*) {
+    if (idx >= self->len) {
+        String::init(out);
+        return;
+    }
+    if (idx <= 0) {
+        out->inner.len = self->len;
+        out->inner.data = self->data;
+        out->capacity = self->capacity;
+        String::init(self);
+        return;
+    }
+    let remainder: Str;
+    remainder.len = self->len - idx;
+    remainder.data = &self->data[idx];
+    out->from_str(&remainder);
+    self->truncate(idx);
+}
+
+fn String::clear(self: String*) { self->len = 0; }
+
+fn String::clone_from(self: String*, clone_from: String*) {
+    self->len = clone_from->inner.len;
+    self->capacity = clone_from->capacity;
+    self->data = malloc(self->capacity + 1);
+    memcpy(self->data, clone_from->inner.data, self->len);
+    self->data[self->len] = 0;
+}
+
+fn String::reserve(self: String*, count: i64) {
+    if (self->capacity > count) return;
+    self->capacity = count;
+    self->data = realloc(self->data, self->capacity);
+}
+
+fn String::shrink_to_fit(self: String*) {
+    if (self->capacity == self->len) return;
+    let new_buf: char*;
+    new_buf = malloc(self->len + 1);
+    memcpy(new_buf, self->data, self->len + 1);
+    free(self->data);
+    self->capacity = self->len;
+    self->data = new_buf;
+}
+
+fn String::truncate(self: String*, count: i64) {
+    if (self->len > count) self->len = count;
+}
+
+fn String::pop(self: String*) -> char {
+    let out: char;
+    out = self->data[self->len - 1];
+    self->len = self->len - 1;
+    return out;
+}
+
+fn String::remove(self: String*, idx: i64) -> char {
+    if (idx >= self->len) {
+        return self->pop();
+    }
+    if (idx < 0) idx = 0;
+    let out: char;
+    out = self->data[idx];
+    let i: i64;
+    i = idx;
+    while (i < self->len) {
+        self->data[i] = self->data[i + 1];
+        i += 1;
+    }
+    self->len = self->len - 1;
+    return out;
+}
+
+fn String::from_str(self: String*, str: Str*) {
+    self->capacity = str->len;
+    self->len = str->len;
+    self->data = malloc(str->len + 1);
+    memcpy(self->data, str->data, str->len);
+    self->data[self->len] = 0;
+}
+
+fn String::from_cstr(self: String*, cstr: CStr) {
+    let s: Str;
+    s.from_cstr(cstr);
+    self->from_str(&s);
+}
+
+fn String::from_raw_parts(self: String*, data: char*, len: i64, capacity: i64) {
+    self->data = data;
+    self->len = len;
+    self->capacity = capacity;
+}
+
+#include file.nsh
+
+fn open(filename: i8*, flags: i64, mode: i64) -> i64 {
+    return __builtin_syscall(2, filename, flags, mode);
+}
+
+fn close(fd: i64) -> i64 {
+    return __builtin_syscall(3, fd);
+}
+
+fn lseek(fd: i64, offset: i64, whence: SeekWhence) -> i64 {
+    return __builtin_syscall(8, fd, offset, whence);
+}
+
+fn filedump(filename: CStr) {
+  let fid: i64;
+  fid = open(filename, O_RDONLY, 0);
+  let buf: i8[0x100];
+  let read_len: i64;
+  while (true) {
+    read_len = read(fid, buf, 0x100);
+    write(STDOUT, buf, read_len);
+    if (read_len < 0x100) break;
+  }
+}
+
+fn main() {
+  let name: i8[0x20];
+  let name_len: i64;
+  let s: String;
+  name_len = read(STDIN, name, 0x1f);
+  name[name_len] = 0; 
+  malloc(100);
+  s.from_cstr("test string");
+  s.push_format(" and %i...", 123);
+  malloc(20);
+  print("Hello, %s\n", name);
+  print("%S\n", &s);
+  s.destroy();
+  filedump("main.ns");
+}
