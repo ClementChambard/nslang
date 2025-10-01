@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-ANY_FILE_HAD_ERROR = False
-
 import sys
 from dataclasses import dataclass
 from typing import List
 from utils.diagnostic import fatal_error
+
+ANY_FILE_HAD_ERROR = False
 
 
 @dataclass
@@ -28,6 +28,7 @@ class CompileSingleFileOptions:
     debug: bool
     to_remove: List[str]
     clang_args: List[str]
+    tst: bool
 
     def __init__(self):
         self.print_ast = False
@@ -52,8 +53,12 @@ class CompileSingleFileOptions:
         self.to_remove = []
         self.clang_args = []
         self.comment_ir_in_asm = False
+        self.tst = False
 
     def check_args(self):
+        if self.tst:
+            return
+
         if len(self.input_files) == 0:
             fatal_error("no input file")
 
@@ -128,6 +133,8 @@ class CompileSingleFileOptions:
                 )
             elif args[i].startswith("-l"):
                 self.link_libraries.append(args[i])
+            elif args[i] == "-tst":
+                self.tst = True
             else:
                 self.input_files.append(args[i])
             i += 1
@@ -137,6 +144,11 @@ def exec_compiler(args):
     options = CompileSingleFileOptions()
     options.read_from_args(args)
     options.check_args()
+
+    if options.tst:
+        run_test()
+        return
+
     if options.compile_only:
         for i, o in zip(options.input_files, options.output_files):
             compile(i, o, options)
@@ -241,6 +253,12 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
         print(assembly)
 
     create_object_from_asm(assembly, output_file, options.nasm_args)
+
+
+def run_test():
+    from ir2.example import example
+
+    example()
 
 
 def main():

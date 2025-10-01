@@ -1,0 +1,19 @@
+
+lib fn add(arg0: i8, arg1: i64) -> i64 {
+  let return_value: i32;
+  return_value = arg0 + arg1;
+  if (return_value < 0) return 0;
+  while (return_value > 0) {
+    return_value -= 1;
+    if (return_value == 2) break;
+  }
+  return return_value;
+}
+
+lib fn tst(arg: i64) -> i64 {
+  return +-arg * 10;
+}
+
+lib fn fn_ret_void(a: bool) { 
+  if (a) return;
+}
