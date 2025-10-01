@@ -1,0 +1,320 @@
+#include sema_literal.nsh
+#include ast_nodes_type.nsh
+#include str.nsh
+#include stdlib.nsh
+#include mem.nsh
+#include io.nsh
+#include diags.nsh
+
+fn get_digit(c: char) -> i64 {
+  if (c >= '0') if (c <= '9') {
+    return cast<i64>(c - '0');
+  }
+  if (c >= 'a') if (c <= 'f') {
+    return cast<i64>(c - 'a') + 10;
+  }
+  if (c >= 'A') if (c <= 'F') {
+    return cast<i64>(c - 'A') + 10;
+  }
+  return -1;
+}
+
+fn NumLiteralParser::parse_int(self: NumLiteralParser*, s: i8*, base: i64) -> i8* {
+    let n: i64;
+    n = 0;
+    while (*s != 0) {
+      let digit: i64;
+      digit = get_digit(*s);
+      if ((digit == -1) | (digit >= base)) break;
+      n *= base;
+      n += digit;
+      s += 1;
+    }
+    self->res = n;
+    return s;
+}
+
+fn NumLiteralParser::parse_num(self: NumLiteralParser*, s: i8*) -> i8* {
+  if (s[0] == '0') {
+    if (s[1] == 'x') return self->parse_int(&s[2], 16);
+    if (s[1] == 'X') return self->parse_int(&s[2], 16);
+    if (s[1] == 'b') return self->parse_int(&s[2], 2);
+    if (s[1] == 'B') return self->parse_int(&s[2], 2);
+    // TODO: float that start with 0
+    return self->parse_int(s, 8);
+  } else {
+    // TODO: float
+    return self->parse_int(s, 10);
+  }
+}
+
+fn NumLiteralParser::parse_suffix(self: NumLiteralParser*, s: i8*) {
+    if (strcmp(s, "i8") == 0) self->ty = Type::get_builtin(BTK_I8);
+    else if (strcmp(s, "i16") == 0) self->ty = Type::get_builtin(BTK_I16);
+    else if (strcmp(s, "i32") == 0) self->ty = Type::get_builtin(BTK_I32);
+    else if (strcmp(s, "i64") == 0) self->ty = Type::get_builtin(BTK_I64);
+    else if (strcmp(s, "u8") == 0) self->ty = Type::get_builtin(BTK_U8);
+    else if (strcmp(s, "u16") == 0) self->ty = Type::get_builtin(BTK_U16);
+    else if (strcmp(s, "u32") == 0) self->ty = Type::get_builtin(BTK_U32);
+    else if (strcmp(s, "u64") == 0) self->ty = Type::get_builtin(BTK_U64);
+    else {
+      print("invalid number suffix '%s'", s);
+      self->had_error = true;
+    }
+}
+
+fn NumLiteralParser::parse(self: NumLiteralParser*, tok: Token*) {
+    // assert tok.ty == Tok.NUM
+    let val_end: CStr;
+    let value_str: CStr;
+    value_str = malloc(tok->len + 1);
+    value_str[tok->len] = 0;
+    memcpy(value_str, tok->value, tok->len);
+    val_end = self->parse_num(value_str);
+    if (*val_end != 0) self->parse_suffix(val_end);
+    free(value_str);
+}
+
+fn NumLiteralParser::init(self: NumLiteralParser*, tok: Token*) {
+    self->res = 0;
+    self->ty = Type::get_builtin(BTK_I64);
+    self->had_error = false;
+    self->parse(tok);
+}
+
+
+fn process_char_escape(buf: i8*, loc: Loc, out_char: i64*, had_error: bool*) -> i8* {
+  let delimited: bool;
+  let end_delimiter_found: bool;
+  let result_char: char;
+  let cur_loc: i64;
+  delimited = false;
+  end_delimiter_found = false;
+  result_char = buf[0];
+  cur_loc = 1;
+
+  if ((result_char == '(') | (result_char == '{') | (result_char == '[') | (result_char == '%') | 
+      (result_char == '\\') | (result_char == '\'') | (result_char == '\"') | (result_char == '\?')) {
+    *out_char = result_char;
+  }
+  else if (result_char == 'a') *out_char = 7;
+  else if (result_char == 'b') *out_char = 8;
+  else if (result_char == 'e') *out_char = 27;
+  else if (result_char == 'E') *out_char = 27;
+  else if (result_char == 'f') *out_char = 12;
+  else if (result_char == 'n') *out_char = 10;
+  else if (result_char == 'r') *out_char = 13;
+  else if (result_char == 't') *out_char = 9;
+  else if (result_char == 'v') *out_char = 11;
+  else if (result_char == 'x') {
+  //        result_char = 0
+  //        if buf[cur_loc:] != "" and buf[cur_loc] == "{":
+  //            delimited = True
+  //            cur_loc += 1
+  //            if buf[cur_loc] == "}":
+  //                *had_error = True
+  //                diag(loc, "diag::err_delimited_escape_empty", Diag.ERROR)
+  //        elif buf[cur_loc:] == "" or buf[cur_loc] not in HEX_DIGITS:
+  //            *had_error = True
+  //            diag(loc, "diag::err_hex_escape_no_digits x", Diag.ERROR)
+  //            return buf[1:]
+  //        overflow = False
+  //        while buf[cur_loc:] != "":
+  //            if delimited and buf[cur_loc] == "}":
+  //                cur_loc += 1
+  //                end_delimiter_found = True
+  //                break
+  //            if buf[cur_loc] not in HEX_DIGITS:
+  //                if not delimited:
+  //                    break
+  //                *had_error = True
+  //                diag(
+  //                    loc,
+  //                    "diag::err_delimited_escape_invalid << StringRef(cur_loc, 1)",
+  //                    Diag.ERROR,
+  //                )
+  //                continue
+  //            if result_char & 0xF0000000:
+  //                overflow = True
+  //            result_char <<= 4
+  //            result_char |= hex_digit_value(buf[cur_loc])
+  //            cur_loc += 1
+  //        # Check overflow depending on char width
+  //        if result_char >> 8 != 0:  # use char_width variable
+  //            overflow = True
+  //            result_char &= ~0 >> (32 - 8)  # use char_width variable
+  //        if not *had_error and overflow:
+  //            *had_error = True
+  //            diag(loc, "diag::err_escape_too_large 0", Diag.ERROR)
+  } else if ((result_char >= '0') & (result_char <= '7')) {
+  //        cur_loc -= 1
+  //        result_char = 0
+  //        num_digits = 0
+  //        while (
+  //            buf[cur_loc:] != ""
+  //            and num_digits < 3
+  //            and buf[cur_loc] in OCTAL_DIGITS
+  //        ):
+  //            result_char <<= 3
+  //            result_char |= ord(buf[cur_loc]) - ord("0")
+  //            cur_loc += 1
+  //            num_digits += 1
+  //        # Check overflow depending on char width
+  //        if result_char >> 8 != 0:  # use char_width variable
+  //            *had_error = True
+  //            result_char &= ~0 >> (32 - 8)  # use char_width variable
+  //            diag(loc, "diag::err_escape_too_large 1", Diag.ERROR)
+  } else if (result_char == 'o') {
+  //        overflow = False
+  //        if buf[cur_loc:] == "" or buf[cur_loc] != "{":
+  //            *had_error = True
+  //            diag(loc, "diag::err_hex_escape_no_digits x", Diag.ERROR)
+  //            return buf[1:]
+  //        result_char = 0
+  //        delimited = True
+  //        cur_loc += 1
+  //        if buf[cur_loc] == "}":
+  //            *had_error = True
+  //            diag(loc, "diag::err_delimited_escape_empty", Diag.ERROR)
+  //        while buf[cur_loc:] != "":
+  //            if buf[cur_loc] == "}":
+  //                end_delimiter_found = True
+  //                cur_loc += 1
+  //                break
+  //            if buf[cur_loc] not in OCTAL_DIGITS:
+  //                *had_error = True
+  //                diag(
+  //                    loc,
+  //                    "diag::err_delimited_escape_invalid << StringRef(cur_loc, 1)",
+  //                    Diag.ERROR,
+  //                )
+  //                cur_loc += 1
+  //                continue
+  //            if result_char & 0xE0000000:
+  //                overflow = True
+  //            result_char <<= 3
+  //            result_char |= ord(buf[cur_loc]) - ord("0")
+  //            cur_loc += 1
+  //        # Check overflow depending on char width
+  //        if not *had_error and overflow or (result_char >> 8) != 0:
+  //            *had_error = True
+  //            result_char &= ~0 >> (32 - 8)  # use char_width variable
+  //            diag(loc, "diag::err_escape_too_large 1", Diag.ERROR)
+  } else {
+    //if (result_char.isprintable()) diag(loc "diag::ext_unknown_escape << std::string(1, result_char)" DIAG_ERROR);
+    //else 
+      diag(loc, "diag::ext_unknown_escape << \"x\" + utohexstr(result_char)", DIAG_ERROR);
+    *out_char = result_char;
+  }
+
+  if (delimited) if (!end_delimiter_found) diag(loc, "err_expected '}'", DIAG_ERROR);
+  // if (EvalMethod == StringLiteralEvalMethod::Unevaluated && !IsEscapeValidInUnevaluatedStringLiteral(Escape)) { Diag(Diags, Features, Loc, ThisTokBegin, EscapeBegin, ThisTokBuf, diag::err_unevaluated_string_invalid_escape_sequence) << StringRef(EscapeBegin, ThisTokBuf - EscapeBegin); HadError = true; }
+
+  return &buf[cur_loc];
+}
+
+fn CharLiteralParser::parse(self: CharLiteralParser*, tok: Token*) {
+  // assert tok.ty == Tok.CHR
+  // assert val.startswith("'") and val.endswith("'")
+  // assert len(val) > 0
+  let value_str: CStr;
+  let value_str_len: i64;
+  value_str_len = tok->len - 2;
+  value_str = malloc(value_str_len + 1);
+  memcpy(value_str, &tok->value[1], value_str_len);
+  value_str[value_str_len] = 0;
+  let buf: i8*;
+  buf = value_str;
+  if (*buf != '\\') {
+    if (buf[1] != 0) {
+      diag(tok->loc, "Char constant too long", DIAG_ERROR);
+      self->had_error = true;
+    }
+    self->res = *buf;
+  } else {
+    buf = &buf[1];
+    if (buf[0] == 'u') exit(1); // todo: ucn escape
+    if (buf[0] == 'U') exit(1); // todo: ucn escape
+    if (buf[0] == 'N') exit(1); // todo: ucn escape
+    buf = process_char_escape(buf, tok->loc, &self->res, &self->had_error);
+    if (*buf != 0) {
+      diag(tok->loc, "Char constant too long", DIAG_ERROR);
+      self->had_error = true;
+    }
+  }
+  free(value_str);
+}
+
+fn CharLiteralParser::init(self: CharLiteralParser*, tok: Token*) {
+  self->res = 0;
+  self->ty = Type::get_builtin(BTK_I8);
+  self->had_error = false;
+  self->parse(tok);
+}
+
+
+fn StringLiteralParser::get_string(self: StringLiteralParser*) -> i8* {
+  return self->result_buf;
+}
+
+fn StringLiteralParser::get_string_length(self: StringLiteralParser*) -> i64 {
+  return self->result_off;
+}
+
+fn StringLiteralParser::get_num_string_chars(self: StringLiteralParser*) -> i64 {
+  return self->get_string_length();
+}
+
+fn slp_diagnose_lexing_error(slp: StringLiteralParser*, loc: Loc) {
+  slp->had_error = true;
+  diag(loc, "failure when lexing a string literal", DIAG_ERROR);
+}
+
+fn StringLiteralParser::parse(self: StringLiteralParser*, string_toks: Token**, string_toks_len: i64) {
+  let output_string: String;
+  output_string.init();
+
+  if ((string_toks_len == 0) | (string_toks[0]->len < 2))
+    return slp_diagnose_lexing_error(self, 0);
+
+  // TODO: get data about strings
+
+  let i: i64;
+  i = 0;
+  while (i < string_toks_len) {
+    let val: i8*;
+    let end: i8*;
+    val = &string_toks[i]->value[1];
+    end = val + (string_toks[i]->len - 2);
+    while (val < end) {
+      if (*val != '\\') {
+        output_string.push(*val);
+      } else {
+        val += 1;
+        if (*val == "u") exit(1);
+        if (*val == "U") exit(1);
+        if (*val == "N") exit(1);
+        let c: i64;
+        val = process_char_escape(val, string_toks[i]->loc, &c, &self->had_error);
+        output_string.push(c);
+      }
+      val += 1;
+    }
+  }
+
+  self->result_buf = output_string.data;
+  self->result_off = output_string.len;
+}
+
+fn StringLiteralParser::init(self: StringLiteralParser*, string_toks: Token**, string_toks_len: i64, eval_method: bool) {
+  self->max_token_length = 0;
+  self->size_bound = 0;
+  self->char_byte_width = 0;
+  self->kind = TOK_UNKNOWN;
+  self->result_off = 0;
+  self->result_buf = nullptr;
+  self->eval_method = eval_method;
+  self->had_error = false;
+;
+  self->parse(string_toks, string_toks_len);
+}

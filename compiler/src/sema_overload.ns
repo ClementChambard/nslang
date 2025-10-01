@@ -1,0 +1,33 @@
+#include sema_overload.nsh
+#include ast_nodes_type.nsh
+#include sema_expr.nsh
+
+fn sema::try_implicit_conversion(e: Expr*, ty: Type*, is_explicit: bool) -> ImplicitConversionSequence* {
+    // ics = ImplicitConversionSequence()
+    // if is_standard_conversion(f, to_type, ics.val, is_explicit):
+    //     ics.conversion_kind = 0
+    //     return ics
+    // # from_type = f.ty
+    // 
+    // # if (ToType->getAs<RecordType>() && FromType->getAs<RecordType>() && (S.Context.hasSameUnqualifiedType(FromType, ToType) || S.IsDerivedFrom(From->getBeginLoc(), FromType, ToType))) {
+    // #   ICS.setStandard(); ICS.Standard.setAsIdentityConversion(); ICS.Standard.setFromType(FromType); ICS.Standard.setAllToTypes(ToType); ICS.Standard.CopyConstructor = nullptr;
+    // #   if (!S.Context.hasSameUnqualifiedType(FromType, ToType)) ICS.Standard.Second = ICK_Derived_To_Base;
+    // #   return ICS;
+    // # }
+    // # return TryUserDefinedConversion(S, From, ToType, SuppressUserConversions, AllowExplicit, InOverloadResolution, CStyle, AllowObjCWritebackConversion, AllowObjCConversionOnExplicit);
+    // ics.conversion_kind = 5  # bad
+    // return ics
+    return nullptr;
+}
+
+fn sema::try_contextually_convert_to_bool(val: Expr*) -> ImplicitConversionSequence* {
+  // if f is of type nullptr_t, ImplicitConversionSequence::getNullptrToBool(From->getType(), S.Context.BoolTy, From->isGLValue());
+  return sema::try_implicit_conversion(val, Type::get_builtin(BTK_BOOL), false);
+}
+
+fn sema::perform_contextually_convert_to_bool(val: Expr*) -> Expr* {
+  let ics: ImplicitConversionSequence*;
+  ics = sema::try_contextually_convert_to_bool(val);
+  // if ics.conversion_kind == 5:  return nullptr;
+  return sema::perform_implicit_conversion(val, Type::get_builtin(BTK_BOOL), ics);
+}

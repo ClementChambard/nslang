@@ -1,0 +1,204 @@
+#include ast_print.nsh
+#include ast_nodes_decl.nsh
+#include ast_nodes_type.nsh
+#include io.nsh
+#include opened_file.nsh
+#include loc.nsh
+#include str.nsh
+
+let RESET_COL: CStr;
+let DECL_COL: CStr;
+let ATTR_COL: CStr;
+let STMT_COL: CStr;
+let CMT_COL: CStr;
+let TYPE_COL: CStr;
+let ADDR_COL: CStr;
+let LOC_COL: CStr;
+let VK_COL: CStr;
+let OK_COL: CStr;
+let ERROR_COL: CStr;
+let NULL_COL: CStr;
+let UNDERSERIALID_COL: CStr;
+let CAST_COL: CStr;
+let VALUE_COL: CStr;
+let DECL_NAME_COL: CStr;
+let INDENT_COL: CStr;
+
+fn init_colors() {
+  RESET_COL = "\x1b[0m";
+  DECL_COL = "\x1b[1;32m";         // Green Bold
+  ATTR_COL = "\x1b[1;34m";         // Blue  Bold
+  STMT_COL = "\x1b[1;35m";         // Magenta Bold
+  CMT_COL = "\x1b[34m";            // Blue
+  TYPE_COL = "\x1b[32m";           // Green
+  ADDR_COL = "\x1b[33m";           // Yellow
+  LOC_COL = "\x1b[33m";            // Yellow
+  VK_COL = "\x1b[36m";             // Cyan
+  OK_COL = "\x1b[36m";             // Cyan
+  ERROR_COL = "\x1b[1;31m";        // Red   Bold
+  NULL_COL = "\x1b[34m";           // Blue
+  UNDERSERIALID_COL = "\x1b[1;32m";// Green Bold
+  CAST_COL = "\x1b[31m";           // Red
+  VALUE_COL = "\x1b[1;36m";        // Cyan  Bold
+  DECL_NAME_COL = "\x1b[1;36m";    // Cyan  Bold
+  INDENT_COL = "\x1b[34m";         // Blue
+}
+
+let LAST_LOC_FILE: i8*;
+let LAST_LOC_LINE: i64;
+
+fn print_location(loc: Loc) {
+  let cloc: CompleteLoc;
+  cloc.filename = nullptr;
+  OpenedFile::get_loc(&cloc, loc);
+  if (cloc.filename == nullptr) {
+    print("%s<invalid sloc>%s", LOC_COL, RESET_COL);
+  } else if (LAST_LOC_FILE != cloc.filename) {
+    print("%s%s:%i:%i%s", LOC_COL, cloc.filename, cloc.line, cloc.col, RESET_COL);
+    LAST_LOC_FILE = cloc.filename;
+  } else if (LAST_LOC_LINE != cloc.line) {
+    print("%sline:%i:%i%s", LOC_COL, cloc.line, cloc.col, RESET_COL);
+    LAST_LOC_LINE = cloc.line;
+  } else {
+    print("%scol:%i%s", LOC_COL, cloc.col, RESET_COL);
+  }
+}
+
+fn print_range(fst: Loc, lst: Loc) {
+  print("<");
+  print_location(fst);
+  if (fst != lst) {
+    print(", ");
+    print_location(lst);
+  }
+  print(">");
+}
+
+fn print_type(t: Type*) {
+  let s: String;
+  s.init();
+  t->str_append(&s);
+  print("%s'%S'%s", TYPE_COL, &s, RESET_COL);
+  s.destroy();
+}
+
+fn print_decl(d: Decl*) {
+  if (d->kind == DECLKIND_NONE) {
+    print("%sNULL%s\n", NULL_COL, RESET_COL);
+    return;
+  }
+  if (d->kind == DECLKIND_NAMED) {
+    print("%sNAMED%s\n", NULL_COL, RESET_COL);
+    return;
+  }
+  if (d->kind == DECLKIND_VALUE) {
+    print("%sVALUE%s\n", NULL_COL, RESET_COL);
+    return;
+  }
+  print(DECL_COL);
+  if (d->kind == DECLKIND_TU) print("TranslationUnitDecl");
+  if (d->kind == DECLKIND_ENUMVARIANT) print("EnumVariantDecl");
+  if (d->kind == DECLKIND_FIELD) print("FieldDecl");
+  if (d->kind == DECLKIND_VAR) print("VarDecl");
+  if (d->kind == DECLKIND_PARAM) print("ParamDecl");
+  if (d->kind == DECLKIND_FN) print("FnDecl");
+  if (d->kind == DECLKIND_TYPE) print("TypeDecl");
+  if (d->kind == DECLKIND_ENUM) print("EnumDecl");
+  if (d->kind == DECLKIND_STRUCT) print("StructDecl");
+  print("%s ", RESET_COL);
+  print_range(d->src_range.start, d->src_range.end);
+  if (d->is_named()) {
+    print(" %s%s%s", DECL_NAME_COL, cast<NamedDecl*>(d)->name, RESET_COL);
+  }
+  if (d->kind == DECLKIND_ENUMVARIANT) { print(" = %i\n", cast<EnumVariantDecl*>(d)->val); return; }
+  if (d->is_value()) {
+    print(" ");
+    print_type(cast<ValueDecl*>(d)->ty);
+  }
+  if (d->is_type()) {
+    print(" ");
+    print_type(cast<TypeDecl*>(d)->ty);
+  }
+  if (d->kind == DECLKIND_STRUCT) if (cast<StructDecl*>(d)->first_field_is_super) print(" has_super");
+  print("\n");
+  return;
+}
+
+fn print_indent(indent: DArray*) {
+  let i: i64;
+  i = 0;
+  print(INDENT_COL);
+  while (i < indent->len) {
+    if (cast<i64>(indent->data[i]) == 0) {
+      print("   ");
+    } else if (cast<i64>(indent->data[i]) == 1) {
+      print("|  ");
+    } else if (cast<i64>(indent->data[i]) == 2) {
+      print("`- ");
+    } else if (cast<i64>(indent->data[i]) == 3) {
+      print("|- ");
+    }
+    i += 1;
+  }
+  print(RESET_COL);
+}
+
+fn print_decl_tree(d: Decl*, indent: DArray*) {
+  print_indent(indent);
+  print_decl(d);
+  if (indent->len > 0) {
+    indent->data[indent->len - 1] = indent->data[indent->len - 1] - 2;
+  }
+  indent->push(cast<void*>(3));
+
+  let i: i64;
+  i = 0;
+  if (d->kind == DECLKIND_TU) {
+    while (i < cast<TranslationUnitDecl*>(d)->decls_count) {
+      if (i == cast<TranslationUnitDecl*>(d)->decls_count - 1) indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
+      print_decl_tree(cast<TranslationUnitDecl*>(d)->decls[i], indent);
+      i += 1;
+    }
+  }
+  if (d->kind == DECLKIND_ENUM) {
+    while (i < cast<EnumDecl*>(d)->variants_count) {
+      if (i == cast<EnumDecl*>(d)->variants_count - 1) indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
+      print_decl_tree(cast<EnumDecl*>(d)->variants[i], indent);
+      i += 1;
+    }
+  }
+  if (d->kind == DECLKIND_STRUCT) {
+    while (i < cast<StructDecl*>(d)->fields.len) {
+      if (i == cast<StructDecl*>(d)->fields.len - 1) indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
+      print_decl_tree(cast<StructDecl*>(d)->fields[i], indent);
+      i += 1;
+    }
+  }
+  if (d->kind == DECLKIND_FN) {
+    while (i < cast<FnDecl*>(d)->param_decls_count) {
+      if (cast<FnDecl*>(d)->body == nullptr) {
+        if (i == cast<FnDecl*>(d)->param_decls_count - 1) indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
+      }
+      print_decl_tree(cast<FnDecl*>(d)->param_decls[i], indent);
+      i += 1;
+    }
+    if (cast<FnDecl*>(d)->body != nullptr) {
+      indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
+      // TODO: print body
+    }
+  }
+
+  indent->pop();
+  if (indent->len > 0) {
+    indent->data[indent->len - 1] = indent->data[indent->len - 1] + 2;
+  }
+}
+
+fn print_ast(tu: TranslationUnitDecl*) {
+  let i: i64;
+  i = 0;
+  init_colors();
+  let indent: DArray;
+  indent.init();
+  print_decl_tree(tu, &indent);
+}

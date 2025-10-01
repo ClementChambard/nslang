@@ -28,6 +28,7 @@ fn tok_get_name(self: Tok) -> i8* {
     else if (self == TOK_RSQUARE) return cast<i8*>("]");
     else if (self == TOK_SEMI) return cast<i8*>(";");
     else if (self == TOK_COLON) return cast<i8*>(":");
+    else if (self == TOK_COLONCOLON) return cast<i8*>("::");
     else if (self == TOK_PERIOD) return cast<i8*>(".");
     else if (self == TOK_ARROW) return cast<i8*>("->");
     else if (self == TOK_ELLIPSIS) return cast<i8*>("...");

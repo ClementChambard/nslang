@@ -7,12 +7,18 @@
 #include mem.nsh
 #include diags.nsh
 #include ir.nsh
+#include parser.nsh
+#include ast_print.nsh
+
+#include ast_nodes_type.nsh
 
 fn init() {
     IdentInfo::add_keywords();
+    init_type_data();
 }
 
 fn cleanup() {
+    cleanup_type_data();
     OpenedFile::close_all();
     IdentInfo::remove_all();
 }
@@ -27,18 +33,31 @@ fn main() {
 
     lexer.enter_source_file("example.ns");
 
-    let out_token: Token*;
-    out_token = lexer.lex();
-    while (out_token->ty != TOK_EOF) {
-        out_token->dump();
-        free(out_token);
-        out_token = lexer.lex();
-    }
-    free(out_token);
+    let parser__: Parser*;
+    parser__ = Parser::new(&lexer);
 
-    lexer.delete();
+    let tu: TranslationUnitDecl*;
+
+    tu = parser()->parse();
+  
+    print_ast(tu);
+
+    parser__->delete();
+
+
+
+    // let out_token: Token*;
+    // out_token = lexer.lex();
+    // while (out_token->ty != TOK_EOF) {
+    //     out_token->dump();
+    //     free(out_token);
+    //     out_token = lexer.lex();
+    // }
+    // free(out_token);
+
+    // lexer.delete();
 
     cleanup();
 
-    test_ir();
+    // test_ir();
 }

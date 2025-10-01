@@ -20,6 +20,7 @@ enum Tok: i64 {
     TOK_RSQUARE,
     TOK_SEMI,
     TOK_COLON,
+    TOK_COLONCOLON,
     TOK_PERIOD,
     TOK_ARROW,
     TOK_ELLIPSIS,

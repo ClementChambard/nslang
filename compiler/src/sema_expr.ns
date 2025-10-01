@@ -1,0 +1,1572 @@
+#include sema_expr.nsh
+#include sema_scope.nsh
+#include sema_overload.nsh
+#include darray.nsh
+#include ast_nodes_type.nsh
+#include ast_nodes_decl.nsh
+#include diags.nsh
+#include io.nsh
+#include mem.nsh
+#include stdlib.nsh
+
+fn sema::get_expr_range(e: Expr*, start: Loc*, end: Loc*) {
+  if (e == nullptr) return;
+  let rge: LocRge;
+  cast<Stmt*>(e)->get_range(&rge);
+  if (start != nullptr) *start = rge.start;
+  if (end != nullptr) *end = rge.end;
+}
+
+fn sema::invalid_operands(loc: Loc, lhs: Expr*, rhs: Expr*, res: OperandResult*) {
+  // OriginalOperand OrigLHS(LHS.get()), OrigRHS(RHS.get());
+  let s: String;
+  s.init();
+  s.push_cstr("invalid operands to binary expression (");
+  lhs->ty->str_append(&s);
+  s.push_cstr(" and ");
+  rhs->ty->str_append(&s);
+  s.push(')');
+  diag(loc, s.data, DIAG_ERROR); // , [lhs.get_range(), rhs.get_range()])
+  s.destroy();
+  // if (OrigLHS.Conversion) Diag(OrigLHS.Conversion->getLocation(), diag::note_typecheck_invalid_operands_converted) << 0 << LHS.get()->getType();
+  // if (OrigRHS.Conversion) Diag(OrigRHS.Conversion->getLocation(), diag::note_typecheck_invalid_operands_converted) << 1 << RHS.get()->getType();
+  res->lhs = lhs;
+  res->rhs = rhs;
+  res->ty = nullptr;
+}
+
+fn sema::default_function_array_conversion(e: Expr*, diagnose: bool) -> Expr* {
+  let ty: Type*;
+  ty = e->ty;
+  // assert ty is not None, "default_function_array_conversion - missing type"
+  if (e->kind == TYPEKIND_FUNCTION) {
+    // TODO: cast to function ptr
+    // if (auto *DRE = dyn_cast<DeclRefExpr>(E->IgnoreParenCasts())) if (auto *FD = dyn_cast<FunctionDecl>(DRE->getDecl())) if (!checkAddressOfFunctionIsAvailable(FD, Diagnose, E->getExprLoc())) return ExprError();
+    // E = ImpCastExprToType(E, Context.getPointerType(Ty), CK_FunctionToPointerDecay).get();
+    return e;
+  } else if (e->kind == TYPEKIND_ARRAY) {
+    return sema::imp_cast_expr_to_type(e, Type::get_pointer(cast<ArrayType*>(ty)->subtype), CK_ARRAY_TO_POINTER_DECAY, VK_PRVALUE);
+  }
+  return e;
+}
+
+fn sema::default_lvalue_conversion(e: Expr*) -> Expr* {
+  if (e->value_kind == VK_PRVALUE) return e;
+  if (e->ty->kind == TYPEKIND_FUNCTION) return e;
+  if (e->ty->kind == TYPEKIND_NONE) return e;
+  if (e->ty->kind == TYPEKIND_ARRAY) return e;
+  // if (T->isRecordType()) return E;
+  // CheckForNullPointerDereference(*this, E);
+  let ck: CastKind;
+  ck = CK_LVALUE_TO_RVALUE; // T->isNullPtrType() ? CK_NullToPointer : CK_LValueToRValue;
+  return ImplicitCastExpr::new(e->ty, VK_PRVALUE, ck, e);
+}
+
+fn sema::default_function_array_lvalue_conversion(e: Expr*, diagnose: bool) -> Expr* {
+  let res: Expr*;
+  res = sema::default_function_array_conversion(e, diagnose);
+  if (res == nullptr) return nullptr;
+  return sema::default_lvalue_conversion(res);
+}
+
+fn sema::usual_unary_conversions(expr: Expr*) -> Expr* {
+  let e: Expr*;
+  e = sema::default_function_array_lvalue_conversion(expr, true);
+  if (e == nullptr) return nullptr;
+  // ty = e.ty
+  // assert ty is not None, "Missing type"
+  // if (Ty->isIntegralOrUnscopedEnumerationType()) {
+  //   QualType PTy = Context.isPromotableBitField(E);
+  //   if (!PTy.isNull()) {
+  //     E = ImpCastExprToType(E, PTy, CK_IntegralCast).get();
+  //     return E;
+  //   }
+  //   if (Context.isPromotableIntegerType(Ty)) {
+  //     QualType PT = Context.getPromotedIntegerType(Ty);
+  //     E = ImpCastExprToType(E, PT, CK_IntegralCast).get();
+  //     return E;
+  //   }
+  // }
+  return e;
+}
+
+fn sema::usual_arithmetic_conversions(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_assign: bool, res: OperandResult*) {
+  // lhs, rhs = check_enum_arithmetic_conversions(lhs, rhs, loc, is_comp_assign)
+  res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
+  let rhs_r: Expr*;
+  let lhs_r: Expr*;
+  if (!is_comp_assign) {
+    lhs_r = sema::usual_unary_conversions(lhs);
+    if (lhs_r == nullptr) return;
+    lhs = lhs_r; res->lhs = lhs;
+  }
+  rhs_r = sema::usual_unary_conversions(rhs);
+  if (rhs_r == nullptr) return;
+  rhs = rhs_r; res->rhs = rhs;
+
+  let lhs_type: Type*;
+  let rhs_type: Type*;
+  lhs_type = lhs->ty->get_unqualified();
+  rhs_type = rhs->ty->get_unqualified();
+
+  if (lhs_type == rhs_type) {  // if (Context.hasSameType(LHSType, RHSType)) return Context.getCommonSugaredType(LHSType, RHSType);
+    res->ty = lhs_type;
+    return;
+  }
+
+  // TODO: different types
+  if (!lhs_type->is_arithmetic_type()) return;
+  if (!rhs_type->is_arithmetic_type()) return;
+
+  let lhs_unpromoted_type: Type*;
+  lhs_unpromoted_type = lhs_type;
+  if (lhs_type == Type::get_builtin(BTK_BOOL)) { // if (Context.isPromotableIntegerType(LHSType)) LHSType = Context.getPromotedIntegerType(LHSType);
+      lhs_type = Type::get_builtin(BTK_I64);
+  }
+  if (lhs_type == Type::get_builtin(BTK_I8)) lhs_type = Type::get_builtin(BTK_I64);
+  // QualType LHSBitfieldPromoteTy = Context.isPromotableBitField(LHS.get());
+  // if (!LHSBitfieldPromoteTy.isNull()) LHSType = LHSBitfieldPromoteTy;
+  if (lhs_type != lhs_unpromoted_type) if (!is_comp_assign) {
+      lhs_r = sema::imp_cast_expr_to_type(lhs, lhs_type, CK_INTEGRAL_CAST, VK_PRVALUE);
+      // assert lhs_r is not None
+      lhs = lhs_r; res->lhs = lhs;
+  }
+  if (lhs_type == rhs_type) {  // if (Context.hasSameType(LHSType, RHSType)) return Context.getCommonSugaredType(LHSType, RHSType);
+      res->ty = lhs_type;
+      return;
+  }
+  // if (unsupportedTypeConversion(*this, LHSType, RHSType)) return QualType();
+  // if (LHSType->isRealFloatingType() || RHSType->isRealFloatingType()) return handleFloatConversion(*this, LHS, RHS, LHSType, RHSType, ACK == ACK_CompAssign);
+  // return handleIntegerConversion<doIntegralCast, doIntegralCast> (*this, LHS, RHS, LHSType, RHSType, ACK == ACK_CompAssign);
+  // TODO: actual
+  rhs_r = sema::imp_cast_expr_to_type(rhs, lhs_type, CK_INTEGRAL_CAST, VK_PRVALUE);
+  // assert rhs_r is not None
+  rhs = rhs_r; res->lhs = rhs_r;
+  res->ty = lhs_type;
+}
+
+fn sema::check_arithmetic_op_pointer_operand(loc: Loc, operand: Expr*) -> bool {
+  let res_type: Type*;
+  res_type = operand->ty;
+  if (operand->ty->kind != TYPEKIND_POINTER) return true;
+
+  // pointee_ty = res_type.subtype
+  // if (PointeeTy->isVoidType()) { diagnoseArithmeticOnVoidPointer(S, Loc, Operand); return False }
+  // if (PointeeTy->isFunctionType()) { diagnoseArithmeticOnFunctionPointer(S, Loc, Operand); return False; }
+  // if (checkArithmeticIncompletePointerType(S, Loc, Operand)) return false;
+  return true;
+}
+
+fn sema::check_array_access(base_expr: Expr*, index_expr: Expr*) {
+    // TODO:
+    // if (isConstantEvaluatedContext()) return;
+    // IndexExpr = IndexExpr->IgnoreParenImpCasts();
+    // if (IndexExpr->isValueDependent()) return;
+    //
+    // const Type *EffectiveType = BaseExpr->getType()->getPointeeOrArrayElementType();
+    // BaseExpr = BaseExpr->IgnoreParenCasts();
+    // const ConstantArrayType *ArrayTy = Context.getAsConstantArrayType(BaseExpr->getType());
+    // LangOptions::StrictFlexArraysLevelKind StrictFlexArraysLevel = getLangOpts().getStrictFlexArraysLevel();
+    // const Type *BaseType = ArrayTy == nullptr ? nullptr : ArrayTy->getElementType().getTypePtr();
+    // bool IsUnboundedArray = BaseType == nullptr || BaseExpr->isFlexibleArrayMemberLike(Context, StrictFlexArraysLevel, /*IgnoreTemplateOrMacroSubstitution=*/true);
+    // if (EffectiveType->isDependentType() || (!IsUnboundedArray && BaseType->isDependentType())) return;
+    // Expr::EvalResult Result;
+    // if (!IndexExpr->EvaluateAsInt(Result, Context, Expr::SE_AllowSideEffects)) return;
+    // llvm::APSInt index = Result.Val.getInt();
+    // if (IndexNegated) { index.setIsUnsigned(false); index = -index; }
+    // if (IsUnboundedArray) {
+    //   if (EffectiveType->isFunctionType()) return;
+    //   if (index.isUnsigned() || !index.isNegative()) {
+    //     const auto &ASTC = getASTContext();
+    //     unsigned AddrBits = ASTC.getTargetInfo().getPointerWidth(EffectiveType->getCanonicalTypeInternal().getAddressSpace());
+    //     if (index.getBitWidth() < AddrBits) index = index.zext(AddrBits);
+    //     std::optional<CharUnits> ElemCharUnits = ASTC.getTypeSizeInCharsIfKnown(EffectiveType);
+    //     if (!ElemCharUnits || ElemCharUnits->isZero()) return;
+    //     llvm::APInt ElemBytes(index.getBitWidth(), ElemCharUnits->getQuantity());
+    //     if (index.getActiveBits() <= AddrBits) {
+    //       bool Overflow;
+    //       llvm::APInt Product(index);
+    //       Product += 1;
+    //       Product = Product.umul_ov(ElemBytes, Overflow);
+    //       if (!Overflow && Product.getActiveBits() <= AddrBits)
+    //         return;
+    //     }
+    //     llvm::APInt MaxElems = llvm::APInt::getMaxValue(AddrBits);
+    //     MaxElems = MaxElems.zext(std::max(AddrBits + 1, ElemBytes.getBitWidth()));
+    //     MaxElems += 1;
+    //     ElemBytes = ElemBytes.zextOrTrunc(MaxElems.getBitWidth());
+    //     MaxElems = MaxElems.udiv(ElemBytes);
+    //     unsigned DiagID = ASE ? diag::warn_array_index_exceeds_max_addressable_bounds : diag::warn_ptr_arith_exceeds_max_addressable_bounds;
+    //     DiagRuntimeBehavior(BaseExpr->getBeginLoc(), BaseExpr, PDiag(DiagID) << toString(index, 10, true) << AddrBits << (unsigned)ASTC.toBits(*ElemCharUnits) << toString(ElemBytes, 10, false) << toString(MaxElems, 10, false) << (unsigned)MaxElems.getLimitedValue(~0U) << IndexExpr->getSourceRange());
+    //     const NamedDecl *ND = nullptr;
+    //     while (const auto *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr)) BaseExpr = ASE->getBase()->IgnoreParenCasts();
+    //     if (const auto *DRE = dyn_cast<DeclRefExpr>(BaseExpr)) ND = DRE->getDecl();
+    //     if (const auto *ME = dyn_cast<MemberExpr>(BaseExpr)) ND = ME->getMemberDecl();
+    //     if (ND) DiagRuntimeBehavior(ND->getBeginLoc(), BaseExpr, PDiag(diag::note_array_declared_here) << ND);
+    //   }
+    //   return;
+    // }
+    //
+    // if (index.isUnsigned() || !index.isNegative()) {
+    //   if (BaseType->isIncompleteType()) return;
+    //   llvm::APInt size = ArrayTy->getSize();
+    //   if (BaseType != EffectiveType) {
+    //     uint64_t ptrarith_typesize = Context.getTypeSize(EffectiveType);
+    //     uint64_t array_typesize = Context.getTypeSize(BaseType);
+    //     if (!ptrarith_typesize) ptrarith_typesize = Context.getCharWidth();
+    //     if (ptrarith_typesize != array_typesize) {
+    //       uint64_t ratio = array_typesize / ptrarith_typesize;
+    //       if (ptrarith_typesize * ratio == array_typesize) size *= llvm::APInt(size.getBitWidth(), ratio);
+    //     }
+    //   }
+    //   if (size.getBitWidth() > index.getBitWidth()) index = index.zext(size.getBitWidth());
+    //   else if (size.getBitWidth() < index.getBitWidth()) size = size.zext(index.getBitWidth());
+    //   if (AllowOnePastEnd ? index.ule(size) : index.ult(size)) return;
+    //   if (ASE) {
+    //     SourceLocation RBracketLoc = SourceMgr.getSpellingLoc(ASE->getRBracketLoc());
+    //     if (SourceMgr.isInSystemHeader(RBracketLoc)) {
+    //       SourceLocation IndexLoc = SourceMgr.getSpellingLoc(IndexExpr->getBeginLoc());
+    //       if (SourceMgr.isWrittenInSameFile(RBracketLoc, IndexLoc)) return;
+    //     }
+    //   }
+    //   unsigned DiagID = ASE ? diag::warn_array_index_exceeds_bounds : diag::warn_ptr_arith_exceeds_bounds;
+    //   unsigned CastMsg = (!ASE || BaseType == EffectiveType) ? 0 : 1;
+    //   QualType CastMsgTy = ASE ? ASE->getLHS()->getType() : QualType();
+    //   DiagRuntimeBehavior(BaseExpr->getBeginLoc(), BaseExpr, PDiag(DiagID) << toString(index, 10, true) << ArrayTy->desugar() << CastMsg << CastMsgTy << IndexExpr->getSourceRange());
+    // } else {
+    //   unsigned DiagID = diag::warn_array_index_precedes_bounds;
+    //   if (!ASE) {
+    //     DiagID = diag::warn_ptr_arith_precedes_bounds;
+    //     if (index.isNegative()) index = -index;
+    //   }
+    //   DiagRuntimeBehavior(BaseExpr->getBeginLoc(), BaseExpr, PDiag(DiagID) << toString(index, 10, true) << IndexExpr->getSourceRange());
+    // }
+    //
+    // const NamedDecl *ND = nullptr;
+    // while (const auto *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr)) BaseExpr = ASE->getBase()->IgnoreParenCasts();
+    // if (const auto *DRE = dyn_cast<DeclRefExpr>(BaseExpr)) ND = DRE->getDecl();
+    // if (const auto *ME = dyn_cast<MemberExpr>(BaseExpr)) ND = ME->getMemberDecl();
+    // if (ND) DiagRuntimeBehavior(ND->getBeginLoc(), BaseExpr, PDiag(diag::note_array_declared_here) << ND);
+}
+
+fn sema::check_addition_operands(lhs: Expr*, rhs: Expr*, tok_loc: Loc, opc: BinaryOperatorKind, comp_lhs_ty: Type*, res: OperandResult*) {
+  let comp_type: Type*;
+  sema::usual_arithmetic_conversions(lhs, rhs, tok_loc, comp_lhs_ty != nullptr, res);
+  lhs = res->lhs; rhs = res->rhs; comp_type = res->ty;
+  // if opc == BinaryOperatorKind.ADD:
+  //   diagnoseStringPlusInt(*this, Loc, LHS.get(), RHS.get());
+  //   diagnoseStringPlusChar(*this, Loc, LHS.get(), RHS.get());
+  if (comp_type != nullptr) if (comp_type->is_arithmetic_type()) {
+    // if (CompLHSTy) *CompLHSTy = comp_type;
+    return;
+  }
+  let pexp: Expr*; let iexp: Expr*;
+  pexp = lhs;
+  iexp = rhs;
+  if (pexp->ty->kind != TYPEKIND_POINTER) {
+    pexp = rhs;
+    iexp = lhs;
+    if (pexp->ty->kind != TYPEKIND_POINTER) {
+      return sema::invalid_operands(tok_loc, lhs, rhs, res);
+    }
+  }
+  if (!iexp->ty->is_integer_type()) {
+    return sema::invalid_operands(tok_loc, lhs, rhs, res);
+  }
+  // if (PExp->IgnoreParenCasts()->isNullPointerConstant(Context, Expr::NPC_ValueDependentIsNotNull)) {
+  //   Expr::EvalResult KnownVal;
+  //   if ((!IExp->isValueDependent() && (!IExp->EvaluateAsInt(KnownVal, Context) || KnownVal.Val.getInt() != 0))) {
+  //     bool IsGNUIdiom = BinaryOperator::isNullPointerArithmeticExtension(Context, BinaryOperatorKind.ADD, pexp, iexp);
+  //     diagnoseArithmeticOnNullPointer(*this, Loc, pexp, IsGNUIdiom);
+  //   }
+  // }
+  if (!sema::check_arithmetic_op_pointer_operand(tok_loc, pexp)) {
+    res->ty = nullptr;
+    return;
+  }
+  sema::check_array_access(pexp, iexp);
+  // if (CompLHSTy) { QualType LHSTy = Context.isPromotableBitField(LHS.get()); if (LHSTy.isNull()) { LHSTy = LHS.get()->getType(); if (Context.isPromotableIntegerType(LHSTy)) LHSTy = Context.getPromotedIntegerType(LHSTy); } *CompLHSTy = LHSTy; }
+  res->ty = pexp->ty;
+}
+
+fn sema::check_subtraction_operands(lhs: Expr*, rhs: Expr*, loc: Loc, comp_lhs_ty: Type*, res: OperandResult*) {
+  sema::usual_arithmetic_conversions(lhs, rhs, loc, comp_lhs_ty != nullptr, res);
+  if (res->ty != nullptr) if (res->ty->is_arithmetic_type()) {
+    // if (CompLHSTy) *CompLHSTy = comp_type;
+    return;
+  }
+  if (lhs->ty->kind == TYPEKIND_POINTER) {
+    // TODO:
+    res->ty = lhs->ty;
+    return;
+  }
+  return sema::invalid_operands(loc, lhs, rhs, res);
+}
+
+fn sema::check_multiply_divide_operands(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_assign: bool, is_div: bool, res: OperandResult*) {
+  sema::usual_arithmetic_conversions(lhs, rhs, loc, is_comp_assign, res);
+  if (res->ty == nullptr) return sema::invalid_operands(loc, lhs, rhs, res);
+  if (!res->ty->is_arithmetic_type()) return sema::invalid_operands(loc, lhs, rhs, res);
+  // if is_div:
+  //     diagnose_bad_divide_or_remainder_values(lhs, rhs, loc, is_div)
+  //     diagnose_division_size_of_pointer_or_array(lhs, rhs, loc)
+}
+
+fn sema::check_remainder_operands(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_assign: bool, res: OperandResult*) {
+  sema::usual_arithmetic_conversions(lhs, rhs, loc, is_comp_assign, res);
+  if (res->ty == nullptr) return sema::invalid_operands(loc, lhs, rhs, res);
+  if (!res->ty->is_integer_type()) return sema::invalid_operands(loc, lhs, rhs, res);
+  // diagnose_bad_divide_or_remainder_values(lhs, rhs, loc, False)
+}
+
+fn sema::check_shift_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, is_comp_assign: bool, res: OperandResult*) {
+  let old_lhs: Expr*; let lhs_r: Expr*; let rhs_r: Expr*;
+  res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
+  old_lhs = lhs;
+  lhs_r = sema::usual_unary_conversions(lhs);
+  if (lhs_r != nullptr) return;
+  lhs = lhs_r; res->lhs = lhs;
+  let lhs_type: Type*;
+  lhs_type = lhs->ty;
+  if (is_comp_assign) lhs = old_lhs; res->lhs = lhs;
+  rhs_r = sema::usual_unary_conversions(rhs);
+  if (rhs_r != nullptr) return;
+  rhs = rhs_r; res->rhs = rhs;
+  // rhs_type = rhs.ty
+  // if (not lhs_type.is_fixed_point_or_integer_type() and not lhs_type.has_integer_representation()) or not rhs_type.has_integer_representation():
+  //     return invalid_operands(loc, lhs, rhs)
+  // if is_scoped_enumeration_type(lhs_type) or is_scoped_enumeration_type(rhs_type):
+  //     return invalid_operands(loc, lhs, rhs)
+  // diagnose_bad_shift_values(lhs, rhs, loc, opc, lhs_type);
+  res->ty = lhs_type;
+}
+
+fn sema::check_bitwise_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, res: OperandResult*) {
+  let is_comp_assign: bool;
+  is_comp_assign = ((opc == BOK_ANDASSIGN) | (opc == BOK_ORASSIGN) | (opc == BOK_XORASSIGN));
+  // if opc == BOK_AND: diagnose_logical_not_on_lhs_of_check(lhs, rhs, loc, opc)
+  // if lhs.ty.has_floating_representation() or rhs.ty.has_floating_representation(): return invalid_operands(loc, lhs, rhs)
+  res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
+  let lhs_result: Expr*; let rhs_result: Expr*;
+  let result: OperandResult;
+  sema::usual_arithmetic_conversions(lhs, rhs, loc, is_comp_assign, &result);
+  if (result.lhs == nullptr) return;
+  if (result.rhs == nullptr) return;
+  res->lhs = result.lhs;
+  res->rhs = result.rhs;
+  res->ty = result.ty;
+  // if opc == BOK_XOR: diagnose_xor_misused_as_pow(lhs, rhs, loc)
+  if (result.ty != nullptr) return;  // and comp_type.is_integral_or_unscoped_enumeration_type():
+  return sema::invalid_operands(loc, lhs, rhs, res);
+}
+
+fn sema::check_logical_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, res: OperandResult*) {
+  // bool EnumConstantInBoolContext = false;
+  // for (const ExprResult &HS : {LHS, RHS}) {
+  //     if (const auto *DREHS = dyn_cast<DeclRefExpr>(HS.get())) {
+  //     const auto *ECDHS = dyn_cast<EnumConstantDecl>(DREHS->getDecl());
+  //     if (ECDHS && ECDHS->getInitVal() != 0 && ECDHS->getInitVal() != 1)
+  //         EnumConstantInBoolContext = true;
+  //     }
+  // }
+  //
+  // if (EnumConstantInBoolContext) Diag(Loc, diag::warn_enum_constant_in_bool_context);
+  //
+  // QualType LHSTy = LHS.get()->getType();
+  // QualType RHSTy = RHS.get()->getType();
+  // const auto *LHSATy = dyn_cast<ArrayType>(LHSTy);
+  // const auto *RHSATy = dyn_cast<ArrayType>(RHSTy);
+  //
+  // if (!EnumConstantInBoolContext && LHS.get()->getType()->isIntegerType() && !LHS.get()->getType()->isBooleanType() && RHS.get()->getType()->isIntegerType()) {
+  //     Expr::EvalResult EVResult;
+  //     if (RHS.get()->EvaluateAsInt(EVResult, Context)) {
+  //         llvm::APSInt Result = EVResult.Val.getInt();
+  //         if (!RHS.get()->getType()->isBooleanType() || (Result != 0 && Result != 1)) {
+  //             Diag(Loc, diag::warn_logical_instead_of_bitwise) << RHS.get()->getSourceRange() << (Opc == BO_LAnd ? "&&" : "||");
+  //             Diag(Loc, diag::note_logical_instead_of_bitwise_change_operator) << (Opc == BO_LAnd ? "&" : "|") << FixItHint::CreateReplacement(SourceRange(Loc, getLocForEndOfToken(Loc)), Opc == BO_LAnd ? "&" : "|");
+  //             if (Opc == BO_LAnd)
+  //                 Diag(Loc, diag::note_logical_instead_of_bitwise_remove_constant) << FixItHint::CreateRemoval(SourceRange(getLocForEndOfToken(LHS.get()->getEndLoc()), RHS.get()->getEndLoc()));
+  //         }
+  //     }
+  // }
+
+  let lhs_res: Expr*; let rhs_res: Expr*;
+  lhs_res = sema::perform_contextually_convert_to_bool(lhs);
+  if (lhs_res == nullptr) return sema::invalid_operands(loc, lhs, rhs, res);
+  lhs = lhs_res;
+  rhs_res = sema::perform_contextually_convert_to_bool(rhs);
+  if (rhs_res == nullptr) return sema::invalid_operands(loc, lhs, rhs, res);
+  res->lhs = lhs; res->rhs = rhs_res; res->ty = Type::get_builtin(BTK_BOOL);
+}
+
+fn sema::check_for_modifiable_lvalue(e: Expr*, loc: Loc) -> bool {
+  // TODO:
+  if (e->kind == EXPRKIND_DECLREF) return false;
+  else if (e->kind == EXPRKIND_ARRAYSUBSCRIPT) return false;
+  else if (e->kind == EXPRKIND_UNARY) { if (cast<UnaryExpr*>(e)->opc == UOK_DEREF) return false; }
+  else if (e->kind == EXPRKIND_MEMBER) return false;
+  else {
+      diag(loc, "not modifiable lvalue (TODO)", DIAG_ERROR);
+      return false;
+  }
+}
+
+fn sema::check_assignment_operands(lhs: Expr*, rhs: Expr*, op_loc: Loc, compound_type: Type*, opc: BinaryOperatorKind, res: OperandResult*) {
+  res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
+  if (sema::check_for_modifiable_lvalue(lhs, op_loc)) return;
+
+  let lhs_type: Type*;
+  lhs_type = lhs->ty;
+  // rhs_type = compound_type if compound_type is not None else rhs.ty
+  // conv_ty = None
+  if (compound_type == nullptr) {
+      // TODO:
+      let rhs_r: Expr*;
+      rhs_r = sema::default_function_array_lvalue_conversion(rhs, true);
+      // rhs_check = rhs
+      // check_identity_field_assignment(lhs_expr, rhs_check, op_loc, *this);
+      // conv_ty = check_single_assignment_constraints(lhs_type, rhs);
+      if (rhs_r == nullptr) return;
+      rhs = rhs_r; res->rhs = rhs;
+      // warn a =+ b
+  } else {
+      // TODO:
+      // conv_ty = check_assignment_constraints(loc, lhs_type, rhs_type)
+  }
+  // if (DiagnoseAssignmentResult(ConvTy, op_loc, LHSType, RHSType, RHS.get(), AA_Assigning)) return QualType();
+  // CheckForNullPointerDereference(*this, LHSExpr);
+  // AssignedEntity AE{LHSExpr};
+  // check_expr_lifetime(*this, AE, RHS.get());
+  res->ty = lhs_type;
+}
+
+fn sema::check_compare_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, res: OperandResult*) {
+  res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
+  let lhs_r: Expr*; let rhs_r: Expr*;
+  lhs_r = sema::default_function_array_lvalue_conversion(lhs, true);
+  if (lhs_r == nullptr) return;
+  rhs_r = sema::default_function_array_lvalue_conversion(rhs, true);
+  if (rhs_r == nullptr) return;
+  res->lhs = lhs_r; res->rhs = rhs_r; res->ty = Type::get_builtin(BTK_BOOL);
+  // TODO: lot bigger...
+}
+
+fn sema::scalar_type_to_boolean_cast_kind(scalar_ty: Type*) -> CastKind {
+  if (scalar_ty == Type::get_builtin(BTK_BOOL)) return CK_NOOP;
+  if (scalar_ty->is_integer_type()) return CK_INTEGRAL_TO_BOOLEAN;
+  if (scalar_ty->kind == TYPEKIND_POINTER) return CK_POINTER_TO_BOOLEAN;
+  // assert False
+  return 0;
+}
+
+// fn sema::create_materialize_temporary_expr(*args) -> Expr*;
+
+fn sema::imp_cast_expr_to_type(e: Expr*, ty: Type*, kind: CastKind, vk: ValueKind) -> Expr* {
+  // diagnose_nullable_to_nonnull_conversion(ty, e.ty, e.get_range()[0])
+  // diagnose_zero_to_nullptr_conversion(kind, e);
+  // if (Context.hasAnyFunctionEffects() && !isCast(CCK) && kind != CK_NullToPointer && kind != CK_NullToMemberPointer)
+  //   diagnoseFunctionEffectConversion(Ty, E->getType(), E->getBeginLoc());
+  let expr_ty: Type*;
+  let type_ty: Type*;
+  expr_ty = e->ty;  // get_canonical_type
+  type_ty = ty;  // get_canonical_type
+
+  if (expr_ty == type_ty) return e;
+
+  if (kind == CK_ARRAY_TO_POINTER_DECAY) {
+      if (e->value_kind == VK_PRVALUE) {
+        // e_r = create_materialize_temporary_expr(e.ty, e, False)
+        // if e_r is None:
+        //     return None
+        // e = e_r
+      }
+  }
+
+  if (e->kind == EXPRKIND_IMPLICITCAST) {
+    if (cast<CastExpr*>(e)->cast_kind == kind) { // && (!BasePath || BasePath->empty()):
+      e->ty = ty;
+      e->value_kind = vk;
+      return e;
+    }
+  }
+
+  return ImplicitCastExpr::new(ty, vk, kind, e); // BasePath, CurFPFeatureOverrides()
+}
+
+fn sema::build_bin_op(scope: Scope*, tok_loc: Loc, opc: BinaryOperatorKind, lhs: Expr*, rhs: Expr*) -> BinaryExpr* {
+    let vk: ValueKind;
+    vk = VK_PRVALUE;
+    // check both type support
+    let is_comp: bool;
+    let res: OperandResult;
+    is_comp = false;
+    res.ty = nullptr;
+    if (opc == BOK_ASSIGN) {
+      sema::check_assignment_operands(lhs, rhs, tok_loc, nullptr, opc, &res);
+      // vk = lhs.value_kind ### ???
+      // if (!ResultTy.isNull()) { Diagnosessignment(*this, LHS.get(), RHS.get(), OpLoc, true); DiagnoseSelfMove(LHS.get(), RHS.get(), OpLoc); }
+      // RecordModifiableNonNullParam(*this, LHS.get());
+    } else if ((opc == BOK_MUL) | (opc == BOK_DIV)) {
+      sema::check_multiply_divide_operands(lhs, rhs, tok_loc, false, opc == BOK_DIV, &res);
+    } else if (opc == BOK_REM) {
+      sema::check_remainder_operands(lhs, rhs, tok_loc, false, &res);
+    } else if (opc == BOK_ADD) {
+      sema::check_addition_operands(lhs, rhs, tok_loc, opc, nullptr, &res);
+    } else if (opc == BOK_SUB) {
+      sema::check_subtraction_operands(lhs, rhs, tok_loc, nullptr, &res);
+    } else if ((opc == BOK_SHL) | (opc == BOK_SHR)) {
+      sema::check_shift_operands(lhs, rhs, tok_loc, opc, false, &res);
+    } else if ((opc == BOK_LE) | (opc == BOK_LT) | (opc == BOK_GE) | (opc == BOK_GT)) {
+      sema::check_compare_operands(lhs, rhs, tok_loc, opc, &res);
+      // if isinstance(lhs, BinExpr) and lhs.is_comparison_op) { diag(tok_loc, warn_consecutive_comparison)
+    } else if ((opc == BOK_EQ) | (opc == BOK_NE)) {
+      sema::check_compare_operands(lhs, rhs, tok_loc, opc, &res);
+    } else if ((opc == BOK_AND) | (opc == BOK_XOR) | (opc == BOK_OR)) {
+      sema::check_bitwise_operands(lhs, rhs, tok_loc, opc, &res);
+    } else if ((opc == BOK_LAND) | (opc == BOK_LOR)) {
+      sema::check_logical_operands(lhs, rhs, tok_loc, opc, &res);
+    } else if ((opc == BOK_MULASSIGN) | (opc == BOK_DIVASSIGN)) {
+      sema::check_multiply_divide_operands(lhs, rhs, tok_loc, true, opc == BOK_DIVASSIGN, &res);
+      is_comp = true;
+      if (res.ty != nullptr) if (res.lhs != nullptr) if (res.rhs != nullptr) {
+        sema::check_assignment_operands(res.lhs, res.rhs, tok_loc, res.ty, opc, &res);
+      }
+    } else if (opc == BOK_REMASSIGN) {
+      sema::check_remainder_operands(lhs, rhs, tok_loc, true, &res);
+      is_comp = true;
+      if (res.ty != nullptr) if (res.lhs != nullptr) if (res.rhs != nullptr) {
+        sema::check_assignment_operands(res.lhs, res.rhs, tok_loc, res.ty, opc, &res);
+      }
+    } else if (opc == BOK_ADDASSIGN) {
+      sema::check_addition_operands(lhs, rhs, tok_loc, opc, nullptr, &res);
+      is_comp = true;
+      if (res.ty != nullptr) if (res.lhs != nullptr) if (res.rhs != nullptr) {
+        sema::check_assignment_operands(res.lhs, res.rhs, tok_loc, res.ty, opc, &res);
+      }
+    } else if (opc == BOK_SUBASSIGN) {
+      sema::check_subtraction_operands(lhs, rhs, tok_loc, nullptr, &res);
+      is_comp = true;
+      if (res.ty != nullptr) if (res.lhs != nullptr) if (res.rhs != nullptr) {
+        sema::check_assignment_operands(res.lhs, res.rhs, tok_loc, res.ty, opc, &res);
+      }
+    } else if ((opc == BOK_SHLASSIGN) | (opc == BOK_SHRASSIGN)) {
+      sema::check_shift_operands(lhs, rhs, tok_loc, opc, true, &res);
+      is_comp = true;
+      if (res.ty != nullptr) if (res.lhs != nullptr) if (res.rhs != nullptr) {
+        sema::check_assignment_operands(res.lhs, res.rhs, tok_loc, res.ty, opc, &res);
+      }
+    } else if ((opc == BOK_ANDASSIGN) | (opc == BOK_XORASSIGN) | (opc == BOK_ORASSIGN)) {
+      // if or | and, diagnose_self_assignment
+      sema::check_bitwise_operands(lhs, rhs, tok_loc, opc, &res);
+      is_comp = true;
+      if (res.ty != nullptr) if (res.lhs != nullptr) if (res.rhs != nullptr) {
+        sema::check_assignment_operands(res.lhs, res.rhs, tok_loc, res.ty, opc, &res);
+      }
+    } else {
+      print("Unhandled operator\n");
+      exit(1);
+    }
+    if (res.ty == nullptr) return nullptr;
+    if (res.lhs == nullptr) return nullptr;
+    if (res.rhs == nullptr) return nullptr;
+    if (!is_comp) return BinaryExpr::new(lhs, rhs, opc, res.ty, vk, tok_loc);
+    // vk = ValueKind.LVALUE ### ???
+    return CompoundAssignExpr::new(lhs, rhs, opc, lhs->ty, vk, tok_loc);
+}
+
+fn sema::check_address_of_operand(e: Expr*, op_loc: Loc) -> Type* {
+  // TODO:
+  // assert e.value_kind == ValueKind.LVALUE
+  return Type::get_pointer(e->ty);
+}
+
+fn sema::check_indirection_operand(e: Expr*, op_loc: Loc) -> Type* {
+  let op: Expr*; let op_ty: Type*; let result: Type*;
+  op = sema::usual_unary_conversions(e);
+  if (op == nullptr) return nullptr;
+  op_ty = op->ty;
+  result = nullptr;
+  // if (isa<CXXReinterpretCastExpr>(Op)) { QualType OpOrigType = Op->IgnoreParenCasts()->getType(); S.CheckCompatibleReinterpretCast(OpOrigType, OpTy, /*IsDereference*/true, Op->getSourceRange()); }
+  if (op_ty->kind == TYPEKIND_POINTER) {
+    result = cast<PointerType*>(op_ty)->subtype;
+  } else {
+    let s: String;
+    s.init();
+    s.push_cstr("indirection requires pointer operand (");
+    op_ty->str_append(&s);
+    s.push_cstr(" invalid)");
+    diag(op_loc, s.data, DIAG_ERROR); // [op.get_range()])
+    s.destroy();
+    return nullptr;
+  }
+
+  // Diagnose void* deref
+  return result;
+}
+
+// fn sema::check_increment_decrement_operand(*args);
+
+fn sema::build_unary_op(scope: Scope*, op_loc: Loc, opc: UnaryOperatorKind, arg: Expr*) -> UnaryExpr* {
+  // TODO: checks and possible conversion (change type for '*' and '&')
+  let input: Expr*; let vk: ValueKind; let result_type: Type*;
+  input = arg;
+  vk = VK_PRVALUE;
+  result_type = nullptr;
+  // can_overflow = False
+
+  // if (opc == (UOK_PREINC | UOK_PREDEC | UOK_POSTINC | UOK_POSTDEC)) {
+  //   result_type = sema::check_increment_decrement_operand(input, vk, op_loc, opc == UOK_PREINC or opc == UOK_POSTINC, opc == UOK_PREINC or opc == UOK_PREDEC,)
+  //   // can_overflow = is_overflowing_integer_type(context, result_type)
+  // } else 
+  if (opc == UOK_ADDROF) {
+    result_type = sema::check_address_of_operand(input, op_loc);
+    // check_address_of_no_deref(arg)
+    // record_modifiable_non_null_param(arg)
+  } else if (opc == UOK_DEREF) {
+    input = sema::default_function_array_lvalue_conversion(input, true);
+    if (input == nullptr) return nullptr;
+    result_type = sema::check_indirection_operand(input, op_loc);
+    vk = VK_LVALUE;
+  } else if ((opc == UOK_PLUS) | (opc == UOK_MINUS)) {
+    // can_overflow = ( opc == UOK_MINUS)  # and is_overflowing_integer_type(context, input.ty)
+    input = sema::usual_unary_conversions(input);
+    if (input == nullptr) return nullptr;
+    result_type = input->ty;
+    if (result_type->is_arithmetic_type()) {
+    } else if ((opc == UOK_PLUS) & (result_type->kind == TYPEKIND_POINTER)) {
+    } else {
+      let s: String;
+      s.init();
+      s.push_cstr("invalid argument type ");
+      result_type->str_append(&s);
+      s.push_cstr(" to unary expression");
+      diag(op_loc, s.data, DIAG_ERROR); // [input.get_range()],)
+      s.destroy();
+      return nullptr;
+    }
+  } else if (opc == UOK_NOT) {
+    input = sema::usual_unary_conversions(input);
+    if (input == nullptr) return nullptr;
+    result_type = input->ty;
+    if (!result_type->is_integer_type()) {
+      let s: String;
+      s.init();
+      s.push_cstr("invalid argument type ");
+      result_type->str_append(&s);
+      s.push_cstr(" to unary expression");
+      diag(op_loc, s.data, DIAG_ERROR); // [input.get_range()],)
+      s.destroy();
+      return nullptr;
+    }
+  } else if (opc == UOK_LNOT) {
+    input = sema::default_function_array_lvalue_conversion(input, true);
+    if (input == nullptr) return nullptr;
+    result_type = input->ty;
+    if (result_type->is_scalar_type()) { // and not isScopedEnumerationType(resultType):
+      input = sema::imp_cast_expr_to_type(input, Type::get_builtin(BTK_BOOL), sema::scalar_type_to_boolean_cast_kind(result_type), VK_PRVALUE);
+    } else {
+      let s: String;
+      s.init();
+      s.push_cstr("invalid argument type ");
+      result_type->str_append(&s);
+      s.push_cstr(" to unary expression");
+      diag(op_loc, s.data, DIAG_ERROR); // [input.get_range()],)
+      s.destroy();
+      return nullptr;
+    }
+    result_type = Type::get_builtin(BTK_BOOL);
+  }
+
+  if (result_type == nullptr) return nullptr;
+  if (input == nullptr) return nullptr;
+
+  // if opc == UOK_ADDROF or opc == UOK_DEREF:
+  //     check_array_access(Input)
+
+  let uo: UnaryExpr*;
+  uo = UnaryExpr::new(input, opc, result_type, vk, op_loc);  // ok, can_overflow, cur_fp_feature_overrides()
+  // if opc == UOK_DEREF and not isinstance(uo.ty, ArrayType): ExprEvalContexts.back().PossibleDerefs.insert(UO);
+  return uo;
+}
+
+fn sema::act_on_bin_op(scope: Scope*, tok_loc: Loc, kind: Tok, lhs: Expr*, rhs: Expr*) -> BinaryExpr* {
+  let opc: BinaryOperatorKind;
+  opc = binary_operator_kind_from_tok(kind);
+  // assert lhs is not None and rhs is not None, "missing operand to binary op"
+  // diagnose_bin_op_precedence(opc, tok_loc, lhs_expr, rhs_expr)
+  return sema::build_bin_op(scope, tok_loc, opc, lhs, rhs);
+}
+
+fn sema::act_on_unary_op(scope: Scope*, op_loc: Loc, op: Tok, arg: Expr*) -> UnaryExpr* {
+  let opc: UnaryOperatorKind;
+  opc = unary_operator_kind_from_tok(op);
+  return sema::build_unary_op(scope, op_loc, opc, arg);
+}
+
+fn sema::act_on_postfix_unary_op(scope: Scope*, op_loc: Loc, op: Tok, arg: Expr*) -> UnaryExpr* {
+  let opc: UnaryOperatorKind;
+  if (op == TOK_PLUSPLUS) opc = UOK_POSTINC;
+  if (op == TOK_MINUSMINUS) opc = UOK_POSTDEC;
+  return sema::build_unary_op(scope, op_loc, opc, arg);
+}
+
+fn sema::lookup_field_in_struct(struct_type: StructType*, name: CStr, out_type: Type**) -> i64 {
+  let offset: i64;
+  offset = 0;
+  let i: i64;
+  i = 0;
+  while (i < struct_type->fields.len) {
+    let al: i64;
+    let ty: Type*;
+    ty = cast<Type*>(struct_type->fields[i+1]);
+    al = ty->get_align();
+    let a: i64;
+    a = (offset % al);
+    if (a != 0) offset += al - a;
+    if (strcmp(cast<CStr>(struct_type->fields[i]), name) == 0) {
+      if (out_type != nullptr) *out_type = ty;
+      return offset;
+    }
+    offset += ty->get_size();
+    i += 2;
+  }
+  let super_type: Type*;
+  super_type = struct_type->super_type();
+  if (super_type != nullptr) if (super_type->kind == TYPEKIND_STRUCT) {
+    return sema::lookup_field_in_struct(cast<StructType*>(super_type), name, out_type);
+  }
+  return -1;
+}
+
+fn sema::lookup_method_in_struct(struct_type: StructType*, name: CStr, loc: Loc) -> FnDecl* {
+  let i: i64;
+  let method: FnDecl*;
+  method = nullptr;
+  i = 0;
+  while (i < struct_type->methods.len) {
+    if (strcmp(cast<CStr>(struct_type->methods[i]), name) == 0) {
+      method = cast<FnDecl*>(struct_type->methods[i+1]);
+      break;
+    }
+    i += 2;
+  }
+  if (method == nullptr) return nullptr;
+  // First arg must be pointer of struct_type
+  if (method->param_decls_count != 0) {
+    if (method->param_decls[0]->ty->kind == TYPEKIND_POINTER) {
+      if (cast<PointerType*>(method->param_decls[0]->ty)->subtype == struct_type) {
+        return method;
+      }
+    }
+  }
+  let s: String;
+  s.format("method '%s' of ", name);
+  cast<Type*>(struct_type)->str_append(&s);
+  s.push_cstr(" can't be called because it does not have a self argument");
+  diag(loc, s.data, DIAG_ERROR);
+  s.destroy();
+  return nullptr;
+}
+
+fn sema::build_member_reference_expr(base: Expr*, base_type: Type*, oploc: Loc, is_arrow: bool, name: CStr, name_loc: Loc) -> Expr* {
+  let struct_type: StructType*;
+  let rge: LocRge;
+  let arr: Expr**;
+  struct_type = nullptr;
+  if (is_arrow) {
+    if ((base_type->kind == TYPEKIND_POINTER) & (cast<PointerType*>(base_type)->subtype->kind == TYPEKIND_STRUCT)) {
+      base = sema::default_lvalue_conversion(base);
+      struct_type = cast<PointerType*>(base_type)->subtype;
+    } else {
+      cast<Stmt*>(base)->get_range(&rge);
+      diag(rge.start, "base expr of '->' is not a pointer to a struct", DIAG_ERROR); //, [base.get_range()]);
+      // TODO: What type should the expression have ?
+      arr = malloc(sizeof(Expr*)); *arr = base;
+      return sema::create_recovery_expr(rge.start, oploc, arr, 1, nullptr);
+    }
+  } else if (base_type->kind != TYPEKIND_STRUCT) {
+      cast<Stmt*>(base)->get_range(&rge);
+      diag(rge.start, "base expr of '.' is not a struct", DIAG_ERROR); // , [base.get_range()]);
+      // TODO: What type should the expression have ?
+      arr = malloc(sizeof(Expr*)); *arr = base;
+      return sema::create_recovery_expr(rge.start, oploc, arr, 1, nullptr);
+  } else {
+    struct_type = cast<StructType*>(base_type);
+  }
+  let offset: i64; let field_type: Type*;
+  offset = sema::lookup_field_in_struct(struct_type, name, &field_type);
+  if (offset >= 0) {
+    return MemberExpr::new(base, is_arrow, oploc, name, field_type, VK_LVALUE, offset);
+  }
+  let method: FnDecl*;
+  method = sema::lookup_method_in_struct(struct_type, name, oploc);
+  if (method != nullptr) {
+    return MethodExpr::new(base, is_arrow, oploc, method);
+  }
+  let s: String;
+  s.format("unknown field or method '%s' for '", name);
+  cast<Type*>(struct_type)->str_append(&s);
+  s.push('\'');
+  diag(name_loc, s.data, DIAG_ERROR);
+  s.destroy();
+  // TODO: What type should the expression have ?
+  cast<Stmt*>(base)->get_range(&rge);
+  arr = malloc(sizeof(Expr*)); *arr = base;
+  return sema::create_recovery_expr(rge.start, oploc, arr, 1, nullptr);
+}
+
+fn sema::act_on_member_access_expr(scope: Scope*, base: Expr*, oploc: Loc, opkind: Tok, ss: void*, name: UnqualifiedId*) -> Expr* {
+  // DeclarationNameInfo name_info
+  // assert name.value is not None
+  let name_info: CStr;
+  let is_arrow: bool;
+  let first_qualifier_in_scope: void*;
+  name_info = name->value->val;
+  is_arrow = opkind == TOK_ARROW;
+  
+  // result = maybe_convert_paren_list_expr_to_paren_expr(scope, base)
+  // if result is None: return None
+  // base = result
+  
+  let res: Expr*;
+  res = sema::build_member_reference_expr(base, base->ty, oploc, is_arrow, name_info, name->start_location);
+  // if res is not None and isinstance(res, MemberExpr):
+  //     check_member_access_of_no_deref(res)
+  return res;
+}
+
+fn sema::check_boolean_condition(loc: Loc, cond_expr: Expr*, is_constexpr: bool, fst_checks: bool) -> Expr* {
+  let e: Expr*;
+  e = sema::perform_contextually_convert_to_bool(cond_expr);
+  if (!is_constexpr) return e;
+  if (e == nullptr) return e;
+  exit(1);
+  // assert False, "Not implemented"
+  // llvm::APSInt Cond;
+  // E = VerifyIntegerConstantExpression(E.get(), &Cond, diag::err_constexpr_if_condition_expression_is_not_constant);
+  // return E;
+}
+
+fn sema::check_conditional_operands(cond: Expr*, lhs: Expr*, rhs: Expr*, vk: ValueKind, question_loc: Loc, res: CondOperandResult*) {
+  res->vk = VK_PRVALUE; res->cond = cond; res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
+  let cond_res: Expr*;
+  cond_res = sema::check_boolean_condition(0, cond, false, true);
+  if (cond_res == nullptr) return;
+  res->cond = cond_res;
+  // TODO: Check value kind and type of lhs and rhs. For now, assume its the exact same
+  // assert lhs.ty == rhs.ty
+  res->ty = lhs->ty;
+  res->vk = lhs->value_kind;
+}
+
+fn sema::act_on_conditional_op(question_loc: Loc, colon_loc: Loc, cond_expr: Expr*, lhs: Expr*, rhs: Expr*) -> ConditionalExpr* {
+  // lhs_ty = lhs.ty
+  // rhs_ty = rhs.ty
+  let res: CondOperandResult;
+  sema::check_conditional_operands(cond_expr, lhs, rhs, VK_PRVALUE, question_loc, &res);
+  if (res.ty == nullptr) return nullptr;
+  if (res.cond == nullptr) return nullptr;
+  if (res.lhs == nullptr) return nullptr;
+  if (res.rhs == nullptr) return nullptr;
+  // emit warning when a conditional operator and binary operator are mixed in a way that suggests
+  // the programmer assumed the conditional operator has higher precedence,
+  // for example: "int x = a + someBinaryCondition ? 1 : 2".
+  // diagnose_conditional_precedence(question_loc, cond, lhs, rhs)
+  // result = compute_conditional_nullability(result, lhs_ty, rhs_ty, context)
+  return ConditionalExpr::new(res.cond, question_loc, res.lhs, colon_loc, res.rhs, res.ty, res.vk);
+}
+
+#include sema_literal.nsh
+
+fn sema::act_on_numeric_constant(tok: Token*) -> IntegerLiteral* {
+  let parser: NumLiteralParser;
+  parser.init(tok);
+  if (parser.had_error) diag(tok->loc, "Error parsing numeric constant", DIAG_ERROR);
+  if (parser.ty->is_integer_type()) return IntegerLiteral::new(parser.res, parser.ty, tok->loc);
+  // assert False, "float not implemented"
+  return nullptr;
+}
+
+fn sema::act_on_character_constant(tok: Token*) -> IntegerLiteral* {
+  let parser: CharLiteralParser;
+  parser.init(tok);
+  if (parser.had_error) diag(tok->loc, "Error parsing char constant", DIAG_ERROR);
+  if (parser.ty->is_integer_type()) return IntegerLiteral::new(parser.res, parser.ty, tok->loc);
+  // assert False, "incorrect type for char constant"
+  return nullptr;
+}
+
+fn sema::act_on_bool_literal(op_loc: Loc, kind: Tok) -> BoolLiteral* {
+  // assert kind == Tok.KW_TRUE or kind == Tok.KW_FALSE, "Unknown boolean value"
+  return BoolLiteral::new(kind == TOK_KW_TRUE, Type::get_builtin(BTK_BOOL), op_loc);
+}
+
+fn sema::act_on_string_literal(string_toks: Token**, string_toks_count: i64) -> StringLiteral* {
+  // assert len(string_toks) > 0, "Must have at least one string!"
+  // expanded_toks = []
+  let parser: StringLiteralParser;
+  parser.init(string_toks, string_toks_count, false);
+
+  if (parser.had_error) return nullptr;
+
+  let locs: Loc*;
+  locs = malloc(sizeof(Loc) * string_toks_count);
+  let i: i64;
+  i = 0;
+  while (i < string_toks_count) {
+    locs[i] = string_toks[i]->loc;
+    i += 1;
+  }
+
+  let ty: Type*;
+  ty = Type::get_builtin(BTK_I8);
+  let kind: CStr;
+  kind = "ordinary";
+  // TODO: multiple char_ty and kind
+  let str_ty: Type*;
+  str_ty = Type::get_array(ty, parser.get_num_string_chars());
+  return StringLiteral::new(parser.get_string(), locs, string_toks_count, kind, str_ty);
+}
+
+fn sema::ignored_value_conversions(e: Expr*) -> Expr* {
+  // maybe_decrement_count(e, RefsMinusAssignments);
+  return e;
+}
+
+fn sema::act_on_nullptr_literal(loc: Loc) -> Expr* {
+  return IntegerLiteral::new(0, Type::get_pointer(nullptr), loc);
+}
+
+fn sema::act_on_explicit_cast(ty: Type*, e: Expr*, sl: Loc, el: Loc) -> Expr* {
+  let ics: ImplicitConversionSequence*;
+  ics = sema::try_implicit_conversion(e, ty, true);
+  return sema::perform_implicit_conversion(e, ty, ics);
+}
+
+lib let CUR_FN_DECL: FnDecl*;
+
+fn sema::act_on_vaarg_expr(ty: Type*, sl: Loc, el: Loc) -> VAArgExpr* {
+  if (!CUR_FN_DECL->is_vararg) {
+    diag(sl, "cannot use vararg expr in non vararg function", DIAG_ERROR);
+    return nullptr;
+  }
+  return VAArgExpr::new(ty, sl, el);
+}
+
+fn sema::act_on_sizeof_expr(ty: Type*, expr: Expr*, sl: Loc, el: Loc) -> SizeofExpr* {
+  return SizeofExpr::new(ty, expr, sl, el);
+}
+
+fn sema::act_on_scoped_identifier(scope: Scope*, ii: IdentInfo*, loc: Loc) -> StructType* {
+  let maybe_struct_decl: NamedDecl*;
+  maybe_struct_decl = scope->lookup_named_decl(ii->val);
+  if (maybe_struct_decl != nullptr) if (maybe_struct_decl->kind == DECLKIND_STRUCT) {
+    // assert isinstance(maybe_struct_decl.ty, StructType)
+    return cast<StructType*>(cast<StructDecl*>(maybe_struct_decl)->ty);
+  }
+  let s: String;
+  s.format("'%s' does not name a struct type", ii->val);
+  diag(loc, s.data, DIAG_ERROR);
+  s.destroy();
+  return nullptr;
+}
+
+fn sema::act_on_paren_expr(lp_loc: Loc, rp_loc: Loc, e: Expr*) -> ParenExpr* {
+  // assert e is not None, "missing expr"
+  // float stuff ?
+  return ParenExpr::new(lp_loc, rp_loc, e);
+}
+
+fn sema::create_recovery_expr(begin: Loc, end: Loc, sub_exprs: Expr**, expr_count: i64, ty: Type*) -> RecoveryExpr* {
+  // if not context.recovery_ast: return None
+  // if is_sfinae_context(): return None
+  // if t.is_null() or t->is_undeduced_type() or not context.recovery_ast_type: t = context.dependent_ty
+  return RecoveryExpr::new(ty, begin, end, sub_exprs, expr_count);
+}
+
+fn sema::act_on_builtin_syscall_expr(builtin_tok: Token*, rparen_loc: Loc, args: Expr**, args_count: i64) -> BuiltinExpr* {
+  let i: i64;
+  i = 0;
+  while (i < args_count) {
+    args[i] = sema::default_function_array_lvalue_conversion(args[i], true);
+    i += 1;
+  }
+  return BuiltinExpr::new("__builtin_syscall", builtin_tok->loc, args, args_count, rparen_loc);
+}
+
+fn sema::act_on_builtin_expr(builtin_tok: Token*, rparen_loc: Loc, args: Expr**, args_count: i64) -> BuiltinExpr* {
+  if (builtin_tok->ty == TOK_BUILTIN_SYSCALL) {
+     return sema::act_on_builtin_syscall_expr(builtin_tok, rparen_loc, args, args_count);
+  }
+  // assert False, "unhandled builtin tok kind"
+  return nullptr;
+}
+
+fn sema::check_completed_expr(e: Expr*, check_loc: Loc, is_constexpr: bool) {
+  // llvm::SaveAndRestore ConstantContext(isConstantEvaluatedOverride, IsConstexpr || isa<ConstantExpr>(E));
+  // CheckImplicitConversions(E, CheckLoc);
+  // CheckUnsequencedOperations(E);
+  // if not is_constexpr: check_for_int_overflow(e)
+  // DiagnoseMisalignedMembers();
+}
+
+fn sema::maybe_create_expr_with_cleanups(sub_expr: Expr*) -> Expr* {
+  // assert sub_expr is not None, "subexpression can't be null!"
+  // CleanupVarDeclMarking();
+  // unsigned FirstCleanup = ExprEvalContexts.back().NumCleanupObjects;
+  // assert(ExprCleanupObjects.size() >= FirstCleanup);
+  // assert(Cleanup.exprNeedsCleanups() || ExprCleanupObjects.size() == FirstCleanup);
+  // if (!Cleanup.exprNeedsCleanups()) return SubExpr;
+  // auto Cleanups = llvm::ArrayRef(ExprCleanupObjects.begin() + FirstCleanup, ExprCleanupObjects.size() - FirstCleanup);
+  // auto *E = ExprWithCleanups::Create(Context, SubExpr, Cleanup.cleanupsHaveSideEffects(), Cleanups);
+  // DiscardCleanupsInEvaluationContext();
+  // return E;
+  return sub_expr;
+}
+
+fn sema::act_on_finish_full_expr(fe: Expr*, cc: Loc, discarded_value: bool, is_constexpr: bool) -> Expr* {
+  if (fe == nullptr) return nullptr;
+  // if (DiagnoseUnexpandedParameterPack(fe)) return ExprError();
+
+  if (discarded_value) {
+    fe = sema::ignored_value_conversions(fe);
+    if (fe == nullptr) return nullptr;
+    // diagnose_unused_expr_result(fe, "diag::warn_unused_expr");
+   }
+   // TODO: do it correctly in the correct place...
+   if (fe->value_kind != VK_PRVALUE) {
+       fe = sema::default_lvalue_conversion(fe);
+   }
+
+  sema::check_completed_expr(fe, cc, is_constexpr);
+
+  // LambdaScopeInfo *const CurrentLSI = getCurLambda(/*IgnoreCapturedRegions=*/true);
+  // DeclContext *DC = CurContext;
+  // while (isa_and_nonnull<CapturedDecl>(DC)) DC = DC->getParent();
+  // const bool IsInLambdaDeclContext = isLambdaCallOperator(DC);
+  // if (IsInLambdaDeclContext && CurrentLSI && CurrentLSI->hasPotentialCaptures() && !fe.isInvalid()) CheckIfAnyEnclosingLambdasMustCaptureAnyPotentialCaptures(FE, CurrentLSI, *this);
+  return sema::maybe_create_expr_with_cleanups(fe);
+}
+
+fn sema::act_on_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rparen_loc: Loc) -> Expr* {
+  let call: CallExpr*;
+  call = sema::build_call_expr(scope, fun, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, false, true);
+  if (call == nullptr) return nullptr;
+
+  // if (const auto *ULE = dyn_cast<UnresolvedLookupExpr>(Fn); ULE && ULE->hasExplicitTemplateArgs() && ULE->decls_begin() == ULE->decls_end()) {
+  //     Diag(Fn->getExprLoc(), getLangOpts().CPlusPlus20 ? diag::warn_cxx17_compat_adl_only_template_id : diag::ext_adl_only_template_id) << ULE->getName();
+  // }
+  //
+  // if (const auto *CE = dyn_cast<CallExpr>(Call.get())) {
+  //     DiagnosedUnqualifiedCallsToStdFunctions(*this, CE);
+  // }
+  //
+  // if (auto *DRE = dyn_cast<DeclRefExpr>(Fn->IgnoreParens()); DRE && Call.get()->isValueDependent()) {
+  //     currentEvaluationContext().ReferenceToConsteval.erase(DRE);
+  // }
+  return call;
+}
+
+fn sema::act_on_array_subscript_expr(scope: Scope*, base: Expr*, lbloc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rbloc: Loc) -> Expr* {
+  // if (((base->getType()->isRecordType() || (ArgExprs.size() != 1 || isa<PackExpansionExpr>(ArgExprs[0]) || ArgExprs[0]->getType()->isRecordType())))) {
+  //   return CreateOverloadedArraySubscriptExpr(lbLoc, rbLoc, base, ArgExprs);
+  // }
+  // assert len(arg_exprs) == 1, "Unsupported multiple arg subscript"
+
+  let res: Expr*;
+  res = sema::create_builtin_array_subscript_expr(base, lbloc, arg_exprs[0], rbloc);
+  // if res is not None and isinstance(res, ArraySubscriptExpr):
+  //     check_subscript_access_of_no_deref(res)
+
+  return res;
+}
+
+fn sema::build_decl_ref_expr_nns(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr, ii: IdentInfo*, nameloc: Loc, nns: void*) -> DeclRefExpr* {
+  // bool RefersToCapturedVariable = isa<VarDecl, BindingDecl>(D) && NeedToCaptureVariable(D, NameInfo.getLoc());
+
+  let e: DeclRefExpr*;
+  e = DeclRefExpr::new(nns, d, name, ii, nameloc, ty, vk);
+  // , getNonOdrUseReasonInCurrentContext(D)) ctx, nns, refers..., template ...
+  // MarkDeclRefReferenced(E);
+  
+  // if (const auto *FPT = Ty->getAs<FunctionProtoType>())
+  //   if (isUnresolvedExceptionSpec(FPT->getExceptionSpecType()))
+  //     if (const auto *NewFPT = ResolveExceptionSpec(NameInfo.getLoc(), FPT)) E->setType(Context.getQualifiedType(NewFPT, Ty.getQualifiers()));
+  
+  // const auto *FD = dyn_cast<FieldDecl>(D);
+  // if (const auto *IFD = dyn_cast<IndirectFieldDecl>(D)) FD = IFD->getAnonField();
+  // if (FD) {
+  //   UnusedPrivateFields.remove(FD);
+  //   if (FD->isBitField()) E->setObjectKind(OK_BitField);
+  // }
+  
+  // if (const auto *BD = dyn_cast<BindingDecl>(D)) if (const auto *BE = BD->getBinding()) E->setObjectKind(BE->getObjectKind());
+
+  return e;
+}
+
+fn sema::build_decl_ref_expr(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr, ii: IdentInfo*, nameloc: Loc, ss: void*) -> DeclRefExpr* {
+  // get nns from ss
+  return sema::build_decl_ref_expr_nns(d, ty, vk, name, ii, nameloc, nullptr);
+}
+
+fn sema::act_on_id_expression(s: Scope*, ss: void*, i: UnqualifiedId*, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr* {
+  // if (SS.isInvalid()) return ExprError();
+  // assert i.value is not None
+  let name_string: String;
+  name_string.from_cstr(i->value->val);
+  let ii: IdentInfo*;
+  ii = i->value;
+  let nameloc: Loc;
+  nameloc = i->start_location;
+
+  let ssname: CStr;
+  // XXX: ssname = ss->name;
+
+  if (ss != nullptr)
+      name_string.format("%s::%s", ssname, i->value->val);
+  let lookup_decl: NamedDecl*;
+  lookup_decl = s->lookup_named_decl(name_string.data);
+
+  if (lookup_decl == nullptr) {
+    let s: String;
+    s.format("Undeclared identifier '%s'", name_string.data);
+    diag(nameloc, s.data, DIAG_ERROR);
+    s.destroy();
+    name_string.destroy();
+    // fill keyword_replacement
+    return nullptr;
+  }
+
+  // if (isPotentialImplicitMemberAccess(SS, R, IsAddressOfOperand))
+  //   return BuildPossibleImplicitMemberExpr(SS, 0, R, nullptr, S);
+
+  let out: Expr*;
+  out = sema::build_declaration_name_expr(ss, name_string.data, ii, nameloc, lookup_decl, false);
+  name_string.destroy();
+  return out;
+}
+
+fn sema::build_resolved_call_expr(fun: Expr*, ndecl: NamedDecl*, lparen_loc: Loc, args: Expr**, args_count: i64, rparen_loc: Loc, is_exec_config: bool, uses_adl: i64) -> Expr* {
+  let fnty: FunctionType*;
+  fnty = cast<FunctionType*>(cast<FnDecl*>(ndecl)->ty);
+
+  let the_call: CallExpr*;
+  if (fun->kind == EXPRKIND_METHOD) {
+    the_call = MethodCallExpr::new(fun, args, args_count, fnty->return_type, VK_PRVALUE, rparen_loc);
+  } else {
+    the_call = CallExpr::new(fun, args, args_count, fnty->return_type, VK_PRVALUE, rparen_loc);
+  }
+
+  if (sema::convert_arguments_for_call(the_call, fun, cast<FnDecl*>(ndecl), fnty, args, args_count, rparen_loc, is_exec_config)) return nullptr;
+  return the_call;
+}
+
+fn sema::gather_arguments_for_call(call_loc: Loc, fdecl: FnDecl*, proto: FunctionType*, args: Expr**, args_count: i64, all_args: DArray*) -> bool {
+  let num_params: i64;
+  num_params = proto->param_count;
+  let i: i64;
+  i = 0;
+  while (i < args_count) {
+    let arg: Expr*;
+    arg = args[i];
+    if (i < num_params) {
+      let proto_arg_type: Type*;
+      proto_arg_type = proto->param_types[i];
+      // param = fdecl.param_decls[i]
+      if (i >= args_count) return true;
+      // InitializedEntity Entity = InitializedEntity::InitializeParameter(Context, Param, proto_arg_type)
+      // ExprResult ArgE = PerformCopyInitialization(Entity, SourceLocation(), Arg, false, false);
+      // if (ArgE.isInvalid()) return true;
+      // Arg = ArgE.getAs<Expr>();
+      // CheckArrayAccess(Arg);
+      // CheckStaticArrayArgument(CallLoc, Param, Arg);
+
+      // TODO: actual
+      let ics: ImplicitConversionSequence*;
+      ics = sema::try_implicit_conversion(arg, proto_arg_type, false);
+      arg = sema::perform_implicit_conversion(arg, proto_arg_type, ics);
+    } else {
+      arg = sema::default_function_array_lvalue_conversion(arg, true);
+    }
+    all_args->push(arg);
+    i += 1;
+  }
+
+  return false;
+}
+
+fn sema::build_declaration_name_expr(ss: void*, name: CStr, ii: IdentInfo*, nameloc: Loc, d: NamedDecl*, accept_invalid_decl: bool) -> Expr* {
+  // assert d is not None
+  // loc = nameloc
+  // if check_decl_in_expr(loc, d, accept_invalid_decl):
+  //     return create_recovery_expr(nameloc, nameloc, [])
+
+  if (!cast<Decl*>(d)->is_value()) {
+    let s: String;
+    s.format("%s does not refer to a value", name);
+    diag(nameloc, s.data, DIAG_ERROR);
+    s.destroy();
+    return nullptr;
+  }
+ 
+  // if diagnose_use_of_decl(d, loc):
+  //     return None
+
+  // vd = ValueDecl(d)
+
+  // if vd.is_invalid_decl() and not accept_invalid_decl:
+  //     return None
+
+  // if (auto *IndirectField = dyn_cast<IndirectFieldDecl>(VD); IndirectField && !IndirectField->isCXXClassMember()) return BuildAnonymousStructUnionMemberReference(SS, NameInfo.getLoc(), IndirectField);
+
+  let ty: Type*;
+  let vk: ValueKind;
+  ty = cast<ValueDecl*>(d)->ty;
+  if (ty == nullptr) return nullptr;
+  vk = VK_PRVALUE;
+  
+  if ((d->kind == DECLKIND_VAR) | (d->kind == DECLKIND_PARAM)) vk = VK_LVALUE;
+  if (d->kind == DECLKIND_ENUMVARIANT) {
+    vk = VK_PRVALUE;
+    // assert isinstance(ty, EnumType)
+    // if (ty->kind == TYPEKIND_ENUM) ty = ty->get_aliased_type(); // if aliased_type is not none
+  }
+  // TODO: get correct vkind and type depending on decl kind
+  
+  let e: Expr*;
+  e = sema::build_decl_ref_expr(cast<ValueDecl*>(d), ty, vk, name, ii, nameloc, ss);
+  // if (VD->isInvalidDecl() && E) return CreateRecoveryExpr(E->getBeginLoc(), E->getEndLoc(), {E});
+  return e;
+}
+
+fn sema::build_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rparen_loc: Loc, is_exec_config: bool, allow_recovery: bool) -> Expr* {
+  // result = maybe_convert_paren_list_expr_to_paren_expr(scope, fn);
+  // if result is None: return None
+  // fn = result
+  //# Fn isa PseudoDestructorExpr => if args not empty: diag::err_pseudo_dtor_call_with_args => CallExpr::Create VoidTy PRValue
+  //# Fn isa RecordType => build_call_to_object_of_class_type(scope, fn, lparen_loc, arg_exprs, rparen_loc)
+  //# Fn isa BoundMemberType => build_call_to_member_function(scpoe, fn, lparen_loc, arg_exprs, rparen_loc, is_exec_config, allow_recovery)
+  //# Fn isa OverloadTy => TODO:
+
+  let naked_fn: Expr*;
+  naked_fn = fn; // .ignore_parens()
+  
+  // calling_ndecl_indirectly = False
+  let ndecl: Decl*;
+  ndecl = nullptr;
+  // if isinstance(naked_fn, UnaryExpr):
+  //     if naked_fn.opc == UOK_ADDROF:
+  //         // calling_ndecl_indirectly = True
+  //         naked_fn = naked_fn.arg.ignore_parens()
+  
+  if (naked_fn->kind == EXPRKIND_DECLREF) {
+    ndecl = cast<DeclRefExpr*>(naked_fn)->decl;
+    // diag(fn.get_range()[0], "Can only call functions", DIAG_ERROR)
+    // return None
+    // if isinstance(ndecl, FnDecl) and ndecl.get_builtin_id():
+    //     fdecl = rewrite_builtin_function_decl(context, fdecl, arg_exprs)
+    //     if fdecl is not None:
+    //         ndecl = fdecl
+    //         fn = DeclRefExpr(context, fdecl.get_qualifier_loc(), 0, fdecl, False, 0, fdecl.ty, fn.value_kind, fdecl, None, dre.isnonodruse())
+  } else if (naked_fn->kind == EXPRKIND_METHOD) {
+    ndecl = cast<MethodExpr*>(naked_fn)->method_func;
+  } else {
+    let rge: LocRge;
+    cast<Stmt*>(fun)->get_range(&rge);
+    diag(rge.start, "Can only call functions", DIAG_ERROR);
+    return nullptr;
+  }
+  
+  // if isinstance(ndecl, FnDecl):
+  //     if calling_ndecl_indirectly and not check_address_of_function_is_available(ndecl, True, fn->get_range()[0]):
+  //         return None
+  //     check_direct_call_validity(fn, ndecl, arg_exprs);
+  
+  return sema::build_resolved_call_expr(fn, ndecl, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, is_exec_config);
+}
+
+fn sema::create_builtin_array_subscript_expr(base: Expr*, lloc: Loc, idx: Expr*, rloc: Loc) -> Expr* {
+  let lhs_expr: Expr*;
+  let rhs_expr: Expr*;
+  let vk: ValueKind;
+  lhs_expr = base;
+  rhs_expr = idx;
+  vk = VK_LVALUE;
+  // lhs_expr = lhs_expr.ignore_implicit()
+  // rhs_expr = rhs_expr.ignore_implicit()
+  if (lhs_expr->ty->kind == TYPEKIND_ARRAY) if (lhs_expr->value_kind != VK_LVALUE) vk = VK_XVALUE;
+  if (rhs_expr->ty->kind == TYPEKIND_ARRAY) if (rhs_expr->value_kind != VK_LVALUE) vk = VK_XVALUE;
+  lhs_expr = sema::default_lvalue_conversion(lhs_expr);
+  if (lhs_expr == nullptr) return nullptr;
+  rhs_expr = sema::default_function_array_lvalue_conversion(rhs_expr, true);
+  if (rhs_expr == nullptr) return nullptr;
+
+  let lhs_ty: Type*;
+  let rhs_ty: Type*;
+  let result_type: Type*;
+  lhs_ty = lhs_expr->ty;
+  rhs_ty = rhs_expr->ty;
+  // base_expr, index_expr = None, None
+  result_type = nullptr;
+  if (lhs_ty->kind == TYPEKIND_POINTER) {
+    // base_expr, index_expr = lhs_expr, rhs_expr
+    result_type = cast<PointerType*>(lhs_ty)->subtype;
+  } else if (rhs_ty->kind == TYPEKIND_POINTER) {
+    // base_expr, index_expr = rhs_expr, lhs_expr
+    result_type = cast<PointerType*>(rhs_ty)->subtype;
+  } else if (lhs_ty->kind == TYPEKIND_ARRAY) {
+    // diag::ext_subscript_non_lvalue
+    lhs_expr = sema::imp_cast_expr_to_type(lhs_expr, Type::get_pointer(cast<ArrayType*>(lhs_ty)->subtype), CK_ARRAY_TO_POINTER_DECAY, VK_PRVALUE);
+    // assert lhs_expr is not None
+    lhs_ty = lhs_expr->ty;
+    // base_expr, index_expr = rhs_expr, lhs_expr
+    // assert isinstance(lhs_ty, PointerType)
+    result_type = cast<PointerType*>(lhs_ty)->subtype;
+  } else if (rhs_ty->kind == TYPEKIND_ARRAY) {
+    // diag::ext_subscript_non_lvalue
+    rhs_expr = sema::imp_cast_expr_to_type(rhs_expr, Type::get_pointer(cast<ArrayType*>(rhs_ty)->subtype), CK_ARRAY_TO_POINTER_DECAY, VK_PRVALUE);
+    // assert rhs_expr is not None
+    rhs_ty = rhs_expr->ty;
+    // base_expr, index_expr = rhs_expr, lhs_expr
+    // assert isinstance(rhs_ty, PointerType)
+    result_type = cast<PointerType*>(rhs_ty)->subtype;
+  } else if (lhs_ty->kind == TYPEKIND_STRUCT) {
+    // Check if super field is pointer
+// fn StructType::deepest_super_field(self: StructType*, name: CStr*) -> Type* {
+    let f: Type*;
+    let name: CStr;
+    f = cast<StructType*>(lhs_ty)->deepest_super_field(&name);
+    if (f != nullptr) {
+        if (f->kind == TYPEKIND_POINTER) { // TODO: or array type ?
+          let uid: UnqualifiedId*;
+          uid = UnqualifiedId::new();
+          uid->set_identifier(IdentInfo::find(name, strlen(name)), lloc);
+          lhs_expr = sema::act_on_member_access_expr(nullptr, base, lloc, TOK_PERIOD, nullptr, uid);
+          lhs_expr = sema::default_lvalue_conversion(lhs_expr);
+          if (lhs_expr == nullptr) return nullptr;
+          // base_expr = lhs_expr
+          // index_expr = rhs_expr
+          result_type = cast<PointerType*>(f)->subtype;
+        } else {
+          diag(lloc, "subscripted value is not an array or a pointer", DIAG_ERROR);
+          return nullptr;
+        }
+    } else {
+        diag(lloc, "subscripted value is not an array or a pointer", DIAG_ERROR);
+        return nullptr;
+    }
+  } else {
+    diag(lloc, "subscripted value is not an array or a pointer", DIAG_ERROR);
+    return nullptr;
+  }
+  // if not index_expr.ty.is_integer_type():
+  //   return None # diag::err_typecheck_subscript_not_integer
+  //# Warn if index is char constexpr
+  //# error if result_type =is function type diag::err_subscript_function_type
+  
+  // if (RequireCompleteSizedType(LLoc, ResultType, diag::err_subscript_incomplete_or_sizeless_type, BaseExpr))
+  //   return ExprError();
+  
+  // if (lhs_exp.ignore_paren_imp_casts().ty.is_variably_modified_type() && function_scopes.size() > 1) {
+  //   if (auto *TT = LHSExp->IgnoreParenImpCasts()->getType()->getAs<TypedefType>()) {
+  //     for (auto I = FunctionScopes.rbegin(), E = std::prev(FunctionScopes.rend()); I != E; ++I) {
+  //       auto *CSI = dyn_cast<CapturingScopeInfo>(*I);
+  //       if (CSI == nullptr) break;
+  //       DeclContext *DC = nullptr;
+  //       if (auto *LSI = dyn_cast<LambdaScopeInfo>(CSI))
+  //         DC = LSI->CallOperator;
+  //       else if (auto *CRSI = dyn_cast<CapturedRegionScopeInfo>(CSI))
+  //         DC = CRSI->TheCapturedDecl;
+  //       else if (auto *BSI = dyn_cast<BlockScopeInfo>(CSI))
+  //         DC = BSI->TheDecl;
+  //       if (DC) {
+  //         if (DC->containsDecl(TT->getDecl()))
+  //           break;
+  //         captureVariablyModifiedType(
+  //             Context, LHSExp->IgnoreParenImpCasts()->getType(), CSI);
+  //       }
+  //     }
+  //   }
+  // }
+  
+  return ArraySubscriptExpr::new(lhs_expr, rhs_expr, result_type, vk, rloc);  // , ok
+}
+
+fn sema::convert_arguments_for_call(call: CallExpr*, fun: Expr*, fdecl: FnDecl*, proto: FunctionType*, args: Expr**, args_count: i64, rparen_loc: Loc, is_exec_config: bool) -> bool {
+//     XXX:
+//     num_params = len(proto.param_types)
+// 
+//     if isinstance(call, MethodCallExpr):
+//         assert isinstance(call.fn, MethodExpr)
+//         args = [call.fn.self_object, *args]
+//         if not call.fn.is_arrow:
+//             args[0].ty = PointerType(args[0].ty)
+// 
+//     if len(args) < num_params:
+//         expected = ["expected", "expected at least"][fdecl.is_vararg]
+//         diag(
+//             rparen_loc,
+//             f"too few arguments to function call, {expected} {num_params}, have {len(args)}",
+//             DIAG_ERROR,
+//             [fn.get_range()],
+//         )
+//         diag(
+//             fdecl.get_range()[0],
+//             f"{fdecl.name} declared here",
+//             DIAG_NOTE,
+//             [fdecl.get_params_range()],
+//         )
+//         return True
+// 
+//     if len(args) > num_params and not fdecl.is_vararg:
+//         diag(
+//             args[num_params].get_range()[0],
+//             f"too many arguments to function call, expected {num_params}, have {len(args)}",
+//             DIAG_ERROR,
+//             [fn.get_range()],
+//         )
+//         diag(
+//             fdecl.get_range()[0],
+//             f"{fdecl.name} declared here",
+//             DIAG_NOTE,
+//             [fdecl.get_params_range()],
+//         )
+//         call.args = call.args[:num_params]
+//         return True
+// 
+//     all_args = []
+// 
+//     if gather_arguments_for_call(call.get_range()[0], fdecl, proto, args, all_args):
+//         return True
+// 
+//     if isinstance(call, MethodCallExpr):
+//         all_args = all_args[1:]
+// 
+//     for i, a in enumerate(all_args):
+//         call.args[i] = a
+// 
+//     return False
+}
+
+
+fn sema::perform_implicit_conversion(f: Expr*, to_type: Type*, ics: ImplicitConversionSequence*) {
+  // XXX:
+//     // TODO: doit
+//     if ics.conversion_kind != 0:
+//         diag(
+//             f.get_range()[0],
+//             f"Invalid conversion {f.ty} => {to_type}",
+//             DIAG_ERROR,
+//             [f.get_range()],
+//         )
+//         // print(f, to_type)
+//     assert ics.conversion_kind == 0  // TODO:
+//     scs = ics.val
+//     from_type = f.ty
+//     // initial_from_type = from_type
+//     from .overload import ImplicitConversionKind
+// 
+//     match scs.first:
+//         case ImplicitConversionKind.IDENTITY:
+//             pass
+//         case ImplicitConversionKind.LVALUE_TO_RVALUE:
+//             f = default_lvalue_conversion(f)
+//             from_type = f.ty
+//         case ImplicitConversionKind.ARRAY_TO_POINTER:
+//             assert isinstance(from_type, ArrayType)
+//             from_type = PointerType(from_type.subtype)
+//             f_r = imp_cast_expr_to_type(
+//                 f, from_type, CastKind.ARRAY_TO_POINTER_DECAY, ValueKind.PRVALUE
+//             )
+//             assert f_r is not None
+//             f = f_r
+//         case ImplicitConversionKind.FUNCTION_TO_POINTER:
+//             from_type = from_type.get_pointer_type()
+//             f_r = imp_cast_expr_to_type(
+//                 f, from_type, CastKind.FUNCTION_TO_POINTER_DECAY
+//             )
+//             assert f_r is not None
+//             f = f_r
+//         case _:
+//             assert False, "unreachable"
+//     match scs.second:
+//         case ImplicitConversionKind.IDENTITY:
+//             pass
+//         case (
+//             ImplicitConversionKind.INTEGRAL_PROMOTION
+//             | ImplicitConversionKind.INTEGRAL_CONVERSION
+//         ):
+//             // el_ty = to_type
+//             // step_ty = to_type
+//             if to_type == TYPES["bool"]:
+//                 // assert(FromType->castAs<EnumType>()->getDecl()->isFixed() && SCS.Second == ICK_Integral_Promotion && "only enums with fixed underlying type can promote to bool");
+//                 f_r = imp_cast_expr_to_type(
+//                     f, to_type, CastKind.INTEGRAL_TO_BOOLEAN, ValueKind.PRVALUE
+//                 )
+//                 assert f_r is not None
+//                 f = f_r
+//             else:
+//                 f_r = imp_cast_expr_to_type(
+//                     f, to_type, CastKind.INTEGRAL_CAST, ValueKind.PRVALUE
+//                 )
+//                 assert f_r is not None
+//                 f = f_r
+//         // TODO: fixed point / floating point
+//         case ImplicitConversionKind.COMPATIBLE_CONVERSION:
+//             f_r = imp_cast_expr_to_type(f, to_type, CastKind.NOOP, f.value_kind)
+//             assert f_r is not None
+//             f = f_r
+//         case ImplicitConversionKind.POINTER_CONVERSION:
+//             // TODO:
+//             f_r = imp_cast_expr_to_type(f, to_type, CastKind.NOOP, f.value_kind)
+//             assert f_r is not None
+//             f = f_r
+//             //     QualType FromPteeType = From->getType()->getPointeeType();
+//             //     QualType ToPteeType = ToType->getPointeeType();
+//             //     QualType NewToType = ToType;
+//             //     if (!FromPteeType.isNull() && !ToPteeType.isNull() && FromPteeType.getAddressSpace() != ToPteeType.getAddressSpace()) {
+//             //       NewToType = Context.removeAddrSpaceQualType(ToPteeType);
+//             //       NewToType = Context.getAddrSpaceQualType(NewToType, FromPteeType.getAddressSpace());
+//             //       if (ToType->isObjCObjectPointerType()) NewToType = Context.getObjCObjectPointerType(NewToType);
+//             //       else if (ToType->isBlockPointerType()) NewToType = Context.getBlockPointerType(NewToType);
+//             //       else NewToType = Context.getPointerType(NewToType);
+//             //     }
+//             //     CastKind Kind;
+//             //     CXXCastPath BasePath;
+//             //     if (CheckPointerConversion(From, NewToType, Kind, BasePath, false)) return ExprError();
+//             //     if (Kind == CK_BlockPointerToObjCPointerCast) {
+//             //       ExprResult E = From;
+//             //       (void)ObjC().PrepareCastToObjCObjectPointer(E);
+//             //       From = E.get();
+//             //     }
+//             //     if (getLangOpts().allowsNonTrivialObjCLifetimeQualifiers()) ObjC().CheckObjCConversion(SourceRange(), NewToType, From, CCK);
+//             //     From = ImpCastExprToType(From, NewToType, Kind, VK_PRValue, &BasePath, CCK) .get();
+//         // TODO: pointer_member, derived_to_base
+//         case ImplicitConversionKind.BOOLEAN_CONVERSION:
+//             // if (From->getType()->isHalfType()) { From = ImpCastExprToType(From, Context.FloatTy, CK_FloatingCast).get(); FromType = Context.FloatTy; }
+//             f_r = imp_cast_expr_to_type(
+//                 f,
+//                 to_type,
+//                 scalar_type_to_boolean_cast_kind(from_type),
+//                 ValueKind.PRVALUE,
+//             )
+//             assert f_r is not None
+//             f = f_r
+//         case _:
+//             assert False, "unreachable"
+// 
+//     match scs.third:
+//         case ImplicitConversionKind.IDENTITY:
+//             pass
+//         case ImplicitConversionKind.FUNCTION_CONVERSION:
+//             assert False, "TODO: FUNCTION_CONVERSION"
+//         case ImplicitConversionKind.QUALIFICATION:
+//             assert False, "TODO: QUALIFICATION"
+//         case _:
+//             assert False, "unreachable"
+// 
+//     // if (!isCast(CCK)) diagnoseNullableToNonnullConversion(ToType, InitialFromType, From->getBeginLoc());
+//     return f
+}
+

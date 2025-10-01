@@ -1,0 +1,220 @@
+#include sema_stmt.nsh
+#include sema_scope.nsh
+#include sema_expr.nsh
+#include sema_constexpr.nsh
+#include ast_nodes_type.nsh
+#include diags.nsh
+
+fn sema::act_on_expr_stmt(fe: Expr*, discarded_value: bool) -> Expr* {
+  if (fe == nullptr) return nullptr;
+  let rge: LocRge;
+  cast<Stmt*>(fe)->get_range(&rge);
+  fe = sema::act_on_finish_full_expr(fe, rge.start, discarded_value, false);
+  if (fe == nullptr) return nullptr;
+  return fe;
+}
+
+fn sema::act_on_expr_stmt_error() -> Stmt* {
+  // DiscardCleanupsInEvaluationContext();
+  return nullptr;
+}
+
+fn sema::act_on_compound_stmt(lp_loc: Loc, rp_loc: Loc, elts: Stmt**, elt_cnt: i64) -> CompoundStmt* {
+  // num_elts = len(elts)
+  // if (num_elts != 0 && !CurrentInstantiationScope && getCurCompoundScope().HasEmptyLoopBodies):
+  //   for i in range(num_elts):
+  //     DiagnoseEmptyLoopBody(elts[i], elts[i + 1]);
+  return CompoundStmt::new(elts, elt_cnt, lp_loc, rp_loc);
+}
+
+fn sema::act_on_decl_stmt(d: Decl*, start_loc: Loc, end_loc: Loc) -> DeclStmt* {
+  if (d == nullptr) return nullptr;
+  return DeclStmt::new(start_loc, end_loc, d);
+}
+
+fn sema::act_on_if_stmt(if_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc, then_stmt: Stmt*, else_loc: Loc, else_stmt: Stmt*) -> IfStmt* {
+  let cond_expr: Expr*;
+  cond_expr = sema::check_boolean_condition(if_loc, cond, false, true);
+  if (cond_expr == nullptr) return nullptr;
+  cond_expr = sema::act_on_finish_full_expr(cond_expr, if_loc, false, false);
+  if (cond_expr == nullptr) return nullptr;
+  // if (!elseStmt) DiagnoseEmptyStmtBody(RParenLoc, thenStmt, diag::warn_empty_if_body);
+  return IfStmt::new(if_loc, cond_expr, lp_loc, rp_loc, then_stmt, else_loc, else_stmt);
+}
+
+fn sema::act_on_start_of_switch_stmt(switch_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc) -> SwitchStmt* {
+  let cond_expr: Expr*;
+  cond_expr = sema::act_on_finish_full_expr(cond, switch_loc, false, false);
+  if (cond_expr == nullptr) return nullptr;
+  if (!cond_expr->ty->is_integral_or_enumeration_type()) return nullptr;
+  // if cond_expr.isKnownToHaveBooleanValue(): diag(SwitchLoc, diag::warn_bool_switch_condition) << CondExpr->getSourceRange();
+  // set_function_has_branch_into_scope()
+  let ss: SwitchStmt*;
+  ss = SwitchStmt::new(switch_loc, cond_expr, lp_loc, rp_loc, nullptr);
+  // get_cur_function().switch_stack.append(switch_info(ss, False))
+  return ss;
+}
+
+fn sema::act_on_finish_switch_stmt(sl: Loc, stmt: SwitchStmt*, body: Stmt*) -> SwitchStmt* {
+  stmt->body = body;
+  return stmt;
+}
+
+fn sema::act_on_while_stmt(while_loc: Loc, lparen_loc: Loc, cond: Expr*, rparen_loc: Loc, body: Stmt*) -> WhileStmt* {
+  // assert cond is not None
+  let cond_expr: Expr*;
+  cond_expr = sema::check_boolean_condition(while_loc, cond, false, true);
+  if (cond_expr == nullptr) return nullptr;
+  cond_expr = sema::act_on_finish_full_expr(cond_expr, while_loc, false, false);
+  if (cond_expr == nullptr) return nullptr;
+  // if isinstance(body, NullStmt): /* getCurCompoundScope().setHasEmptyLoopBodies(); */ pass
+  return WhileStmt::new(while_loc, cond_expr, lparen_loc, rparen_loc, body);
+}
+
+fn sema::act_on_do_stmt(do_loc: Loc, body: Stmt*, while_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc) -> DoStmt* {
+  // assert cond is not None
+  let cond_expr: Expr*;
+  cond_expr = sema::check_boolean_condition(do_loc, cond, false, true);
+  if (cond_expr == nullptr) return nullptr;
+  cond_expr = sema::act_on_finish_full_expr(cond_expr, do_loc, false, false);
+  if (cond_expr == nullptr) return nullptr;
+  return DoStmt::new(body, cond_expr, do_loc, while_loc, rp_loc);
+}
+
+fn sema::act_on_default_stmt(default_loc: Loc, colon_loc: Loc, sub_stmt: Stmt*, scope: Scope*) -> DefaultStmt* {
+  // if (getCurFunction()->SwitchStack.empty()) {Diag(DefaultLoc, diag::err_default_not_in_switch); return SubStmt;}
+  let ds: DefaultStmt*;
+  ds = DefaultStmt::new(default_loc, colon_loc, sub_stmt);
+  // getCurFunction()->SwitchStack.back().getPointer()->addSwitchCase(DS);
+  return ds;
+}
+
+fn sema::act_on_case_expr(case_loc: Loc, val: Expr*) -> Expr* {
+  if (val == nullptr) return nullptr;
+  // if (DiagnoseUnexpandedParameterPack(Val.get())) return ExprError();
+  // if (getCurFunction()->SwitchStack.empty())
+  //   return ActOnFinishFullExpr(Val.get(), Val.get()->getExprLoc(), false, getLangOpts().CPlusPlus11);
+  //
+  // Expr *CondExpr = getCurFunction()->SwitchStack.back().getPointer()->getCond();
+  // if (!CondExpr) return ExprError();
+  // QualType CondType = CondExpr->getType();
+  //
+  // auto CheckAndFinish = [&](Expr *E) {
+  //   if (CondType->isDependentType() || E->isTypeDependent())
+  //     return ExprResult(E);
+  //
+  //   if (getLangOpts().CPlusPlus11) {
+  //     llvm::APSInt TempVal;
+  //     return CheckConvertedConstantExpression(E, CondType, TempVal, CCEK_CaseValue);
+  //   }
+  //
+  //   ExprResult ER = E;
+  //   if (!E->isValueDependent())
+  //     ER = VerifyIntegerConstantExpression(E, AllowFold);
+  //   if (!ER.isInvalid())
+  //     ER = DefaultLvalueConversion(ER.get());
+  //   if (!ER.isInvalid())
+  //     ER = ImpCastExprToType(ER.get(), CondType, CK_IntegralCast);
+  //   if (!ER.isInvalid())
+  //     ER = ActOnFinishFullExpr(ER.get(), ER.get()->getExprLoc(), false);
+  //   return ER;
+  // };
+  //
+  // ExprResult Converted = CorrectDelayedTyposInExpr(
+  //     Val, /*InitDecl=*/nullptr, /*RecoverUncorrectedTypos=*/false,
+  //     CheckAndFinish);
+  // if (Converted.get() == Val.get())
+  //   Converted = CheckAndFinish(Val.get());
+  // return Converted;
+  return val;
+}
+
+fn sema::act_on_case_stmt(case_loc: Loc, e: Expr*, colon_loc: Loc) -> CaseStmt* {
+  // assert e is not None, "missing LHS value"
+  // if (getCurFunction()->SwitchStack.empty()) {Diag(CaseLoc, diag::err_case_not_in_switch); return StmtError();}
+  // if (LHSVal.isInvalid()) {getCurFunction()->SwitchStack.back().setInt(true); return StmtError();}
+  let cs: CaseStmt*;
+  cs = CaseStmt::new(case_loc, colon_loc, nullptr, sema::eval_const_expr(e));
+  // getCurFunction()->SwitchStack.back().getPointer()->addSwitchCase(CS);
+  return cs;
+}
+
+fn sema::act_on_case_stmt_body(s: Stmt*, sub_stmt: Stmt*) {
+  // assert isinstance(s, CaseStmt)
+  cast<CaseStmt*>(s)->sub_stmt = sub_stmt;
+}
+
+fn sema::act_on_continue_stmt(cl: Loc, cur_scope: Scope*) -> ContinueStmt* {
+  let s: Scope*;
+  s = cur_scope->continue_parent;
+  if (s == nullptr) {
+    diag(cl, "'continue' statement not in loop statement", DIAG_ERROR);
+    return nullptr;
+  }
+  if (s->is_condition_var_scope()) {
+    diag(cl, "cannot jump from this continue statement to the loop increment; ", DIAG_ERROR);
+    return nullptr;
+  }
+  return ContinueStmt::new(cl);
+}
+
+fn sema::act_on_break_stmt(bl: Loc, cur_scope: Scope*) -> BreakStmt* {
+  let s: Scope*;
+  s = cur_scope->break_parent;
+  if (s == nullptr) {
+    diag(bl, "'break' statement not in loop or switch statement", DIAG_ERROR);
+    return nullptr;
+  }
+  return BreakStmt::new(bl);
+}
+
+fn sema::act_on_null_stmt(semi_loc: Loc) -> NullStmt* { 
+  return NullStmt::new(semi_loc); 
+}
+
+#include ast_nodes_decl.nsh
+lib let CUR_FN_DECL: FnDecl*;
+
+lib fn sema::check_case_expression(e: Expr*) -> bool { return true; }
+
+fn sema::act_on_return_stmt(return_loc: Loc, ret_val_expr: Expr*, scope: Scope*, allow_recovery: bool) -> ReturnStmt* {
+  if (CUR_FN_DECL == nullptr) return nullptr;
+
+  let fn_ret_type: Type*;
+  fn_ret_type = cast<FunctionType*>(CUR_FN_DECL->ty)->return_type;
+
+  // if (fd->isNoReturn()) Diag(ReturnLoc, diag::warn_noreturn_function_has_return_expr) << fd;
+  // if (fd->isMain() && RetValExp && isa<CXXBoolLiteralExpr>(RetValExp)) Diag(ReturnLoc, diag::warn_main_returns_bool_literal) << RetValExp->getSourceRange();
+
+  if (fn_ret_type == nullptr) {
+    if (ret_val_expr != nullptr) {
+      if (ret_val_expr->ty != nullptr) {
+        ret_val_expr = sema::ignored_value_conversions(ret_val_expr);
+        if (ret_val_expr == nullptr) return nullptr;
+        ret_val_expr = sema::imp_cast_expr_to_type(ret_val_expr, nullptr, CK_TO_VOID, VK_PRVALUE);
+        let s: String;
+        s.format("void function %s should not return a value", CUR_FN_DECL->name);
+        diag(return_loc, s.data, DIAG_ERROR); // add range ret_val_expr.get_range() if ret_val_expr is not none
+        s.destroy();
+      }
+      ret_val_expr = sema::act_on_finish_full_expr(ret_val_expr, return_loc, false, false);
+      if (ret_val_expr == nullptr) return nullptr;
+    }
+  } else if (ret_val_expr == nullptr) {
+      diag(return_loc, "diag::warn_return_missing_expr) << cast<NamedDecl>(fd) << false;", DIAG_WARNING);
+  } else {
+      // InitializedEntity Entity = InitializedEntity::InitializeResult(ReturnLoc, FnRetType);
+      // ret_val_exp = PerformMoveOrCopyInitialization(Entity, NRInfo, RetValExp, SupressSimplerImplicitMoves);
+      // if (Res.isInvalid() && AllowRecovery) Res = CreateRecoveryExpr(RetValExp->getBeginLoc(), RetValExp->getEndLoc(), RetValExp, FnRetType);
+      // if ret_val_expr is None: return None
+      // CheckReturnValExpr(RetValExp, FnRetType, ReturnLoc, false, Attrs, getCurFunctionDecl());
+      ret_val_expr = sema::act_on_finish_full_expr(ret_val_expr, return_loc, false, false);
+      if (ret_val_expr == nullptr) return nullptr;
+  }
+
+  return ReturnStmt::new(return_loc, ret_val_expr);
+}
+
+fn sema::diagnose_unused_expr_result(s: Stmt*, diag_id: CStr) {
+  // TODO:
+}

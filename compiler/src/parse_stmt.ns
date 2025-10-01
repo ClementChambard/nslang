@@ -1,0 +1,562 @@
+#include parse_stmt.nsh
+#include io.nsh
+#include ast_nodes_stmt.nsh
+#include parse_decl.nsh
+#include parser.nsh
+#include sema_scope.nsh
+#include diags.nsh
+#include sema_stmt.nsh
+#include sema_expr.nsh
+#include stdlib.nsh
+
+// forward decls
+lib fn parse_expr() -> Expr*;
+
+lib fn parse_if_stmt(trailing_else_loc: Loc*) -> IfStmt* {
+  // assert parser().tok.ty == Tok.KW_IF, "Not an if stmt!"
+  let if_loc: Loc;
+  let lparen_loc: Loc;
+  let rparen_loc: Loc;
+  let start: Loc;
+  let cond: Expr*;
+  let skip_until_buf: Tok[2];
+  let is_braced: bool;
+  let then_stmt_loc: Loc;
+  let else_loc: Loc;
+  let else_stmt_loc: Loc;
+  let else_stmt: Stmt*;
+  let inner_statement_trailing_else_loc: Loc;
+  let then_stmt: Stmt*;
+  skip_until_buf[0] = TOK_SEMI;
+  if_loc = parser()->consume_token();
+
+  if (parser()->tok->ty != TOK_LPAREN) {
+    diag(parser()->tok->loc, "expected '(' after 'if'", DIAG_ERROR);
+    parser()->skip_until(skip_until_buf, 1, false, false);
+    return nullptr;
+  }
+
+  parser()->enter_scope(SF_DECL | SF_CONTROL);
+
+  lparen_loc = parser()->consume_paren();
+  start = parser()->tok->loc;
+  cond = parse_expr();
+  
+  if (cond == nullptr) if (parser()->tok->ty != TOK_RPAREN) {
+    parser()->skip_until(skip_until_buf, 1, false, false);
+    if (parser()->tok->ty != TOK_RPAREN) {
+      parser()->exit_scope();
+      return nullptr;
+    }
+  }
+
+  if (cond == nullptr) {
+    let end: Loc;
+    end = start;
+    if (parser()->tok->loc != start) end = parser()->prev_tok_location;
+    cond = sema::create_recovery_expr(start, end, nullptr, 0, Type::get_builtin(BTK_BOOL));
+  }
+ 
+  rparen_loc = parser()->tok->loc;
+  parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
+
+  while (parser()->tok->ty == TOK_RPAREN) {
+    diag(parser()->tok->loc, "extraneous ')' after condition, expected a statement", DIAG_ERROR); // FixItHint::CreateRemoval(Tok.getLocation());
+    parser()->consume_paren();
+  }
+  
+  is_braced = parser()->tok->ty == TOK_LBRACE;
+  if (is_braced) parser()->enter_scope(SF_DECL);
+  
+  then_stmt_loc = parser()->tok->loc;
+  inner_statement_trailing_else_loc = 0;
+  then_stmt = parse_stmt(PSC_SUB_STMT, &inner_statement_trailing_else_loc);
+  if (is_braced) parser()->exit_scope();
+  
+  else_loc = 0;
+  else_stmt_loc = 0;
+  else_stmt = nullptr;
+  
+  if (parser()->tok->ty == TOK_KW_ELSE) {
+    if (trailing_else_loc != nullptr) *trailing_else_loc = parser()->tok->loc;
+    else_loc = parser()->consume_token();
+    is_braced = parser()->tok->ty == TOK_LBRACE;
+    if (is_braced) parser()->enter_scope(SF_DECL);
+    else_stmt_loc = parser()->tok->loc;
+    else_stmt = parse_stmt(PSC_SUB_STMT, nullptr);
+    if (is_braced) parser()->exit_scope();
+  } else if (inner_statement_trailing_else_loc != 0) {
+    diag(inner_statement_trailing_else_loc, "add explicit braces to avoid dangling else", DIAG_WARNING);
+  }
+  
+  parser()->exit_scope();
+  
+  if (then_stmt == nullptr) if (else_stmt == nullptr) return nullptr;
+  
+  if (then_stmt == nullptr) then_stmt = sema::act_on_null_stmt(then_stmt_loc);
+  if (else_stmt == nullptr) else_stmt = sema::act_on_null_stmt(else_stmt_loc);
+  
+  return sema::act_on_if_stmt(if_loc, lparen_loc, cond, rparen_loc, then_stmt, else_loc, else_stmt);
+}
+
+lib fn parse_case_stmt(stmt_ctx: ParsedStmtContext, missing_case: bool, expr: Expr*) -> Stmt* {
+  // assert missing_case or parser().tok.ty == Tok.KW_CASE, "Not a case stmt!"
+  let top_level_case: CaseStmt*;
+  let deepest_parsed_case_stmt: CaseStmt*;
+  let colon_loc: Loc;
+  top_level_case = nullptr;
+  deepest_parsed_case_stmt = nullptr;
+  colon_loc = 0;
+  while (true) {
+    if (!missing_case) if (parser()->tok->ty != TOK_KW_CASE) break;
+    let case_loc: Loc;
+    case_loc = 0;
+    if (!missing_case) case_loc = parser()->consume_token();
+    else {
+      // assert expr is not None
+      let rge: LocRge;
+      cast<Stmt*>(expr)->get_range(&rge);
+      case_loc = rge.start;
+    }
+    colon_loc = 0;
+
+    let lhs: Expr*;
+    lhs = nullptr;
+    if (!missing_case) {
+      lhs = parse_expr(); // parse_case_expression(case_loc);
+      if (lhs == nullptr) {
+        let skip_until_buf: Tok[2];
+        skip_until_buf[0] = TOK_COLON;
+        skip_until_buf[1] = TOK_RBRACE;
+        if (!parser()->skip_until(skip_until_buf, 2, true, true)) return nullptr;
+      }
+    } else {
+      lhs = expr;
+      missing_case = false;
+    }
+
+    if (parser()->try_consume_token(TOK_COLON, &colon_loc)) {
+      // ok
+    } else {
+      // check common typo: '::'
+      let expected_loc: Loc;
+      expected_loc = parser()->prev_tok_location; //get_loc_for_end_of_token
+      diag(expected_loc, "expected ':' after 'case'", DIAG_ERROR); // FixItHint::CreateInsertion(ExpectedLoc, ":");
+      colon_loc = expected_loc;
+    }
+
+    let case_stmt: CaseStmt*;
+    case_stmt = sema::act_on_case_stmt(case_loc, lhs, colon_loc);
+    if (case_stmt == nullptr) {
+      if (top_level_case == nullptr) return parse_stmt(stmt_ctx, nullptr);
+    } else {
+      let next_deepest: CaseStmt*;
+      next_deepest = case_stmt;
+      if (top_level_case == nullptr) top_level_case = case_stmt;
+      else {
+        // assert deepest_parsed_case_stmt is not None
+        sema::act_on_case_stmt_body(deepest_parsed_case_stmt, case_stmt);
+      }
+      deepest_parsed_case_stmt = next_deepest;
+    }
+  }
+
+  let sub_stmt: Stmt*;
+  sub_stmt = nullptr;
+
+  if (parser()->tok->ty == TOK_RBRACE) {
+    sub_stmt = sema::act_on_null_stmt(colon_loc);
+  } else {
+    sub_stmt = parse_stmt(stmt_ctx, nullptr);
+  }
+
+  if (deepest_parsed_case_stmt != nullptr) {
+    if (sub_stmt == nullptr) sub_stmt = sema::act_on_null_stmt(0);
+    // diagnose_label_followed_by_decl(sub_stmt)
+    sema::act_on_case_stmt_body(deepest_parsed_case_stmt, sub_stmt);
+  }
+
+  return top_level_case;
+}
+
+lib fn parse_default_stmt(stmt_ctx: ParsedStmtContext) -> DefaultStmt* {
+  // assert parser().tok.ty == Tok.KW_DEFAULT, "Not a default stmt!"
+  let default_loc: Loc;
+  let colon_loc: Loc;
+  let sub_stmt: Stmt*;
+  default_loc = parser()->consume_token();
+  colon_loc = 0;
+  if (parser()->try_consume_token(TOK_COLON, &colon_loc)) {
+    // ok: do nothing
+  } else if (parser()->try_consume_token(TOK_SEMI, &colon_loc)) {
+    diag(colon_loc, "expected ':' after 'default'", DIAG_ERROR); // FixItHint::CreateReplacement(ColonLoc, ":");
+  } else {
+    let expected_loc: Loc;
+    expected_loc = parser()->prev_tok_location; // get_loc_for_end_of_token
+    diag(expected_loc, "expected ':' after 'default'", DIAG_ERROR); // FixItHint::CreateInsertion(ExpectedLoc, ":");
+    colon_loc = expected_loc;
+  }
+  sub_stmt = nullptr;
+  if (parser()->tok->ty == TOK_RBRACE) {
+    sub_stmt = sema::act_on_null_stmt(colon_loc);
+  } else {
+    sub_stmt = parse_stmt(stmt_ctx, nullptr);
+  }
+  if (sub_stmt == nullptr) {
+    sub_stmt = sema::act_on_null_stmt(colon_loc);
+  }
+  // diagnose_label_followed_by_decl(sub_stmt)
+  return sema::act_on_default_stmt(default_loc, colon_loc, sub_stmt, parser()->cur_scope);
+}
+
+lib fn parse_switch_stmt(trailing_else_loc: Loc*) -> SwitchStmt* {
+  print("SWITCH STMT not implemented!!\n");
+  exit(1);
+  return nullptr;
+//     assert parser().tok.ty == Tok.KW_SWITCH, "Not a switch stmt!"
+//     switch_loc = parser().consume_token()
+// 
+//     if parser().tok.ty != Tok.LPAREN:
+//         diag(parser().tok.loc, "expected '(' after 'switch'", DIAG_ERROR)
+//         parser().skip_until(Tok.SEMI)
+//         return None
+// 
+//     parser().enter_scope(ScopeFlags.SWITCH | ScopeFlags.DECL | ScopeFlags.CONTROL)
+// 
+//     lparen_loc = parser().consume_paren()
+//     start = parser().tok.loc
+//     cond = parse_expr()
+// 
+//     if cond is None and parser().tok.ty != Tok.RPAREN:
+//         parser().skip_until(Tok.SEMI)
+//         if parser().tok.ty != Tok.RPAREN:
+//             parser().exit_scope()
+//             return None
+// 
+//     if cond is None:
+//         cond = actions.create_recovery_expr(
+//             start,
+//             start if parser().tok.loc == start else parser().prev_tok_location,
+//             [],
+//         )
+// 
+//     rparen_loc = parser().tok.loc
+//     parser().expect_and_consume(Tok.RPAREN)
+// 
+//     while parser().tok.ty == Tok.RPAREN:
+//         diag(
+//             parser().tok.loc,
+//             "extraneous ')' after condition, expected a statement",
+//             DIAG_ERROR,
+//         )  # FixItHint::CreateRemoval(Tok.getLocation());
+//         parser().consume_paren()
+// 
+//     switch = actions.act_on_start_of_switch_stmt(
+//         switch_loc, lparen_loc, cond, rparen_loc
+//     )
+//     if switch is None:
+//         if parser().tok.ty == Tok.LBRACE:
+//             parser().consume_brace()
+//             parser().skip_until(Tok.RBRACE)
+//         else:
+//             parser().skip_until(Tok.SEMI)
+//         return switch
+// 
+//     parser().cur_scope.flags |= ScopeFlags.BREAK
+// 
+//     has_lbrace = parser().tok.ty == Tok.LBRACE
+//     if has_lbrace:
+//         parser().enter_scope(ScopeFlags.DECL)
+// 
+//     body = parse_stmt(ParsedStmtContext.SUB_STMT, trailing_else_loc)
+//     assert body is not None
+// 
+//     if has_lbrace:
+//         parser().exit_scope()
+// 
+//     parser().exit_scope()
+// 
+//     return actions.act_on_finish_switch_stmt(switch_loc, switch, body)
+}
+
+lib fn parse_while_stmt(trailing_else_loc: Loc*) -> WhileStmt* {
+  // assert parser().tok.ty == Tok.KW_WHILE, "Not a while stmt!"
+  let while_loc: Loc;
+  let lparen_loc: Loc;
+  let rparen_loc: Loc;
+  let start: Loc;
+  let cond: Expr*;
+  let body: Stmt*;
+  let skip_until_buf: Tok[2];
+  let has_brace: bool;
+  skip_until_buf[0] = TOK_SEMI;
+  while_loc = parser()->consume_token();
+  if (parser()->tok->ty != TOK_LPAREN) {
+    diag(parser()->tok->loc, "expected '(' after 'while'", DIAG_ERROR);
+    parser()->skip_until(skip_until_buf, 1, false, false);
+    return nullptr;
+  }
+
+  parser()->enter_scope(SF_BREAK | SF_CONTINUE | SF_DECL | SF_CONTROL);
+
+  lparen_loc = parser()->consume_paren();
+  start = parser()->tok->loc;
+  cond = parse_expr();
+
+  if (cond == nullptr) if (parser()->tok->ty != TOK_RPAREN) {
+    parser()->skip_until(skip_until_buf, 1, false, false);
+    if (parser()->tok->ty != TOK_RPAREN) {
+      parser()->exit_scope();
+      return nullptr;
+    }
+  }
+
+  if (cond == nullptr) {
+    let end: Loc;
+    end = start;
+    if (parser()->tok->loc != start) end = parser()->prev_tok_location;
+    cond = sema::create_recovery_expr(start, end, nullptr, 0, Type::get_builtin(BTK_BOOL));
+  }
+
+  rparen_loc = parser()->tok->loc;
+  parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
+
+  has_brace = parser()->tok->ty == TOK_LBRACE;
+  if (has_brace) parser()->enter_scope(SF_DECL);
+
+  body = parse_stmt(PSC_SUB_STMT, trailing_else_loc);
+
+  if (has_brace) parser()->exit_scope();
+  parser()->exit_scope();
+
+  if (cond == nullptr) return nullptr;
+  if (body == nullptr) return nullptr;
+
+  return sema::act_on_while_stmt(while_loc, lparen_loc, cond, rparen_loc, body);
+}
+
+lib fn parse_do_stmt() -> DoStmt* {
+  // assert parser().tok.ty == Tok.KW_DO, "Not a do stmt!"
+  let do_loc: Loc;
+  let while_loc: Loc;
+  let lparen_loc: Loc;
+  let rparen_loc: Loc;
+  let start: Loc;
+  let has_lbrace: bool;
+  let body: Stmt*;
+  let cond: Expr*;
+  let skip_until_buf: Tok[2];
+  skip_until_buf[0] = TOK_SEMI;
+  do_loc = parser()->consume_token();
+
+  parser()->enter_scope(SF_BREAK | SF_CONTINUE | SF_DECL);
+
+  has_lbrace = parser()->tok->ty == TOK_LBRACE;
+  if (has_lbrace) parser()->enter_scope(SF_DECL);
+
+  body = parse_stmt(PSC_SUB_STMT, nullptr);
+
+  if (has_lbrace) parser()->exit_scope();
+
+  if (parser()->tok->ty != TOK_KW_WHILE) {
+    if (body != nullptr) {
+      diag(parser()->tok->loc, "expected 'while' in do/while loop", DIAG_ERROR);
+      diag(do_loc, "to match this 'do'", DIAG_NOTE);
+      parser()->skip_until(skip_until_buf, 1, false, true);
+    }
+    return nullptr;
+  }
+
+  while_loc = parser()->consume_token();
+
+  if (parser()->tok->ty != TOK_LPAREN) {
+    diag(parser()->tok->loc, "expected '(' after do/while", DIAG_ERROR);
+    parser()->skip_until(skip_until_buf, 1, false, true);
+    return nullptr;
+  }
+
+  lparen_loc = parser()->consume_paren();
+
+  start = parser()->tok->loc;
+
+  cond = parse_expr();
+
+  if (cond == nullptr) {
+    if (parser()->tok->ty != TOK_RPAREN) 
+      if (parser()->tok->ty != TOK_RSQUARE)
+        if (parser()->tok->ty != TOK_RBRACE) parser()->skip_until(skip_until_buf, 1, false, false);
+    let end: Loc;
+    end = start;
+    if (parser()->tok->loc != start) end = parser()->prev_tok_location;
+    cond = sema::create_recovery_expr(start, end, nullptr, 0, Type::get_builtin(BTK_BOOL));
+  }
+  rparen_loc = parser()->consume_paren();
+
+  parser()->exit_scope();
+
+  if (cond == nullptr) return nullptr;
+  if (body == nullptr) return nullptr;
+
+  return sema::act_on_do_stmt(do_loc, body, while_loc, lparen_loc, cond, rparen_loc);
+}
+
+lib fn parse_continue_stmt() -> ContinueStmt* {
+  let continue_loc: Loc;
+  continue_loc = parser()->consume_token();
+  return sema::act_on_continue_stmt(continue_loc, parser()->cur_scope);
+}
+
+lib fn parse_break_stmt() -> BreakStmt* {
+  let break_loc: Loc;
+  break_loc = parser()->consume_token();
+  return sema::act_on_break_stmt(break_loc, parser()->cur_scope);
+}
+
+// lib fn parse_initializer(); -> Unimplemented ...
+
+lib fn parse_return_stmt() -> ReturnStmt* {
+  // assert parser().tok.ty == Tok.KW_RETURN, "not a return stmt!"
+  let return_loc: Loc;
+  let return_expr: Expr*;
+  return_loc = parser()->consume_token();
+  return_expr = nullptr;
+  if (parser()->tok->ty != TOK_SEMI) {
+    // if (parser()->tok->ty == TOK_LBRACE) return_expr = parse_initializer(); else
+    return_expr = parse_expr();
+    if (return_expr == nullptr) {
+      let skip_until_buf: Tok[1];
+      skip_until_buf[0] = TOK_RBRACE;
+      parser()->skip_until(skip_until_buf, 1, true, true);
+      return nullptr;
+    }
+  }
+  return sema::act_on_return_stmt(return_loc, return_expr, parser()->cur_scope, false);
+}
+
+lib fn parse_expr_stmt(stmt_ctx: ParsedStmtContext) -> Stmt* {
+  let old_token_loc: Loc;
+  let expr: Expr*;
+  old_token_loc = parser()->tok->loc;
+
+  expr = parse_expr();
+  if (expr == nullptr) {
+    let skip_until_buf: Tok[1];
+    skip_until_buf[0] = TOK_RBRACE;
+    parser()->skip_until(skip_until_buf, 1, true, true);
+    if (parser()->tok->ty == TOK_SEMI) parser()->consume_token();
+    return sema::act_on_expr_stmt_error();
+  }
+
+  if (parser()->tok->ty == TOK_COLON) if (parser()->cur_scope->is_switch_scope()) if (sema::check_case_expression(expr)) {
+    diag(old_token_loc, "expected 'case' keyword before expression", DIAG_ERROR); // FixItHint::CreateInsertion(OldToken.getLocation(), "case ");
+    return parse_case_stmt(stmt_ctx, true, expr);
+  }
+
+  parser()->expect_and_consume_semi("expected ';' after expression", nullptr);
+
+  return sema::act_on_expr_stmt(expr, true);
+}
+
+lib fn parse_compound_stmt_body() -> CompoundStmt* {
+  if (parser()->tok->ty != TOK_LBRACE) return nullptr;
+  let open_loc: Loc;
+  let close_loc: Loc;
+  let stmts: DArray;
+  let out: CompoundStmt*;
+  open_loc = parser()->consume_brace();
+  // sema::push_compound_scope(false);
+  stmts.init();
+
+  while (parser()->tok->ty != TOK_RBRACE) {
+    if (parser()->tok->ty == TOK_EOF) break;
+    let stmt: Stmt*;
+    stmt = parse_stmt(PSC_COMPOUND, nullptr);
+    if (stmt != nullptr) stmts.push(stmt);
+  }
+
+  close_loc = parser()->consume_brace();
+  out = sema::act_on_compound_stmt(open_loc, close_loc, cast<Stmt**>(stmts.data), stmts.len);
+  // sema::pop_compound_scope();
+  return out;
+}
+
+lib fn parse_compound_stmt(scope_flags: ScopeFlags) -> CompoundStmt* {
+  // assert parser().tok.ty == Tok.LBRACE, "not a compound stmt!"
+  parser()->enter_scope(scope_flags);
+  let out: CompoundStmt*;
+  out = parse_compound_stmt_body();
+  parser()->exit_scope();
+  return out;
+}
+
+lib fn parse_stmt(stmt_ctx: ParsedStmtContext, trailing_else_loc: Loc*) -> Stmt* {
+  let semi_error: CStr;
+  let res: Stmt*;
+  let tok_ty: Tok;
+  semi_error = "";
+  res = nullptr;
+  tok_ty = parser()->tok->ty;
+  // XXX: what was this for ? I forgot...
+  // if parser().tok.ty == Tok.IDENT:
+  //     if colon after, parse label statement
+  //     next_tok = parser().next_token()
+  //     if next_tok.ty != Tok.COLONCOLON:
+  //         typo correct ident
+  //         if it is now a keyword, retry
+  if (tok_ty == TOK_KW_CASE) return parse_case_stmt(stmt_ctx, false, nullptr);
+  else if (tok_ty == TOK_KW_DEFAULT) return parse_default_stmt(stmt_ctx);
+  else if (tok_ty == TOK_LBRACE) return parse_compound_stmt(SF_DECL | SF_COMPOUND_STMT);
+  else if (tok_ty == TOK_SEMI) return sema::act_on_null_stmt(parser()->consume_token());
+  else if (tok_ty == TOK_KW_IF) return parse_if_stmt(trailing_else_loc);
+  else if (tok_ty == TOK_KW_SWITCH) return parse_switch_stmt(trailing_else_loc);
+  else if (tok_ty == TOK_KW_WHILE) return parse_while_stmt(trailing_else_loc);
+  else if (tok_ty == TOK_KW_DO) {
+    res = parse_do_stmt();
+    semi_error = "do/while";
+  } else if (tok_ty == TOK_KW_FOR) {
+    print("'for' is not implemented\n");
+    exit(1);
+  } else if (tok_ty == TOK_KW_CONTINUE) {
+    res = parse_continue_stmt();
+    semi_error = "continue";
+  } else if (tok_ty == TOK_KW_BREAK) {
+    res = parse_break_stmt();
+    semi_error = "break";
+  } else if (tok_ty == TOK_KW_RETURN) {
+    res = parse_return_stmt();
+    semi_error = "return";
+  } else if (is_declaration_statement()){
+    let decl_start: Loc;
+    let decl_end: Loc;
+    let decl: Decl*;
+    decl_start = parser()->tok->loc;
+    decl_end = 0;
+    decl = parse_decl(DC_BLOCK, &decl_end);
+    return sema::act_on_decl_stmt(decl, decl_start, decl_end);
+  } else if (tok_ty == TOK_RBRACE) {
+    diag(parser()->tok->loc, "expected statement", DIAG_ERROR);
+    return nullptr;
+  } else {
+    return parse_expr_stmt(stmt_ctx);
+  }
+
+  if (!parser()->try_consume_token(TOK_SEMI, nullptr)) if (res != nullptr) {
+    parser()->expect_and_consume(TOK_SEMI, "expected ';' after %s statement", semi_error);
+    let skip_until_buf: Tok[1];
+    skip_until_buf[0] = TOK_RBRACE;
+    parser()->skip_until(skip_until_buf, 1, true, true);
+  }
+  return res;
+}
+
+lib fn is_declaration_statement() -> bool {
+  let ty: Tok;
+  ty = parser()->tok->ty;
+  if (ty == TOK_KW_LET) return true;
+  if (ty == TOK_KW_FN) return true;
+  if (ty == TOK_KW_LIB) return true;
+  if (ty == TOK_KW_TYPE) return true;
+  if (ty == TOK_KW_STRUCT) return true;
+  if (ty == TOK_KW_ENUM) return true;
+  return false;
+}

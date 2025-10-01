@@ -1,0 +1,220 @@
+#include ast_nodes_decl.nsh
+#include ast_nodes_stmt.nsh
+#include ast_nodes_type.nsh
+#include mem.nsh
+
+fn Decl::ast_free(self: Decl*) {
+  if (self == nullptr) return;
+  if (self->kind == DECLKIND_TU) {
+    let i: i64;
+    i = 0;
+    while (i < cast<TranslationUnitDecl*>(self)->decls_count) {
+      cast<TranslationUnitDecl*>(self)->decls[i]->ast_free();
+      i += 1;
+    }
+    free(cast<TranslationUnitDecl*>(self)->decls);
+  }
+  if (self->kind == DECLKIND_ENUM) {
+    let i: i64;
+    i = 0;
+    while (i < cast<EnumDecl*>(self)->variants_count) {
+      free(cast<EnumDecl*>(self)->variants[i]);
+      i += 1;
+    }
+    free(cast<EnumDecl*>(self)->variants);
+  }
+  if (self->kind == DECLKIND_STRUCT) {
+    let i: i64;
+    i = 0;
+    while (i < cast<StructDecl*>(self)->fields.len) {
+      free(cast<StructDecl*>(self)->fields[i]);
+      i += 1;
+    }
+    cast<StructDecl*>(self)->fields.destroy();
+  }
+  if (self->kind == DECLKIND_FN) {
+    let i: i64;
+    i = 0;
+    while (i < cast<FnDecl*>(self)->param_decls_count) {
+      free(cast<FnDecl*>(self)->param_decls[i]);
+      i += 1;
+    }
+    free(cast<FnDecl*>(self)->param_decls);
+    cast<Stmt*>(cast<FnDecl*>(self)->body)->ast_free();
+  }
+  if (self->kind >= DECLKIND_NAMED) {
+    free(cast<NamedDecl*>(self)->name);
+  }
+  free(self);
+}
+
+fn TranslationUnitDecl::new(decls: Decl**, decls_count: i64) -> TranslationUnitDecl* {
+  let self: TranslationUnitDecl*;
+  self = malloc(sizeof(TranslationUnitDecl));
+  self->kind = DECLKIND_TU;
+  self->is_lib = false;
+  self->src_range.start = 1;
+  self->src_range.end = 1;
+  if (decls_count > 0) {
+    self->src_range.start = decls[0]->src_range.start;
+    self->src_range.end = decls[decls_count - 1]->src_range.end;
+  }
+  self->decls = decls;
+  self->decls_count = decls_count;
+  return self;
+}
+
+lib fn TypeDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> TypeDecl* {
+  let self: TypeDecl*;
+  self = malloc(sizeof(TypeDecl));
+  self->kind = DECLKIND_TYPE;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  return self;
+}
+
+fn EnumVariantDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*, val: i64) -> EnumVariantDecl* {
+  let self: EnumVariantDecl*;
+  self = malloc(sizeof(EnumVariantDecl));
+  self->kind = DECLKIND_ENUMVARIANT;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  self->val = val;
+  return self;
+}
+
+fn EnumDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*, variants: EnumVariantDecl**, variants_count: i64) -> EnumDecl* {
+  let self: EnumDecl*;
+  self = malloc(sizeof(EnumDecl));
+  self->kind = DECLKIND_ENUM;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  self->variants = variants;
+  self->variants_count = variants_count;
+  return self;
+}
+
+fn FieldDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> FieldDecl* {
+  let self: FieldDecl*;
+  self = malloc(sizeof(FieldDecl));
+  self->kind = DECLKIND_FIELD;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  return self;
+}
+
+fn VarDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> VarDecl* {
+  let self: VarDecl*;
+  self = malloc(sizeof(VarDecl));
+  self->kind = DECLKIND_VAR;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  return self;
+}
+
+fn ParamDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> ParamDecl* {
+  let self: ParamDecl*;
+  self = malloc(sizeof(ParamDecl));
+  self->kind = DECLKIND_PARAM;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  return self;
+}
+
+fn StructDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> StructDecl* {
+  let self: StructDecl*;
+  self = malloc(sizeof(StructDecl));
+  self->kind = DECLKIND_STRUCT;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->ty = ty;
+  self->fields.init();
+  self->first_field_is_super = false;
+  return self;
+}
+
+fn FnDecl::new(sl: Loc, el: Loc, name: CStr, param_decls: ParamDecl**, param_decls_count: i64, return_type: Type*, is_vararg: bool) -> FnDecl* {
+  let self: FnDecl*;
+  self = malloc(sizeof(FnDecl));
+  self->kind = DECLKIND_FN;
+  self->is_lib = false;
+  self->src_range.start = sl;
+  self->src_range.end = el;
+  self->name = strdup(name);
+  self->param_decls = param_decls;
+  self->param_decls_count = param_decls_count;
+  self->is_vararg = is_vararg;
+  self->body = nullptr;
+
+  let arr: Type**;
+  arr = nullptr;
+  if (param_decls_count != 0) {
+    arr = malloc(sizeof(Type*) * param_decls_count);
+    let i: i64;
+    i = 0;
+    while (i < param_decls_count) {
+      arr[i] = param_decls[i]->ty;
+      i += 1;
+    }
+  }
+  self->ty = Type::get_function(return_type, arr, param_decls_count, is_vararg);
+  return self;
+}
+
+fn FnDecl::set_body(self: FnDecl*, body: CompoundStmt*) {
+  let rge: LocRge;
+  cast<Stmt*>(body)->get_range(&rge);
+  self->body = body;
+  self->src_range.end = rge.end;
+}
+
+fn FnDecl::get_params_range(self: FnDecl*, out: LocRge*) {
+  // TODO:
+  if (self->param_decls_count > 0) {
+    out->start = self->param_decls[0]->src_range.start;
+    out->end = self->param_decls[self->param_decls_count - 1]->src_range.end;
+  } else if (self->body == nullptr) {
+    out->start = self->src_range.start;
+    out->end = self->src_range.end;
+  } else {
+    out->start = self->src_range.start;
+    let rge: LocRge;
+    cast<Stmt*>(self->body)->get_range(&rge);
+    out->end = rge.start;
+  }
+}
+
+
+fn Decl::is_named(self: Decl*) -> bool {
+  return self->kind >= DECLKIND_NAMED;
+}
+
+fn Decl::is_value(self: Decl*) -> bool {
+  if (self->kind < DECLKIND_VALUE) return false;
+  return self->kind <= DECLKIND_FN;
+}
+
+fn Decl::is_type(self: Decl*) -> bool {
+  return self->kind >= DECLKIND_TYPE;
+}
+

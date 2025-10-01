@@ -1,0 +1,27 @@
+#include ast_nodes_unqualified_id.nsh
+#include mem.nsh
+
+fn UnqualifiedId::new() -> UnqualifiedId* {
+  let self: UnqualifiedId*;
+  self = malloc(sizeof(UnqualifiedId));
+  self->kind = UIDK_IDENTIFIER;
+  self->value = nullptr;
+  self->start_location = 0;
+  self->end_location = 0;
+}
+
+fn UnqualifiedId::is_valid(self: UnqualifiedId*) -> bool {
+  return self->start_location != 0;
+}
+
+fn UnqualifiedId::set_identifier(self: UnqualifiedId*, i: IdentInfo*, idloc: Loc) {
+  self->kind = UIDK_IDENTIFIER;
+  self->value = i;
+  self->start_location = idloc;
+  self->end_location = idloc;
+}
+
+fn UnqualifiedId::get_range(self: UnqualifiedId*, out: LocRge*) {
+  out->start = self->start_location;
+  out->end = self->end_location;
+}

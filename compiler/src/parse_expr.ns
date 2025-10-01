@@ -1,0 +1,470 @@
+#include ast_nodes_type.nsh
+#include parse_type.nsh
+#include parse_expr.nsh
+#include parser.nsh
+#include diags.nsh
+#include sema_expr.nsh
+#include sema_constexpr.nsh
+#include io.nsh
+#include stdlib.nsh
+
+fn prec_from_bin_op(tok: Tok) -> Prec {
+  if (tok == TOK_EQUAL) return PREC_ASSIGN;
+  if (tok == TOK_STAREQUAL) return PREC_ASSIGN;
+  if (tok == TOK_SLASHEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_PERCENTEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_PLUSEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_MINUSEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_LESSLESSEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_GREATERGREATEREQUAL) return PREC_ASSIGN;
+  if (tok == TOK_AMPEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_CARETEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_PIPEEQUAL) return PREC_ASSIGN;
+  if (tok == TOK_QUESTION) return PREC_COND;
+  if (tok == TOK_PIPEPIPE) return PREC_OR;
+  if (tok == TOK_AMPAMP) return PREC_AND;
+  if (tok == TOK_PIPE) return PREC_BOR;
+  if (tok == TOK_CARET) return PREC_XOR;
+  if (tok == TOK_AMP) return PREC_BAND;
+  if (tok == TOK_EQUALEQUAL) return PREC_EQ;
+  if (tok == TOK_EXCLAIMEQUAL) return PREC_EQ;
+  if (tok == TOK_LESSEQUAL) return PREC_COMP;
+  if (tok == TOK_LESS) return PREC_COMP;
+  if (tok == TOK_GREATEREQUAL) return PREC_COMP;
+  if (tok == TOK_GREATER) return PREC_COMP;
+  if (tok == TOK_LESSLESS) return PREC_SHIFT;
+  if (tok == TOK_GREATERGREATER) return PREC_SHIFT;
+  if (tok == TOK_PLUS) return PREC_PLUS;
+  if (tok == TOK_MINUS) return PREC_PLUS;
+  if (tok == TOK_PERCENT) return PREC_STAR;
+  if (tok == TOK_SLASH) return PREC_STAR;
+  if (tok == TOK_STAR) return PREC_STAR;
+  return PREC_UNKNOWN;
+}
+
+fn parse_expr() -> Expr* { 
+  let lhs: Expr*;
+  lhs = parse_assignment_expr();
+  return parse_rhs_of_binary_expr(lhs, PREC_COMMA);
+}
+
+fn parse_integer_constexpr(loc: Loc*) -> i64 { 
+  let e: Expr*;
+  let rge: LocRge;
+  e = parse_expr();
+  cast<Stmt*>(e)->get_range(&rge);
+  if (loc != nullptr) *loc = rge.end;
+  if (!e->ty->is_integer_type()) {
+    diag(rge.start, "Expected integer constexpr", DIAG_ERROR); // [e.get_range()];
+    return 0;
+  }
+  return sema::eval_const_expr(e);
+}
+
+fn parse_expression_list(exprs: Expr***, exprs_count: i64*) -> bool {
+  let saw_error: bool;
+  saw_error = false;
+  let array: DArray;
+  array.init();
+  while (true) {
+    let expr: Expr*;
+    expr = nullptr;
+    // if (parser()->tok->ty == TOK_LBRACE) {
+    //   diag::warn_cxx98_compat_generalized_initializer_lists
+    //   expr = parse_brace_initializer();
+    // } else {
+      expr = parse_assignment_expr();
+    // }
+    // if (parser()->tok->ty == TOK_ELLIPSIS) {
+    //   expr = sema::act_on_pack_expansion(expr, parser()->consume_token());
+    // }
+    if (expr == nullptr) {
+      saw_error = true;
+      let skip_until_buf: Tok[2];
+      skip_until_buf[0] = TOK_COMMA;
+      skip_until_buf[1] = TOK_RPAREN;
+      parser()->skip_until(skip_until_buf, 1, false, true);
+    } else {
+      array.push(expr);
+    }
+    if (parser()->tok->ty != TOK_COMMA) break;
+    parser()->consume_token();
+  }
+  return saw_error;
+  if (exprs != nullptr) *exprs = array.data;
+  if (exprs_count != nullptr) *exprs_count = array.len;
+}
+
+fn parse_postfix_expression_suffix(lhs: Expr*) -> Expr* {
+  let loc: Loc;
+  loc = 0;
+  while (true) {
+    let ty: Tok;
+    ty = parser()->tok->ty;
+    if ((ty == TOK_PLUSPLUS) | (ty == TOK_MINUSMINUS)) {
+      if (lhs != nullptr) {
+        let arg: Expr*;
+        arg = lhs;
+        lhs = sema::act_on_postfix_unary_op(parser()->cur_scope, parser()->tok->loc, parser()->tok->ty, arg);
+        if (lhs == nullptr) {
+          // XXX: TODO
+          // lhs = sema::create_recovery_expr(arg->get_begin_loc(), parser()->tok->loc, arg);
+        }
+      }
+      parser()->consume_token();
+    } else if (ty == TOK_LSQUARE) {
+      let loc: Loc;
+      let rloc: Loc;
+      let arg_exprs: Expr**;
+      let arg_count: i64;
+      let had_error: bool;
+      loc = parser()->consume_bracket();
+      had_error = false;
+      if (parse_expression_list(&arg_exprs, &arg_count)) {
+        had_error = true;
+      }
+      rloc = parser()->tok->loc;
+      if ((lhs != nullptr) & (!had_error) & (parser()->tok->ty == TOK_RSQUARE)) {
+        lhs = sema::act_on_array_subscript_expr(parser()->cur_scope, lhs, loc, arg_exprs, arg_count, rloc);
+      } else {
+        lhs = nullptr;
+      }
+      parser()->consume_bracket();
+    } else if (ty == TOK_LPAREN) {
+      let loc: Loc;
+      let arg_exprs: Expr**;
+      let arg_count: i64;
+      let skip_until_buf: Tok[1];
+      arg_exprs = nullptr;
+      arg_count = 0;
+      skip_until_buf[0] = TOK_RPAREN;
+      loc = parser()->consume_paren();
+      if (parser()->tok->ty != TOK_RPAREN) {
+        if (parse_expression_list(&arg_exprs, &arg_count)) {
+          lhs = nullptr;
+        }
+      }
+      if (lhs == nullptr) {
+        parser()->skip_until(skip_until_buf, 1, true, false);
+      } else if (parser()->tok->ty != TOK_RPAREN) {
+        parser()->skip_until(skip_until_buf, 1, true, false);
+        lhs = nullptr;
+      } else {
+        let fun: Expr*;
+        fun = lhs;
+        let rpar_loc: Loc;
+        rpar_loc = parser()->consume_paren();
+        lhs = sema::act_on_call_expr(parser()->cur_scope, fun, loc, arg_exprs, arg_count, rpar_loc);
+        if (lhs == nullptr) {
+          // XXX: TODO
+          // arg_exprs = [fn] + arg_exprs
+          // lhs = sema::create_recovery_expr(fn.get_range()[0], rpar_loc, arg_exprs)
+        }
+      }
+    } else if ((ty == TOK_ARROW) | (ty == TOK_PERIOD)) {
+      let opkind: Tok;
+      let oploc: Loc;
+      let orig_lhs: Expr*;
+      let name: UnqualifiedId*;
+      opkind = parser()->tok->ty;
+      oploc = parser()->consume_token();
+      orig_lhs = lhs;
+      name = UnqualifiedId::new();
+      if (parse_unqualified_id(name)) {
+        lhs = nullptr;
+      }
+      if (lhs != nullptr) {
+        lhs = sema::act_on_member_access_expr(parser()->cur_scope, lhs, oploc, opkind, nullptr, name);       
+      }
+      if (lhs == nullptr) if (orig_lhs != nullptr) if (name != nullptr) {
+        // XXX: TODO
+        // lhs = sema::create_recovery_expr(orig_lhs.get_range()[0], name.get_range()[1], [orig_lhs]);
+      }
+    } else {
+      break;
+    }
+  }
+  return lhs;
+}
+
+fn parse_unqualified_id(out: UnqualifiedId*) -> bool {
+  if (parser()->tok->ty != TOK_IDENT) {
+        // kw_operator
+        // tilde (for destructor name)
+        // transform_type_trait => parse ident
+    diag(parser()->tok->loc, "Expected unqualified identifier", DIAG_ERROR);
+    return true;
+  }
+  let idinf: IdentInfo*;
+  let idloc: Loc;
+  idinf = cast<IdentInfo*>(parser()->tok->value);
+  idloc = parser()->consume_token();
+  out->set_identifier(idinf, idloc);
+  return false;
+}
+
+fn parse_unit_expr() -> Expr* {
+  let res: Expr*;
+  let saved_kind: Tok;
+  res = nullptr;
+  saved_kind = parser()->tok->ty;
+  if (saved_kind == TOK_LPAREN) {
+    let open_loc: Loc;
+    open_loc = parser()->consume_paren();
+    res = parse_expr();
+    if (res != nullptr) if (parser()->tok->ty == TOK_RPAREN) {
+      res = sema::act_on_paren_expr(open_loc, parser()->tok->loc, res);
+    }
+    if (res == nullptr) {
+      let skip_buf: Tok[1];
+      skip_buf[0] = TOK_RPAREN;
+      parser()->skip_until(skip_buf, 1, true, false);
+    } else {
+      parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
+    }
+  } else if (saved_kind == TOK_NUM) {
+    res = sema::act_on_numeric_constant(parser()->tok);
+    parser()->consume_token();
+  } else if ((saved_kind == TOK_KW_TRUE) | (saved_kind == TOK_KW_FALSE)) {
+    res = sema::act_on_bool_literal(parser()->consume_token(), saved_kind);
+  } else if (saved_kind == TOK_KW_NULLPTR) {
+    res = sema::act_on_nullptr_literal(parser()->consume_token());
+  } else if (saved_kind == TOK_KW_VAARG) {
+    let start_loc: Loc;
+    let end_loc: Loc;
+    let ty: Type*;
+    start_loc = parser()->consume_token();
+    parser()->expect_and_consume(TOK_LESS, nullptr, nullptr);
+    ty = parse_type();
+    end_loc = parser()->tok->loc;
+    parser()->expect_and_consume(TOK_GREATER, nullptr, nullptr);
+    res = sema::act_on_vaarg_expr(ty, start_loc, end_loc);
+  } else if (saved_kind == TOK_IDENT) {
+    let ii: IdentInfo*;
+    let iloc: Loc;
+    let ss: StructType*;
+    ii = cast<IdentInfo*>(parser()->tok->value);
+    iloc = parser()->consume_token();
+    ss = nullptr;
+    if (parser()->tok->ty == TOK_COLONCOLON) {
+      parser()->consume_token();
+      if (parser()->tok->ty != TOK_IDENT) {
+        print("TODO: error handling\n"); exit(1);
+      }
+      let scope_ii: IdentInfo*;
+      let scope_loc: Loc;
+      scope_ii = ii;
+      scope_loc = iloc;
+      ii = cast<IdentInfo*>(parser()->tok->value);
+      iloc = parser()->consume_token();
+      ss = sema::act_on_scoped_identifier(parser()->cur_scope, scope_ii, scope_loc);
+    }
+    let name: UnqualifiedId*;
+    let replacement: Token*;
+    name = UnqualifiedId::new();
+    replacement = nullptr; // new Token
+    name->set_identifier(ii, iloc);
+    res = sema::act_on_id_expression(parser()->cur_scope, ss, name, parser()->tok->ty == TOK_LPAREN, replacement); // if parser()->tok->ty == TOK_RPAREN else None
+    if (res == nullptr) {
+      parser()->unconsume_token(replacement);
+      return parse_unit_expr();
+    }
+  } else if (saved_kind == TOK_CHR) {
+    res = sema::act_on_character_constant(parser()->tok);
+    parser()->consume_token();
+  } else if (saved_kind == TOK_STR) {
+    let string_toks: DArray;
+    string_toks.init();
+    while (parser()->tok->ty == TOK_STR) {
+      string_toks.push(parser()->tok);
+      parser()->consume_any_token();
+    }
+    res = sema::act_on_string_literal(cast<Token**>(string_toks.data), string_toks.len);
+  } else if (tok_is_builtin(saved_kind)) {
+    return parse_builtin_expression();
+  } else if ((saved_kind == TOK_PLUSPLUS) | (saved_kind == TOK_MINUSMINUS)) {
+    let saved_loc: Loc;
+    saved_loc = parser()->consume_token();
+    res = parse_unit_expr();
+    if (res != nullptr) {
+      let arg: Expr*;
+      arg = res;
+      res = sema::act_on_unary_op(parser()->cur_scope, saved_loc, saved_kind, arg);
+      if (res == nullptr) {
+        // XXX: TODO
+        // res = sema::create_recovery_expr(saved_tok2.loc, arg.get_range()[1], arg)
+      }
+    }
+  } else if ((saved_kind == TOK_AMP) | (saved_kind == TOK_STAR) | (saved_kind == TOK_PLUS) | (saved_kind == TOK_MINUS) | (saved_kind == TOK_TILDE) | (saved_kind == TOK_EXCLAIM)) {
+    let saved_loc: Loc;
+    saved_loc = parser()->consume_token();
+    res = parse_unit_expr();
+    if (res != nullptr) {
+      let arg: Expr*;
+      arg = res;
+      res = sema::act_on_unary_op(parser()->cur_scope, saved_loc, saved_kind, arg);
+      if (res == nullptr) {
+        // XXX: TODO
+        // res = sema::create_recovery_expr(parser()->tok->loc, arg.get_range()[1], arg);
+      }
+    }
+  } else if (saved_kind == TOK_KW_CAST) {
+    let start_loc: Loc;
+    let end_loc: Loc;
+    let ty: Type*;
+    let expr: Expr*;
+    start_loc = parser()->consume_token();
+    parser()->expect_and_consume(TOK_LESS, nullptr, nullptr);
+    ty = parse_type();
+    parser()->expect_and_consume(TOK_GREATER, nullptr, nullptr);
+    parser()->expect_and_consume(TOK_LPAREN, nullptr, nullptr);
+    expr = parse_expr();
+    end_loc = parser()->tok->loc;
+    parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
+    res = sema::act_on_explicit_cast(ty, expr, start_loc, end_loc);
+  } else if (saved_kind == TOK_KW_SIZEOF) {
+    let start_loc: Loc;
+    let end_loc: Loc;
+    let ty: Type*;
+    let expr: Expr*;
+    start_loc = parser()->consume_token();
+    parser()->expect_and_consume(TOK_LPAREN, nullptr, nullptr);
+    ty = nullptr;
+    expr = nullptr;
+    if (is_start_of_type()) {
+      ty = parse_type();
+    } else {
+      expr = parse_expr();
+      ty = expr->ty;
+    }
+    if (ty == nullptr) {
+      diag(start_loc, "sizeof on invalid type", DIAG_ERROR);
+      ty = Type::get_builtin(BTK_I64);
+    }
+    end_loc = parser()->tok->loc;
+    parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
+    res = sema::act_on_sizeof_expr(ty, expr, start_loc, end_loc);
+  }
+  return parse_postfix_expression_suffix(res);
+}
+
+fn parse_builtin_expression() -> Expr* {
+  // assert parser().tok.ty.is_builtin(), "not a builtin expression"
+  let builtin_tok: Token*;
+  let rparen_loc: Loc;
+  let arg_exprs: Expr**;
+  let arg_count: i64;
+  builtin_tok = parser()->tok;
+  parser()->consume_token();
+  if (parser()->tok->ty != TOK_LPAREN) return nullptr;
+  parser()->consume_paren();
+  if (parser()->tok->ty == TOK_RPAREN) {
+    rparen_loc = parser()->consume_paren();
+    return sema::act_on_builtin_expr(builtin_tok, rparen_loc, nullptr, 0);
+  }
+
+  if (parse_expression_list(&arg_exprs, &arg_count)) {
+    return nullptr; // ?
+  }
+  rparen_loc = parser()->tok->loc;
+  parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
+  return sema::act_on_builtin_expr(builtin_tok, rparen_loc, arg_exprs, arg_count);
+}
+
+fn parse_assignment_expr() -> Expr* {
+  let lhs: Expr*;
+  lhs = parse_unit_expr();
+  return parse_rhs_of_binary_expr(lhs, PREC_ASSIGN);
+}
+
+fn parse_rhs_of_binary_expr(lhs: Expr*, prec: Prec) -> Expr* {
+  let next_tok_prec: Prec;
+  let colon_loc: Loc;
+  next_tok_prec = prec_from_bin_op(parser()->tok->ty);
+  colon_loc = 0;
+  while (true) {
+    let op_token_ty: Tok;
+    let op_token_loc: Loc;
+    let ternary_middle: Expr*;
+    if (next_tok_prec < prec) return lhs;
+    op_token_ty = parser()->tok->ty;
+    if (parser()->tok->ty == TOK_COMMA) {
+      return lhs;
+    }
+    op_token_loc = parser()->consume_token();
+    ternary_middle = nullptr;
+    if (next_tok_prec == PREC_COND) {
+      // if (parser()->tok->ty == TOK_LBRACE) {
+        // // brace_loc = parser().tok.loc
+        // ternary_middle = parse_brace_initializer();
+        // if (ternary_middle != nullptr) {
+        //   diag(op_token_loc, "initializer list cannot be used on the left hand side of operator ':'", DIAG_ERROR)  // sema::get_expr_range(ternary_middle)
+        //   ternary_middle = nullptr;
+        // }
+      // } else 
+      if (parser()->tok->ty != TOK_COLON) {
+        ternary_middle = parse_expr();
+      } else {
+        ternary_middle = nullptr;
+        diag(op_token_loc, "ext_gnu_conditional_expr", DIAG_WARNING);
+      }
+      if (ternary_middle == nullptr) {
+        lhs = nullptr;
+        ternary_middle = nullptr;
+      }
+      if (!parser()->try_consume_token(TOK_COLON, &colon_loc)) {
+        diag(op_token_loc, "expected ':'", DIAG_ERROR);
+        diag(op_token_loc, "to match this '?'", DIAG_NOTE);
+      }
+    }
+    let rhs: Expr*;
+    rhs = nullptr;
+    if (next_tok_prec <= PREC_COND) {
+      rhs = parse_assignment_expr();
+    } else {
+      rhs = parse_unit_expr();
+    }
+    if (rhs == nullptr) {
+      lhs = nullptr;
+    }
+    let this_prec: Prec;
+    let is_right_assoc: bool;
+    this_prec = next_tok_prec;
+    next_tok_prec = prec_from_bin_op(parser()->tok->ty);
+    is_right_assoc = (this_prec == PREC_COND) | (this_prec == PREC_ASSIGN);
+    if ((this_prec < next_tok_prec) | ((this_prec == next_tok_prec) & is_right_assoc)) {
+      let prec_new: i64;
+      // XXX: weird cast with enums
+      prec_new = *cast<i64*>(&this_prec) + cast<i64>(!is_right_assoc);
+      rhs = parse_rhs_of_binary_expr(rhs, *cast<Prec*>(&prec_new));
+      if (rhs == nullptr) lhs = nullptr;
+      next_tok_prec = prec_from_bin_op(parser()->tok->ty);
+    }
+    let orig_lhs: Expr*;
+    orig_lhs = lhs;
+    if (lhs != nullptr) {
+      if (ternary_middle == nullptr) {
+        let bin_op: Expr*;
+        bin_op = sema::act_on_bin_op(parser()->cur_scope, op_token_loc, op_token_ty, lhs, rhs);
+        if (bin_op == nullptr) {
+          // XXX: TODO
+          // bin_op = sema::create_recovery_expr(lhs.get_range()[0], rhs.get_range()[1], [lhs, rhs]);
+        }
+        lhs = bin_op;
+      } else {
+        let cond_op: Expr*;
+        cond_op = sema::act_on_conditional_op(op_token_loc, colon_loc, lhs, ternary_middle, rhs);
+        if (cond_op == nullptr) {
+          // XXX: TODO
+          // args = []
+          // if ternary_middle is not None:
+          //     args = [lhs, ternary_middle, rhs]
+          // else:
+          //     args = [lhs, rhs]
+          // cond_op = sema::create_recovery_expr(lhs.get_range()[0], rhs.get_range()[1], args)
+        }
+        lhs = cond_op;
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+#include sema_constexpr.nsh
+#include ast_nodes_expr.nsh
+#include ast_nodes_type.nsh
+#include ast_nodes_decl.nsh
+#include io.nsh
+#include stdlib.nsh
+
+fn sema::eval_const_expr(e: Expr*) -> i64 {
+  if (e->kind == EXPRKIND_PAREN) return sema::eval_const_expr(cast<ParenExpr*>(e)->val);
+  if (e->kind == EXPRKIND_INTLIT) { return cast<IntegerLiteral*>(e)->value; }
+  if (e->kind == EXPRKIND_BOOLLIT) { return cast<i64>(cast<BoolLiteral*>(e)->value); }
+  if (e->kind == EXPRKIND_SIZEOF) { return cast<SizeofExpr*>(e)->ty_of_sizeof->get_size(); }
+  if (e->kind == EXPRKIND_DECLREF) {
+    if (cast<DeclRefExpr*>(e)->decl->kind == DECLKIND_ENUMVARIANT) {
+      return cast<EnumVariantDecl*>(cast<DeclRefExpr*>(e)->decl)->val;
+    }
+  }
+  if ((cast<i64>(e->kind == EXPRKIND_CAST) | cast<i64>(e->kind == EXPRKIND_IMPLICITCAST)) != 0) {
+    if (cast<CastExpr*>(e)->cast_kind == CK_NOOP) return sema::eval_const_expr(cast<CastExpr*>(e)->expr);
+    if (cast<CastExpr*>(e)->cast_kind == CK_TO_VOID) return sema::eval_const_expr(cast<CastExpr*>(e)->expr);
+    if (cast<CastExpr*>(e)->cast_kind == CK_POINTER_TO_BOOLEAN) return sema::eval_const_expr(cast<CastExpr*>(e)->expr);
+    if (cast<CastExpr*>(e)->cast_kind == CK_INTEGRAL_TO_BOOLEAN) return sema::eval_const_expr(cast<CastExpr*>(e)->expr);
+    if (cast<CastExpr*>(e)->cast_kind == CK_INTEGRAL_CAST) return sema::eval_const_expr(cast<CastExpr*>(e)->expr);
+  }
+  if (e->kind == EXPRKIND_BINARY) {
+    let be: BinaryExpr*;
+    be = cast<BinaryExpr*>(e);
+    if (be->opc == BOK_MUL) return sema::eval_const_expr(be->lhs) * sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_DIV) return sema::eval_const_expr(be->lhs) / sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_REM) return sema::eval_const_expr(be->lhs) % sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_ADD) return sema::eval_const_expr(be->lhs) + sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_SUB) return sema::eval_const_expr(be->lhs) - sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_SHL) return sema::eval_const_expr(be->lhs) << sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_SHR) return sema::eval_const_expr(be->lhs) >> sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_LT) return cast<i64>(sema::eval_const_expr(be->lhs) < sema::eval_const_expr(be->rhs));
+    if (be->opc == BOK_GT) return cast<i64>(sema::eval_const_expr(be->lhs) > sema::eval_const_expr(be->rhs));
+    if (be->opc == BOK_LE) return cast<i64>(sema::eval_const_expr(be->lhs) <= sema::eval_const_expr(be->rhs));
+    if (be->opc == BOK_GE) return cast<i64>(sema::eval_const_expr(be->lhs) >= sema::eval_const_expr(be->rhs));
+    if (be->opc == BOK_EQ) return cast<i64>(sema::eval_const_expr(be->lhs) == sema::eval_const_expr(be->rhs));
+    if (be->opc == BOK_NE) return cast<i64>(sema::eval_const_expr(be->lhs) != sema::eval_const_expr(be->rhs));
+    if (be->opc == BOK_AND) return sema::eval_const_expr(be->lhs) & sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_XOR) return sema::eval_const_expr(be->lhs) ^ sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_OR) return sema::eval_const_expr(be->lhs) | sema::eval_const_expr(be->rhs);
+    if (be->opc == BOK_LAND) { if (sema::eval_const_expr(be->lhs) == 0) return 0; return sema::eval_const_expr(be->rhs); }
+    if (be->opc == BOK_LOR) { if (sema::eval_const_expr(be->lhs) == 1) return 1; return sema::eval_const_expr(be->rhs); }
+  }
+  if (e->kind == EXPRKIND_UNARY) {
+    let ue: UnaryExpr*;
+    ue = cast<UnaryExpr*>(e);
+    if (ue->opc == UOK_PLUS) return sema::eval_const_expr(ue->arg);
+    if (ue->opc == UOK_MINUS) return -sema::eval_const_expr(ue->arg);
+    if (ue->opc == UOK_NOT) return ~sema::eval_const_expr(ue->arg);
+    if (ue->opc == UOK_LNOT) return cast<i64>(!sema::eval_const_expr(ue->arg));
+  }
+  if (e->kind == EXPRKIND_CONDITIONAL) {
+    let cond_val: i64;
+    cond_val = sema::eval_const_expr(cast<ConditionalExpr*>(e)->cond);
+    if (cond_val != 0) {
+      return sema::eval_const_expr(cast<ConditionalExpr*>(e)->lhs);
+    } else {
+      return sema::eval_const_expr(cast<ConditionalExpr*>(e)->rhs);
+    }
+  }
+  // if (e->kind == EXPRKIND_STRLIT) { print("String literal in constexpr context\n"); exit(1); }
+  // if (e->kind == EXPRKIND_CALL) { diag(e.get_range()[0], "function calls are not constexpr", Diag.ERROR, [e.get_range()]) return 0 }
+  // if (e->kind == EXPRKIND_BUILTIN) { diag(e.get_range()[0], "builtin calls are not constexpr", Diag.ERROR, [e.get_range()]) return 0 }
+  // if (e->kind == EXPRKIND_ARRAYSUBSCRIPT) { diag(e.get_range()[0], "array subscripts are not constexpr (TODO: what if subscript in global const array ?)", Diag.ERROR, [e.get_range()]) return 0 }
+  // if (e->kind == EXPRKIND_MEMBER) { diag(e.get_range()[0], "member access is not constexpr (TODO: what if access in global const struct ?)", Diag.ERROR, [e.get_range()]) return 0 }
+  // if isinstance(e, RecoveryExpr): # TODO: should this emit a diagnostic ? return 0
+  print("not a const expression\n");
+  exit(1);
+  return 0;
+}

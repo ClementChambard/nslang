@@ -1,0 +1,220 @@
+#include sema_scope.nsh
+#include ast_nodes_decl.nsh
+#include mem.nsh
+
+fn Scope::set_flags_pr(self: Scope*, parent: Scope*, f: i64) {
+  self->any_parent = parent;
+  self->flags = f;
+  self->break_parent = nullptr;
+  self->continue_parent = nullptr;
+  self->depth = 0;
+  self->prototype_depth = 0;
+  self->prototype_index = 0;
+  self->decl_parent = nullptr;
+  self->fn_parent = nullptr;
+  self->block_parent = nullptr;
+
+  if (parent != nullptr) {
+    if ((f & SF_FN) == 0) {
+      self->break_parent = parent->break_parent;
+      self->continue_parent = parent->continue_parent;
+    }
+    self->depth = parent->depth + 1;
+    self->prototype_depth = parent->prototype_depth;
+    self->prototype_index = 0;
+    self->fn_parent = parent->fn_parent;
+    self->block_parent = parent->block_parent;
+    self->decl_parent = parent->decl_parent;
+    if ((f & (SF_FN | SF_CLASS | SF_BLOCK | SF_FUNCTION_PROTO)) == 0) {
+      self->flags = self->flags | parent->flags;
+    }
+  }
+
+  if ((f & SF_FN) != 0) self->fn_parent = self;
+  if ((f & SF_BREAK) != 0) self->break_parent = self;
+  if ((f & SF_CONTINUE) != 0) self->continue_parent = self;
+  if ((f & SF_BLOCK) != 0) self->block_parent = self;
+  if ((f & SF_DECL) != 0) self->decl_parent = self;
+
+  if ((f & SF_FUNCTION_PROTO) != 0) if ((f & SF_LAMBDA) == 0) {
+    self->prototype_depth = self->prototype_depth + 1;
+  }
+}
+
+fn Scope::set_flags(self: Scope*, f: i64) {
+  self->set_flags_pr(self->get_parent(), f);
+}
+
+fn Scope::get_parent(self: Scope*) -> Scope* {
+  return self->any_parent;
+}
+
+fn Scope::is_block_scope(self: Scope*) -> bool {
+  return (self->flags & SF_BLOCK) != 0;
+}
+
+fn Scope::is_condition_var_scope(self: Scope*) -> bool {
+  return (self->flags & SF_CONDITION_VAR) != 0;
+}
+
+fn Scope::is_function_proto_scope(self: Scope*) -> bool {
+  return (self->flags & SF_FUNCTION_PROTO) != 0;
+}
+
+fn Scope::is_function_decl_scope(self: Scope*) -> bool {
+  return (self->flags & SF_FUNCTION_DECL) != 0;
+}
+
+fn Scope::is_switch_scope(self: Scope*) -> bool {
+  let s: Scope*;
+  s = self;
+  while (s != nullptr) {
+    if ((s->flags & SF_SWITCH) != 0) return true;
+    if ((s->flags & (SF_FN | SF_CLASS | SF_BLOCK | SF_FUNCTION_PROTO)) != 0) return false;
+    s = s->get_parent();
+  }
+  return false;
+}
+
+fn Scope::is_loop_scope(self: Scope*) -> bool {
+  if ((self->flags & SF_BREAK) == 0) return false;
+  return (self->flags & SF_SWITCH) == 0;
+}
+
+fn Scope::is_continue_scope(self: Scope*) -> bool {
+  return (self->flags & SF_CONTINUE) != 0;
+}
+
+fn Scope::is_compound_stmt_scope(self: Scope*) -> bool {
+  return (self->flags & SF_COMPOUND_STMT) != 0;
+}
+
+fn Scope::is_control_scope(self: Scope*) -> bool {
+  return (self->flags & SF_CONTROL) != 0;
+}
+
+fn Scope::is_type_alias_scope(self: Scope*) -> bool {
+  return (self->flags & SF_TYPE_ALIAS) != 0;
+}
+
+fn Scope::is_friend_scope(self: Scope*) -> bool {
+  return (self->flags & SF_FRIEND) != 0;
+}
+
+fn Scope::is_function_scope(self: Scope*) -> bool {
+  return (self->flags & SF_FN) != 0;
+}
+
+fn Scope::is_class_scope(self: Scope*) -> bool {
+  return (self->flags & SF_CLASS) != 0;
+}
+
+fn Scope::contains(self: Scope*, other: Scope*) -> bool {
+  return self->depth < other->depth;
+}
+
+fn Scope::contained_in_prototype_scope(self: Scope*) -> bool {
+  let s: Scope*;
+  s = self;
+  while (s != nullptr) {
+    if (s->is_function_proto_scope()) return true;
+    s = s->get_parent();
+  }
+  return false;
+}
+
+fn Scope::add_flags(self: Scope*, flags: i64) {
+  // assert (flags & ~(ScopeFlags.BREAK | ScopeFlags.CONTINUE)) == 0, ("Unsupported scope flags")
+  if ((flags & SF_BREAK) != 0) {
+    // assert (self.flags & ScopeFlags.BREAK) == 0, "Already set"
+    self->break_parent = self;
+  }
+  if ((flags & SF_CONTINUE) != 0) {
+    // assert (self.flags & ScopeFlags.CONTINUE) == 0, "Already set"
+    self->continue_parent = self;
+  }
+  self->flags = self->flags | flags;
+}
+
+fn Scope::dump(self: Scope*, out_str: String*) {
+  let flags: i64;
+  flags = self->flags;
+  if (self->flags != 0) {
+    out_str->push_cstr("Flags: ");
+    // TODO: print flags...
+    out_str->push('\n');
+  }
+  if (self->any_parent != nullptr) {
+    out_str->push_format("Parent: %i\n", cast<i64>(self->any_parent));
+  }
+  out_str->push_format("Depth: %i\n", self->depth);
+}
+
+fn Scope::set_is_condition_var_scope(self: Scope*, val: bool) {
+  self->flags = (self->flags & ~SF_CONDITION_VAR) | (cast<i64>(val) * SF_CONDITION_VAR);
+}
+
+fn Scope::get_next_function_prototype_index(self: Scope*) -> i64 {
+  // assert (self.flags & ScopeFlags.FUNCTION_PROTO) != 0
+  let i: i64;
+  i = self->prototype_index;
+  self->prototype_index = self->prototype_index + 1;
+  return i;
+}
+
+fn Scope::add_decl(self: Scope*, d: Decl*) {
+  self->decls_in_scope.push(d);
+}
+
+fn Scope::remove_decl(self: Scope*, d: Decl*) {
+  self->decls_in_scope.erase_it(range_find(self->decls_in_scope.begin(), self->decls_in_scope.end(), d));
+}
+
+fn Scope::contains_decl(self: Scope*, d: Decl*) -> bool {
+  return range_find(self->decls_in_scope.begin(), self->decls_in_scope.end(), d) != self->decls_in_scope.end();
+}
+
+fn Scope::lookup_named_decl(self: Scope*, decl_name: CStr) -> NamedDecl* {
+  let i: i64;
+  i = 0;
+  while (i < self->decls_in_scope.len) {
+    if (cast<Decl*>(self->decls_in_scope[i])->kind >= DECLKIND_NAMED) {
+      let nd: NamedDecl*;
+      nd = cast<NamedDecl*>(self->decls_in_scope[i]);
+      if (strcmp(nd->name, decl_name) == 0) return nd;
+    }
+    i += 1;
+  }
+  if (self->any_parent != nullptr) {
+    return self->any_parent->lookup_named_decl(decl_name);
+  }
+  return nullptr;
+}
+
+fn Scope::new(parent: Scope*, flags: ScopeFlags) -> Scope* {
+  let self: Scope*;
+  self = malloc(sizeof(Scope));
+  self->any_parent = nullptr;
+  self->flags = 0;
+  self->depth = 0;
+  self->prototype_depth = 0;
+  self->prototype_index = 0;
+  self->fn_parent = nullptr;
+  self->break_parent = nullptr;
+  self->continue_parent = nullptr;
+  self->block_parent = nullptr;
+  self->decl_parent = nullptr;
+  self->decls_in_scope.init();
+  self->decl_context = nullptr;
+
+  self->set_flags_pr(parent, flags);
+  self->any_parent = parent;
+  self->flags = flags;
+
+  return self;
+}
+
+fn Scope::delete(self: Scope*) {
+  if (self == nullptr) return;
+  free(self);
+}

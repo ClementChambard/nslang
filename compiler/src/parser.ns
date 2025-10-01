@@ -1,0 +1,224 @@
+#include parser.nsh
+#include mem.nsh
+#include diags.nsh
+
+let CUR_PARSER: Parser*;
+fn parser() -> Parser* { return CUR_PARSER; }
+
+fn Parser::new(lexer: Lexer*) -> Parser* {
+  let self: Parser*;
+  self = malloc(sizeof(Parser));
+  self->lexer = lexer;
+  self->tok = lexer->lex();
+  self->prev_tok_location = 0;
+  self->paren_count = 0;
+  self->brace_count = 0;
+  self->bracket_count = 0;
+  self->cur_scope = Scope::new(nullptr, SF_NO);
+  CUR_PARSER = self;
+  return self;
+}
+
+fn Parser::delete(self: Parser*) {
+  if (self == nullptr) return;
+  if (self->tok != nullptr) free(self->tok);
+  let s: Scope*;
+  s = self->cur_scope;
+  while (s != nullptr) {
+    let ss: Scope*;
+    ss = s;
+    s = s->get_parent();
+    ss->delete();
+  }
+  CUR_PARSER = nullptr;
+  free(self);
+}
+
+fn Parser::unconsume_token(self: Parser*, consumed: Token*) {
+  let next_tok: Token*;
+  next_tok = self->tok;
+  self->lexer->enter_token(consumed);
+  self->tok = self->lexer->lex();
+  self->lexer->enter_token(next_tok);
+}
+
+fn Parser::consume_token(self: Parser*) -> Loc {
+  // assert not self.is_token_special(), ("Should consume special tokens with consume_*_token")
+  self->prev_tok_location = self->tok->loc;
+  free(self->tok);
+  self->tok = self->lexer->lex();
+  return self->prev_tok_location;
+}
+
+fn Parser::try_consume_token(self: Parser*, expected: Tok, loc_ptr: Loc*) -> bool {
+  if (self->tok->ty != expected) return false;
+  let loc: Loc;
+  loc = self->consume_token();
+  if (loc_ptr != nullptr) *loc_ptr = loc;
+  return true;
+}
+
+fn Parser::consume_any_token(self: Parser*) -> Loc {
+  if (self->is_token_paren()) return self->consume_paren();
+  if (self->is_token_brace()) return self->consume_brace();
+  if (self->is_token_bracket()) return self->consume_bracket();
+  return self->consume_token();
+}
+
+fn Parser::is_token_paren(self: Parser*) -> bool {
+  if (self->tok->ty == TOK_LPAREN) return true;
+  return self->tok->ty == TOK_RPAREN;
+}
+
+fn Parser::is_token_brace(self: Parser*) -> bool {
+  if (self->tok->ty == TOK_LBRACE) return true;
+  return self->tok->ty == TOK_RBRACE;
+}
+
+fn Parser::is_token_bracket(self: Parser*) -> bool {
+  if (self->tok->ty == TOK_LSQUARE) return true;
+  return self->tok->ty == TOK_RSQUARE;
+}
+
+fn Parser::is_token_special(self: Parser*) -> bool {
+  if (self->is_token_paren()) return true;
+  if (self->is_token_brace()) return true;
+  if (self->is_token_bracket()) return true;
+  return false;
+}
+
+fn Parser::consume_paren(self: Parser*) -> Loc {
+  // assert self.is_token_paren(), "Wrong consume method"
+  if (self->tok->ty == TOK_LPAREN) self->paren_count = self->paren_count + 1;
+  if (self->tok->ty == TOK_RPAREN) self->paren_count = self->paren_count - 1;
+  self->prev_tok_location = self->tok->loc;
+  free(self->tok);
+  self->tok = self->lexer->lex();
+  return self->prev_tok_location;
+}
+
+fn Parser::consume_brace(self: Parser*) -> Loc {
+  // assert self.is_token_brace(), "Wrong consume method"
+  if (self->tok->ty == TOK_LBRACE) self->brace_count = self->brace_count + 1;
+  if (self->tok->ty == TOK_RBRACE) self->brace_count = self->brace_count - 1;
+  self->prev_tok_location = self->tok->loc;
+  free(self->tok);
+  self->tok = self->lexer->lex();
+  return self->prev_tok_location;
+}
+
+fn Parser::consume_bracket(self: Parser*) -> Loc {
+  // assert self.is_token_bracket(), "Wrong consume method"
+  if (self->tok->ty == TOK_LSQUARE) self->bracket_count = self->bracket_count + 1;
+  if (self->tok->ty == TOK_RSQUARE) self->bracket_count = self->bracket_count - 1;
+  self->prev_tok_location = self->tok->loc;
+  free(self->tok);
+  self->tok = self->lexer->lex();
+  return self->prev_tok_location;
+}
+
+fn Parser::expect_and_consume(self: Parser*, expected: Tok, diag_id: CStr, msg: CStr) -> bool {
+  if (self->tok->ty == expected) {
+    self->consume_any_token();
+    return false;
+  }
+  if (is_common_typo(expected, self->tok->ty)) {
+    // fixit with replacement ...
+    diag(self->tok->loc, diag_id, DIAG_ERROR);
+    self->consume_any_token();
+    return false;
+  }
+  // fixit
+  let diag_msg: String;
+  diag_msg.init();
+  if (diag_id == nullptr) {
+    diag_msg.format("expected %s", tok_get_name(expected));
+  } else if (strcmp(diag_id, "expected %s after %s")) {
+    diag_msg.format(diag_id, tok_get_name(expected), msg);
+  } else {
+    diag_msg.format(diag_id, msg);
+  }
+  diag(self->tok->loc, diag_msg.data, DIAG_ERROR);
+  diag_msg.destroy();
+  return true;
+}
+
+fn Parser::next_token(self: Parser*) -> Token* {
+  return nullptr; // TODO: 
+}
+
+fn Parser::expect_and_consume_semi(self: Parser*, diag_id: CStr, token_used: CStr) -> bool {
+  if (self->try_consume_token(TOK_SEMI, nullptr)) return false;
+  if (diag_id == nullptr) diag_id = "expected ';'";
+  if (self->tok->ty != TOK_RPAREN) if (self->tok->ty != TOK_RSQUARE) {
+    return self->expect_and_consume(TOK_SEMI, diag_id, token_used);
+  }
+  if (self->next_token()->ty == TOK_SEMI) {
+    // TODO: format string
+    diag(self->tok->loc, "extraneous '%s' before ';'", DIAG_ERROR);  // fixit
+    self->consume_any_token();
+    self->consume_token();
+    return false;
+  }
+  return self->expect_and_consume(TOK_SEMI, diag_id, token_used);
+}
+
+fn Parser::skip_until(self: Parser*, until_toks: Tok*, until_toks_count: i64, stop_at_semi: bool /* = false */, stop_before_match: bool /* = false */) -> bool {
+  let is_first_token_skipped: bool;
+  is_first_token_skipped = true;
+  let until_one_tok: Tok;
+  while (true) {
+    let i: i64;
+    i = 0;
+    while (i < until_toks_count) {
+      if (self->tok->ty == until_toks[i]) {
+        if (!stop_before_match) self->consume_any_token();
+        return true;
+      }
+      i += 1;
+    }
+    if (until_toks_count == 1) if (until_toks[0] == TOK_EOF) if (!stop_at_semi) {
+      while (self->tok->ty != TOK_EOF) self->consume_any_token();
+      return true;
+    }
+    if (self->tok->ty == TOK_EOF) return false;
+    else if (self->tok->ty == TOK_LPAREN) { self->consume_paren(); until_one_tok = TOK_RPAREN; self->skip_until(&until_one_tok, 1, false, false); }
+    else if (self->tok->ty == TOK_LSQUARE) { self->consume_bracket(); until_one_tok = TOK_RSQUARE; self->skip_until(&until_one_tok, 1, false, false); }
+    else if (self->tok->ty == TOK_LBRACE) { self->consume_brace(); until_one_tok = TOK_RBRACE; self->skip_until(&until_one_tok, 1, false, false); }
+    else if (self->tok->ty == TOK_QUESTION) { self->consume_token(); until_one_tok = TOK_COLON; self->skip_until(&until_one_tok, 1, true, stop_before_match); }
+    else if (self->tok->ty == TOK_RPAREN) { if (self->paren_count > 0) if (!is_first_token_skipped) return false; self->consume_paren(); }
+    else if (self->tok->ty == TOK_RSQUARE) { if (self->bracket_count > 0) if (!is_first_token_skipped) return false; self->consume_bracket(); }
+    else if (self->tok->ty == TOK_RBRACE) { if (self->brace_count > 0) if (!is_first_token_skipped) return false; self->consume_brace(); }
+    else if (self->tok->ty == TOK_SEMI) { if (stop_at_semi) return false; self->consume_token(); }
+    else { self->consume_any_token(); }
+    is_first_token_skipped = false;
+  }
+}
+
+fn Parser::enter_scope(self: Parser*, scope_flags: ScopeFlags) {
+  self->cur_scope = Scope::new(self->cur_scope, scope_flags);
+}
+
+fn Parser::exit_scope(self: Parser*) {
+  // assert self.cur_scope is not None
+  // act_on_pop_scope(self.tok.loc, self.cur_scope)
+  let old_scope: Scope*;
+  old_scope = self->cur_scope;
+  // assert old_scope.parent_scope is not None
+  self->cur_scope = old_scope->get_parent();
+  old_scope->delete();
+}
+
+lib fn parse_translation_unit() -> TranslationUnitDecl*;
+
+fn Parser::parse(self: Parser*) -> TranslationUnitDecl* {
+  return parse_translation_unit();
+}
+
+fn is_common_typo(expected: Tok, actual: Tok) -> bool {
+  if (expected == TOK_SEMI) {
+    if (actual == TOK_COLON) return true;
+    if (actual == TOK_COMMA) return true;
+  }
+  return false;
+}

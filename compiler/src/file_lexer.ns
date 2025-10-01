@@ -258,7 +258,9 @@ fn FileLexer::lex_internal(self: FileLexer*, token: Token*) {
         return;
     }
     if (c == ':') {
-        self->construct_token(token, cur_pos, TOK_COLON);
+        c = self->f->source.data[cur_pos];
+        if (c == ':') self->construct_token(token, cur_pos + 1, TOK_COLONCOLON);
+        else self->construct_token(token, cur_pos, TOK_COLON);
         return;
     }
     if (c == ',') {

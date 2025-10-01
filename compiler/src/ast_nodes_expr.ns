@@ -1,0 +1,421 @@
+#include ast_nodes_expr.nsh
+#include ast_nodes_decl.nsh
+#include mem.nsh
+#include ast_nodes_type.nsh
+
+
+// lib fn Expr::ignore_expr_nodes(self: Expr*, ignore_parens_single_step: void(void));
+
+lib fn unary_operator_kind_from_tok(t: Tok) -> UnaryOperatorKind {
+  if (t == TOK_PLUSPLUS) return UOK_PREINC;
+  if (t == TOK_MINUSMINUS) return UOK_PREDEC;
+  if (t == TOK_AMP) return UOK_ADDROF;
+  if (t == TOK_STAR) return UOK_DEREF;
+  if (t == TOK_PLUS) return UOK_PLUS;
+  if (t == TOK_MINUS) return UOK_MINUS;
+  if (t == TOK_TILDE) return UOK_NOT;
+  if (t == TOK_EXCLAIM) return UOK_LNOT;
+  return UOK_LNOT; // ... error
+}
+
+lib fn unary_operator_kind_str(k: UnaryOperatorKind) -> CStr {
+  if (k == UOK_POSTINC) return cast<CStr>("post ++");
+  if (k == UOK_POSTDEC) return cast<CStr>("post --");
+  if (k == UOK_PREINC) return cast<CStr>("++");
+  if (k == UOK_PREDEC) return cast<CStr>("--");
+  if (k == UOK_ADDROF) return cast<CStr>("&");
+  if (k == UOK_DEREF) return cast<CStr>("*");
+  if (k == UOK_PLUS) return cast<CStr>("+");
+  if (k == UOK_MINUS) return cast<CStr>("-");
+  if (k == UOK_NOT) return cast<CStr>("~");
+  if (k == UOK_LNOT) return cast<CStr>("!");
+  return cast<CStr>(""); // ... error
+}
+
+lib fn UnaryExpr::is_postfix(self: UnaryExpr*) -> bool {
+  if (self->opc == UOK_POSTINC) return true;
+  if (self->opc == UOK_POSTDEC) return true;
+  return false;
+}
+
+
+lib fn binary_operator_kind_from_tok(t: Tok) -> BinaryOperatorKind {
+  if (t == TOK_STAR) return BOK_MUL;
+  if (t == TOK_SLASH) return BOK_DIV;
+  if (t == TOK_PERCENT) return BOK_REM;
+  if (t == TOK_PLUS) return BOK_ADD;
+  if (t == TOK_MINUS) return BOK_SUB;
+  if (t == TOK_LESSLESS) return BOK_SHL;
+  if (t == TOK_GREATERGREATER) return BOK_SHR;
+  if (t == TOK_LESS) return BOK_LT;
+  if (t == TOK_GREATER) return BOK_GT;
+  if (t == TOK_LESSEQUAL) return BOK_LE;
+  if (t == TOK_GREATEREQUAL) return BOK_GE;
+  if (t == TOK_EQUALEQUAL) return BOK_EQ;
+  if (t == TOK_EXCLAIMEQUAL) return BOK_NE;
+  if (t == TOK_AMP) return BOK_AND;
+  if (t == TOK_CARET) return BOK_XOR;
+  if (t == TOK_PIPE) return BOK_OR;
+  if (t == TOK_AMPAMP) return BOK_LAND;
+  if (t == TOK_PIPEPIPE) return BOK_LOR;
+  if (t == TOK_EQUAL) return BOK_ASSIGN;
+  if (t == TOK_STAREQUAL) return BOK_MULASSIGN;
+  if (t == TOK_SLASHEQUAL) return BOK_DIVASSIGN;
+  if (t == TOK_PERCENTEQUAL) return BOK_REMASSIGN;
+  if (t == TOK_PLUSEQUAL) return BOK_ADDASSIGN;
+  if (t == TOK_MINUSEQUAL) return BOK_SUBASSIGN;
+  if (t == TOK_LESSLESSEQUAL) return BOK_SHLASSIGN;
+  if (t == TOK_GREATERGREATEREQUAL) return BOK_SHRASSIGN;
+  if (t == TOK_AMPEQUAL) return BOK_ANDASSIGN;
+  if (t == TOK_CARETEQUAL) return BOK_XORASSIGN;
+  if (t == TOK_PIPEEQUAL) return BOK_ORASSIGN;
+  return BOK_MUL; // ... error "Invalid token for bin op"
+}
+
+lib fn binary_operator_kind_str(k: BinaryOperatorKind) -> CStr {
+  if (k == BOK_MUL) return cast<CStr>("*");
+  if (k == BOK_DIV) return cast<CStr>("/");
+  if (k == BOK_REM) return cast<CStr>("%");
+  if (k == BOK_ADD) return cast<CStr>("+");
+  if (k == BOK_SUB) return cast<CStr>("-");
+  if (k == BOK_SHL) return cast<CStr>("<<");
+  if (k == BOK_SHR) return cast<CStr>(">>");
+  if (k == BOK_LT) return cast<CStr>("<");
+  if (k == BOK_GT) return cast<CStr>(">");
+  if (k == BOK_LE) return cast<CStr>("<=");
+  if (k == BOK_GE) return cast<CStr>(">=");
+  if (k == BOK_EQ) return cast<CStr>("==");
+  if (k == BOK_NE) return cast<CStr>("!=");
+  if (k == BOK_AND) return cast<CStr>("&");
+  if (k == BOK_XOR) return cast<CStr>("^");
+  if (k == BOK_OR) return cast<CStr>("|");
+  if (k == BOK_LAND) return cast<CStr>("&&");
+  if (k == BOK_LOR) return cast<CStr>("||");
+  if (k == BOK_ASSIGN) return cast<CStr>("=");
+  if (k == BOK_MULASSIGN) return cast<CStr>("*=");
+  if (k == BOK_DIVASSIGN) return cast<CStr>("/=");
+  if (k == BOK_REMASSIGN) return cast<CStr>("%=");
+  if (k == BOK_ADDASSIGN) return cast<CStr>("+=");
+  if (k == BOK_SUBASSIGN) return cast<CStr>("-=");
+  if (k == BOK_SHLASSIGN) return cast<CStr>("<<=");
+  if (k == BOK_SHRASSIGN) return cast<CStr>(">>=");
+  if (k == BOK_ANDASSIGN) return cast<CStr>("&=");
+  if (k == BOK_XORASSIGN) return cast<CStr>("^=");
+  if (k == BOK_ORASSIGN) return cast<CStr>("|=");
+  return cast<CStr>(""); // ... error
+}
+
+lib fn binary_operator_is_compound_assignment(k: BinaryOperatorKind) -> bool {
+  if (k < BOK_MULASSIGN) return false;
+  if (k > BOK_ORASSIGN) return false;
+  return true;
+}
+
+lib fn cast_kind_to_string(k: CastKind) -> CStr {
+  if (k == CK_NOOP) return cast<CStr>("Noop");
+  if (k == CK_TO_VOID) return cast<CStr>("ToVoid");
+  if (k == CK_POINTER_TO_BOOLEAN) return cast<CStr>("PointerToBoolean");
+  if (k == CK_INTEGRAL_TO_BOOLEAN) return cast<CStr>("IntegralToBoolean");
+  if (k == CK_INTEGRAL_CAST) return cast<CStr>("IntegralCast");
+  if (k == CK_LVALUE_TO_RVALUE) return cast<CStr>("LValueToRValue");
+  if (k == CK_ARRAY_TO_POINTER_DECAY) return cast<CStr>("ArrayToPointerDecay");
+  if (k == CK_FUNCTION_TO_POINTER_DECAY) return cast<CStr>("FunctionToPointerDecay");
+  return cast<CStr>(""); // ... error
+}
+
+lib fn ignore_parens_single_step(e: Expr*) -> Expr* {
+  if (e->kind == EXPRKIND_PAREN) return cast<ParenExpr*>(e)->val;
+  return e;
+}
+
+lib fn ignore_expr_nodes(e: Expr*, args: void*) -> Expr* {
+  // last_e = None
+  // while e != last_e:
+  //     last_e = e
+  //     for a in args:
+  //         e = a(e)
+  return e;
+}
+
+lib fn stmt_get_range_expr(self: Stmt*, out: LocRge*);
+
+lib fn DeclRefExpr::get_range(self: DeclRefExpr*, out: LocRge*) { out->start = self->loc; out->end = self->loc; }
+lib fn IntegerLiteral::get_range(self: IntegerLiteral*, out: LocRge*) { out->start = self->loc; out->end = self->loc; }
+lib fn BoolLiteral::get_range(self: BoolLiteral*, out: LocRge*) { out->start = self->loc; out->end = self->loc; }
+lib fn StringLiteral::get_range(self: StringLiteral*, out: LocRge*) { out->start = self->locs[0]; out->end = self->locs[self->locs_count - 1]; }
+lib fn ParenExpr::get_range(self: ParenExpr*, out: LocRge*) { out->start = self->l; out->end = self->r; }
+lib fn BinaryExpr::get_range(self: BinaryExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->lhs), out); let rge: LocRge; stmt_get_range_expr(cast<Stmt*>(self->rhs), &rge); out->end = rge.end; }
+lib fn CompoundAssignExpr::get_range(self: CompoundAssignExpr*, out: LocRge*) { cast<BinaryExpr*>(self)->get_range(out); }
+lib fn CallExpr::get_range(self: CallExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->func), out); out->end = self->rp_loc; }
+lib fn MethodCallExpr::get_range(self: MethodCallExpr*, out: LocRge*) { cast<CallExpr*>(self)->get_range(out); }
+lib fn SizeofExpr::get_range(self: SizeofExpr*, out: LocRge*) { out->start = self->sizeof_loc; out->end = self->rp_loc; }
+lib fn RecoveryExpr::get_range(self: RecoveryExpr*, out: LocRge*) { out->start = self->begin_loc; out->end = self->end_loc; }
+lib fn BuiltinExpr::get_range(self: BuiltinExpr*, out: LocRge*) { out->start = self->builtin_loc; out->end = self->rparen_loc; }
+lib fn CastExpr::get_range(self: CastExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->expr), out); }
+lib fn ImplicitCastExpr::get_range(self: ImplicitCastExpr*, out: LocRge*) { cast<CastExpr*>(self)->get_range(out); }
+lib fn VAArgExpr::get_range(self: VAArgExpr*, out: LocRge*) { out->start = self->s; out->end = self->e; }
+lib fn MemberExpr::get_range(self: MemberExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->lhs), out); out->end = self->oploc; }
+lib fn MethodExpr::get_range(self: MethodExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->self_object), out); out->end = self->oploc; } 
+lib fn ArraySubscriptExpr::get_range(self: ArraySubscriptExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->lhs), out); out->end = self->rb_loc; }
+lib fn ConditionalExpr::get_range(self: ConditionalExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->cond), out); let rge: LocRge; stmt_get_range_expr(cast<Stmt*>(self->rhs), &rge); out->end = rge.end; }
+lib fn UnaryExpr::get_range(self: UnaryExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->arg), out); if (self->is_postfix()) out->end = self->loc; else out->start = self->loc; }
+
+
+lib fn stmt_get_range_expr(self: Stmt*, out: LocRge*) {
+  if (self->kind == EXPRKIND_DECLREF)        cast<DeclRefExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_INTLIT)         cast<IntegerLiteral*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_BOOLLIT)        cast<BoolLiteral*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_STRLIT)         cast<StringLiteral*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_PAREN)          cast<ParenExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_UNARY)          cast<UnaryExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_BINARY)         cast<BinaryExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_COMPOUNDASSIGN) cast<CompoundAssignExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_CALL)           cast<CallExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_METHODCALL)     cast<MethodCallExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_SIZEOF)         cast<SizeofExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_MEMBER)         cast<MemberExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_METHOD)         cast<MethodExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_ARRAYSUBSCRIPT) cast<ArraySubscriptExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_CONDITIONAL)    cast<ConditionalExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_RECOVERY)       cast<RecoveryExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_BUILTIN)        cast<BuiltinExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_CAST)           cast<CastExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_IMPLICITCAST)   cast<ImplicitCastExpr*>(self)->get_range(out);
+  if (self->kind == EXPRKIND_VAARG)          cast<VAArgExpr*>(self)->get_range(out);
+}
+
+lib fn DeclRefExpr::ctor(self: DeclRefExpr*, nns: void*, d: ValueDecl*, name: CStr, ii: IdentInfo*, nameloc: Loc, ty: Type*, vk: ValueKind) {
+  self->kind = EXPRKIND_DECLREF;
+  self->decl = d;
+  self->ii = ii;
+  self->loc = nameloc;
+  self->ty = ty;
+  self->value_kind = vk;
+  self->qualifier = nns;
+}
+
+lib fn IntegerLiteral::ctor(self: IntegerLiteral*, v: i64, ty: Type*, l: Loc) {
+  self->kind = EXPRKIND_INTLIT;
+  self->ty = ty;
+  self->value_kind = VK_PRVALUE;
+  self->loc = l;
+  self->value = v;
+}
+
+lib fn BoolLiteral::ctor(self: BoolLiteral*, v: bool, ty: Type*, l: Loc) {
+  self->kind = EXPRKIND_BOOLLIT;
+  self->ty = ty;
+  self->value_kind = VK_PRVALUE; //ok ordinary
+  self->value = v;
+  self->loc = l;
+}
+
+lib fn StringLiteral::ctor(self: StringLiteral*, v: CStr, locs: Loc*, locs_count: i64, kind: void*, ty: Type*) {
+  self->kind = EXPRKIND_STRLIT;
+  self->ty = ty;
+  self->value_kind = VK_LVALUE;
+  self->kind = kind;
+  self->locs = locs;
+  self->locs_count = locs_count;
+  self->value = strdup(v);
+}
+
+lib fn ParenExpr::ctor(self: ParenExpr*, l: Loc, r: Loc, val: Expr*) {
+  self->kind == EXPRKIND_PAREN;
+  self->l = l;
+  self->r = r;
+  self->val = val;
+  self->value_kind = val->value_kind;
+  self->ty = val->ty;
+}
+
+lib fn UnaryExpr::ctor(self: UnaryExpr*, arg: Expr*, opc: UnaryOperatorKind, ty: Type*, vk: ValueKind, l: Loc) {
+  self->kind = EXPRKIND_UNARY;
+  self->opc = opc;
+  self->loc = l;
+  self->value_kind = vk;
+  self->ty = ty;
+  self->arg = arg;
+}
+
+lib fn BinaryExpr::ctor(self: BinaryExpr*, lhs: Expr*, rhs: Expr*, opc: BinaryOperatorKind, ty: Type*, vk: ValueKind, op_loc: Loc) {
+  self->kind = EXPRKIND_BINARY;
+  self->ty = ty;
+  self->value_kind = vk;
+  self->opc = opc;
+  self->op_loc = op_loc;
+  self->lhs = lhs;
+  self->rhs = rhs;
+}
+
+lib fn CompoundAssignExpr::ctor(self: CompoundAssignExpr*, lhs: Expr*, rhs: Expr*, opc: BinaryOperatorKind, ty: Type*, vk: ValueKind, op_loc: Loc) { cast<BinaryExpr*>(self)->ctor(lhs, rhs, opc, ty, vk, op_loc); self->kind = EXPRKIND_COMPOUNDASSIGN; }
+
+lib fn CallExpr::ctor(self: CallExpr*, func: Expr*, args: Expr**, args_count: i64, ty: Type*, vk: ValueKind, rp_loc: Loc) {
+  self->kind = EXPRKIND_CALL;
+  self->ty = ty;
+  self->value_kind = vk;
+  self->func = func;
+  self->args = args;
+  self->args_count = args_count;
+  self->rp_loc = rp_loc;
+}
+
+lib fn MethodCallExpr::ctor(self: MethodCallExpr*, method: Expr*, args: Expr**, args_count: i64, ty: Type*, vk: ValueKind, rp_loc: Loc) { cast<CallExpr*>(self)->ctor(method, args, args_count, ty, vk, rp_loc); self->kind = EXPRKIND_METHODCALL; }
+
+lib fn SizeofExpr::ctor(self: SizeofExpr*, ty: Type*, expr: Expr*, sl: Loc, rl: Loc) {
+  self->kind = EXPRKIND_SIZEOF; 
+  self->sizeof_loc = sl;
+  self->rp_loc = rl;
+  self->expr = expr;
+  self->ty_of_sizeof = ty;
+  self->ty = Type::get_builtin(BTK_I64);
+  self->value_kind = VK_PRVALUE;
+}
+
+lib fn MemberExpr::ctor(self: MemberExpr*, lhs: Expr*, is_arrow: bool, oploc: Loc, name: CStr, ty: Type*, vk: ValueKind, field_offset: i64) {
+  self->kind = EXPRKIND_MEMBER;
+  self->ty = ty;
+  self->value_kind = vk;
+  self->name = strdup(name);
+  self->lhs = lhs;
+  self->is_arrow = is_arrow;
+  self->oploc = oploc;
+  self->field_offset = field_offset;
+}
+
+lib fn MethodExpr::ctor(self: MethodExpr*, self_object: Expr*, is_arrow: bool, oploc: Loc, method: FnDecl*) {
+  self->kind = EXPRKIND_METHOD;
+  self->ty = method->ty;
+  self->value_kind = VK_PRVALUE;
+  self->oploc = oploc;
+  self->is_arrow = is_arrow;
+  self->method_func = method;
+  self->self_object = self_object;
+}
+
+lib fn ArraySubscriptExpr::ctor(self: ArraySubscriptExpr*, lhs: Expr*, rhs: Expr*, t: Type*, vk: ValueKind, rb_loc: Loc) {
+  self->kind = EXPRKIND_ARRAYSUBSCRIPT;
+  self->ty = t;
+  self->value_kind = vk;
+  self->lhs = lhs;
+  self->rhs = rhs;
+  self->rb_loc = rb_loc;
+}
+
+lib fn ConditionalExpr::ctor(self: ConditionalExpr*, cond: Expr*, qloc: Loc, lhs: Expr*, cloc: Loc, rhs: Expr*, t: Type*, vk: ValueKind) {
+  self->kind = EXPRKIND_CONDITIONAL;
+  self->ty = t;
+  self->value_kind = vk; // ok
+  self->question_loc = qloc;
+  self->colon_loc = cloc;
+  self->cond = cond;
+  self->lhs = lhs;
+  self->rhs = rhs;
+}
+
+lib fn RecoveryExpr::ctor(self: RecoveryExpr*, t: Type*, bl: Loc, el: Loc, sub: Expr**, sub_cnt: i64) {
+  self->kind = EXPRKIND_RECOVERY;
+  self->ty = t; // more complex
+  self->value_kind = VK_PRVALUE; // more complex
+  self->begin_loc = bl;
+  self->end_loc = el;
+  self->sub = sub;
+  self->sub_cnt = sub_cnt;
+}
+
+lib fn BuiltinExpr::ctor(self: BuiltinExpr*, builtin: CStr, loc: Loc, args: Expr**, args_count: i64, rp: Loc) {
+  self->kind = EXPRKIND_BUILTIN;
+  self->ty = Type::get_builtin(BTK_I64);
+  self->value_kind = VK_PRVALUE;
+  self->builtin_name = strdup(builtin);
+  self->builtin_loc = loc;
+  self->args = args;
+  self->args_count = args_count;
+  self->rparen_loc = rp;
+}
+
+lib fn CastExpr::ctor(self: CastExpr*, ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) {
+  self->kind = EXPRKIND_CAST;
+  self->ty = ty;
+  self->value_kind = vk;
+  self->cast_kind = kind;
+  self->expr = expr;
+}
+
+lib fn ImplicitCastExpr::ctor(self: ImplicitCastExpr*, ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) { cast<CastExpr*>(self)->ctor(ty, vk, kind, expr); self->kind = EXPRKIND_IMPLICITCAST; }
+
+lib fn VAArgExpr::ctor(self: VAArgExpr*, ty: Type*, s: Loc, e: Loc) {
+  self->kind = EXPRKIND_VAARG;
+  self->ty = ty;
+  self->value_kind = VK_PRVALUE;
+  self->s = s;
+  self->e = e;
+}
+
+lib fn stmt_ast_free_expr(self: Stmt*);
+
+lib fn DeclRefExpr::dtor(self: DeclRefExpr*) {}
+lib fn IntegerLiteral::dtor(self: IntegerLiteral*) {}
+lib fn BoolLiteral::dtor(self: BoolLiteral*) {}
+lib fn StringLiteral::dtor(self: StringLiteral*) { free(self->value); free(self->locs); }
+lib fn ParenExpr::dtor(self: ParenExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->val)); }
+lib fn UnaryExpr::dtor(self: UnaryExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->arg)); }
+lib fn BinaryExpr::dtor(self: BinaryExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
+lib fn CompoundAssignExpr::dtor(self: CompoundAssignExpr*) { cast<BinaryExpr*>(self)->dtor(); }
+lib fn CallExpr::dtor(self: CallExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->func)); let i: i64; i = 0; while (i < self->args_count) { stmt_ast_free_expr(cast<Stmt*>(self->args[i])); i += 1; } free(self->args); }
+lib fn MethodCallExpr::dtor(self: MethodCallExpr*) { cast<MethodCallExpr*>(self)->dtor(); }
+lib fn SizeofExpr::dtor(self: SizeofExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->expr)); }
+lib fn MemberExpr::dtor(self: MemberExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); free(self->name); }
+lib fn MethodExpr::dtor(self: MethodExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->self_object)); }
+lib fn ArraySubscriptExpr::dtor(self: ArraySubscriptExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
+lib fn ConditionalExpr::dtor(self: ConditionalExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->cond)); stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
+lib fn RecoveryExpr::dtor(self: RecoveryExpr*) { let i: i64; i = 0; while (i < self->sub_cnt) { stmt_ast_free_expr(cast<Stmt*>(self->sub[i])); i += 1; } free(self->sub); }
+lib fn BuiltinExpr::dtor(self: BuiltinExpr*) { free(self->builtin_name); let i: i64; i = 0; while (i < self->args_count) { stmt_ast_free_expr(cast<Stmt*>(self->args[i])); i += 1; } free(self->args); }
+lib fn CastExpr::dtor(self: CastExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->expr)); }
+lib fn ImplicitCastExpr::dtor(self: ImplicitCastExpr*) { cast<CastExpr*>(self)->dtor(); }
+lib fn VAArgExpr::dtor(self: VAArgExpr*) {}
+
+lib fn stmt_ast_free_expr(self: Stmt*) {
+  if (self->kind == EXPRKIND_DECLREF)        cast<DeclRefExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_INTLIT)         cast<IntegerLiteral*>(self)->dtor();
+  if (self->kind == EXPRKIND_BOOLLIT)        cast<BoolLiteral*>(self)->dtor();
+  if (self->kind == EXPRKIND_STRLIT)         cast<StringLiteral*>(self)->dtor();
+  if (self->kind == EXPRKIND_PAREN)          cast<ParenExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_UNARY)          cast<UnaryExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_BINARY)         cast<BinaryExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_COMPOUNDASSIGN) cast<CompoundAssignExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_CALL)           cast<CallExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_METHODCALL)     cast<MethodCallExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_SIZEOF)         cast<SizeofExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_MEMBER)         cast<MemberExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_METHOD)         cast<MethodExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_ARRAYSUBSCRIPT) cast<ArraySubscriptExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_CONDITIONAL)    cast<ConditionalExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_RECOVERY)       cast<RecoveryExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_BUILTIN)        cast<BuiltinExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_CAST)           cast<CastExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_IMPLICITCAST)   cast<ImplicitCastExpr*>(self)->dtor();
+  if (self->kind == EXPRKIND_VAARG)          cast<VAArgExpr*>(self)->dtor();
+  free(self);
+}
+
+lib fn DeclRefExpr::new(nns: void*, d: ValueDecl*, name: CStr, ii: IdentInfo*, nameloc: Loc, ty: Type*, vk: ValueKind) -> DeclRefExpr* { let out: DeclRefExpr*; out = malloc(sizeof(DeclRefExpr)); out->ctor(nns, d, name, ii, nameloc, ty, vk); return out; }
+lib fn IntegerLiteral::new(v: i64, ty: Type*, l: Loc) -> IntegerLiteral* { let out: IntegerLiteral*; out = malloc(sizeof(IntegerLiteral)); out->ctor(v, ty, l); return out; }
+lib fn BoolLiteral::new(v: bool, ty: Type*, l: Loc) -> BoolLiteral* { let out: BoolLiteral*; out = malloc(sizeof(BoolLiteral)); out->ctor(v, ty, l); return out; }
+lib fn StringLiteral::new(v: CStr, locs: Loc*, locs_count: i64, kind: void*, ty: Type*) -> StringLiteral* { let out: StringLiteral*; out = malloc(sizeof(StringLiteral)); out->ctor(v, locs, locs_count, kind, ty); return out; }
+lib fn ParenExpr::new(l: Loc, r: Loc, val: Expr*) -> ParenExpr* { let out: ParenExpr*; out = malloc(sizeof(ParenExpr)); out->ctor(l, r, val); return out; }
+lib fn UnaryExpr::new(arg: Expr*, opc: UnaryOperatorKind, ty: Type*, vk: ValueKind, l: Loc) -> UnaryExpr* { let out: UnaryExpr*; out = malloc(sizeof(UnaryExpr)); out->ctor(arg, opc, ty, vk, l); return out; }
+lib fn BinaryExpr::new(lhs: Expr*, rhs: Expr*, opc: BinaryOperatorKind, ty: Type*, vk: ValueKind, op_loc: Loc) -> BinaryExpr* { let out: BinaryExpr*; out = malloc(sizeof(BinaryExpr)); out->ctor(lhs, rhs, opc, ty, vk, op_loc); return out; }
+lib fn CompoundAssignExpr::new(lhs: Expr*, rhs: Expr*, opc: BinaryOperatorKind, ty: Type*, vk: ValueKind, op_loc: Loc) -> CompoundAssignExpr* { let out: CompoundAssignExpr*; out = malloc(sizeof(CompoundAssignExpr)); out->ctor(lhs, rhs, opc, ty, vk, op_loc); return out; }
+lib fn CallExpr::new(func: Expr*, args: Expr**, args_count: i64, ty: Type*, vk: ValueKind, rp_loc: Loc) -> CallExpr* { let out: CallExpr*; out = malloc(sizeof(CallExpr)); out->ctor(func, args, args_count, ty, vk, rp_loc); return out; }
+lib fn MethodCallExpr::new(method: Expr*, args: Expr**, args_count: i64, ty: Type*, vk: ValueKind, rp_loc: Loc) -> MethodCallExpr* { let out: MethodCallExpr*; out = malloc(sizeof(MethodCallExpr)); out->ctor(method, args, args_count, ty, vk, rp_loc); return out; }
+lib fn SizeofExpr::new(ty: Type*, expr: Expr*, sl: Loc, rl: Loc) -> SizeofExpr* { let out: SizeofExpr*; out = malloc(sizeof(SizeofExpr)); out->ctor(ty, expr, sl, rl); return out; }
+lib fn MemberExpr::new(lhs: Expr*, is_arrow: bool, oploc: Loc, name: CStr, ty: Type*, vk: ValueKind, field_offset: i64) -> MemberExpr* { let out: MemberExpr*; out = malloc(sizeof(MemberExpr)); out->ctor(lhs, is_arrow, oploc, name, ty, vk, field_offset); return out; }
+lib fn MethodExpr::new(self_object: Expr*, is_arrow: bool, oploc: Loc, method: FnDecl*) -> MethodExpr* { let out: MethodExpr*; out = malloc(sizeof(MethodExpr)); out->ctor(self_object, is_arrow, oploc, method); return out; }
+lib fn ArraySubscriptExpr::new(lhs: Expr*, rhs: Expr*, t: Type*, vk: ValueKind, rbracket_loc: Loc) -> ArraySubscriptExpr* { let out: ArraySubscriptExpr*; out = malloc(sizeof(ArraySubscriptExpr)); out->ctor(lhs, rhs, t, vk, rbracket_loc); return out; }
+lib fn ConditionalExpr::new(cond: Expr*, qloc: Loc, lhs: Expr*, cloc: Loc, rhs: Expr*, t: Type*, vk: ValueKind) -> ConditionalExpr* { let out: ConditionalExpr*; out = malloc(sizeof(ConditionalExpr)); out->ctor(cond, qloc, lhs, cloc, rhs, t, vk); return out; }
+lib fn RecoveryExpr::new(t: Type*, bl: Loc, el: Loc, sub: Expr**, sub_cnt: i64) -> RecoveryExpr* { let out: RecoveryExpr*; out = malloc(sizeof(RecoveryExpr)); out->ctor(t, bl, el, sub, sub_cnt); return out; }
+lib fn BuiltinExpr::new(builtin: CStr, loc: Loc, args: Expr**, args_count: i64, rp: Loc) -> BuiltinExpr* { let out: BuiltinExpr*; out = malloc(sizeof(BuiltinExpr)); out->ctor(builtin, loc, args, args_count, rp); return out; }
+lib fn CastExpr::new(ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) -> CastExpr* { let out: CastExpr*; out = malloc(sizeof(CastExpr)); out->ctor(ty, vk, kind, expr); return out; }
+lib fn ImplicitCastExpr::new(ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) -> ImplicitCastExpr* { let out: ImplicitCastExpr*; out = malloc(sizeof(ImplicitCastExpr)); out->ctor(ty, vk, kind, expr); return out; }
+lib fn VAArgExpr::new(ty: Type*, s: Loc, e: Loc) -> VAArgExpr* { let out: VAArgExpr*; out = malloc(sizeof(VAArgExpr)); out->ctor(ty, s, e); return out; }

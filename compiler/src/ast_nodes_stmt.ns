@@ -1,0 +1,247 @@
+#include ast_nodes_stmt.nsh
+#include ast_nodes_expr.nsh
+#include ast_nodes_decl.nsh
+#include mem.nsh
+
+lib fn stmt_get_range_expr(self: Stmt*, out: LocRge*);
+lib fn stmt_ast_free_expr(self: Stmt*);
+
+fn Stmt::get_range(self: Stmt*, out: LocRge*) {
+  if (self->kind == STMTKIND_DECL) {
+    out->start = cast<DeclStmt*>(self)->start_loc;
+    out->end = cast<DeclStmt*>(self)->end_loc;
+  } else if (self->kind == STMTKIND_NULL) {
+    out->start = cast<NullStmt*>(self)->semi_loc;
+    out->end = cast<NullStmt*>(self)->semi_loc;
+  } else if (self->kind == STMTKIND_COMPOUND) {
+    out->start = cast<CompoundStmt*>(self)->lbrace_loc;
+    out->end = cast<CompoundStmt*>(self)->rbrace_loc;
+  } else if (self->kind == STMTKIND_CASE) {
+    let cs: CaseStmt*;
+    cs = cast<CaseStmt*>(self);
+    out->start = cs->keyword_loc;
+    if (cs->sub_stmt == nullptr) {
+      out->end = cs->colon_loc;
+      return;
+    }
+    let rge: LocRge;
+    cs->sub_stmt->get_range(&rge);
+    out->end = rge.end;
+  } else if (self->kind == STMTKIND_DEFAULT) {
+    let cs: CaseStmt*;
+    cs = cast<CaseStmt*>(self);
+    out->start = cs->keyword_loc;
+    if (cs->sub_stmt == nullptr) {
+      out->end = cs->colon_loc;
+      return;
+    }
+    let rge: LocRge;
+    cs->sub_stmt->get_range(&rge);
+    out->end = rge.end;
+  } else if (self->kind == STMTKIND_IF) {
+    let rge: LocRge;
+    let is: IfStmt*;
+    is = cast<IfStmt*>(self);
+    out->start = is->if_loc;
+    if (is->else_stmt != nullptr) {
+      is->else_stmt->get_range(&rge);
+    } else {
+      is->then_stmt->get_range(&rge);
+    }
+    out->end = rge.end;
+  } else if (self->kind == STMTKIND_SWITCH) {
+    let rge: LocRge;
+    let ss: SwitchStmt*;
+    ss = cast<SwitchStmt*>(self);
+    out->start = ss->switch_loc;
+    ss->body->get_range(&rge);
+    out->end = rge.end;
+  } else if (self->kind == STMTKIND_WHILE) {
+    let rge: LocRge;
+    let ws: WhileStmt*;
+    ws = cast<WhileStmt*>(self);
+    out->start = ws->while_loc;
+    ws->body->get_range(&rge);
+    out->end = rge.end;
+  } else if (self->kind == STMTKIND_DO) {
+    out->start = cast<DoStmt*>(self)->do_loc;
+    out->end = cast<DoStmt*>(self)->rparen_loc;
+  } else if (self->kind == STMTKIND_CONTINUE) {
+    out->start = cast<ContinueStmt*>(self)->continue_loc;
+    out->end = cast<ContinueStmt*>(self)->continue_loc;
+  } else if (self->kind == STMTKIND_BREAK) {
+    out->start = cast<BreakStmt*>(self)->break_loc;
+    out->end = cast<BreakStmt*>(self)->break_loc;
+  } else {
+    stmt_get_range_expr(self, out);
+  }
+}
+
+fn Stmt::ast_free(self: Stmt*) {
+  if (self == nullptr) return;
+  if (self->kind == STMTKIND_DECL) {
+    cast<DeclStmt*>(self)->decl->ast_free();
+  } else if (self->kind == STMTKIND_COMPOUND) {
+    let cs: CompoundStmt*;
+    cs = cast<CompoundStmt*>(self);
+    let i: i64;
+    i = 0;
+    while (i < cs->children_count) {
+      cs->children[i]->ast_free();
+      i += 1;
+    }
+    free(cs->children);
+  } else if (self->kind == STMTKIND_CASE) {
+    cast<CaseStmt*>(self)->sub_stmt->ast_free();
+  } else if (self->kind == STMTKIND_DEFAULT) {
+    cast<DefaultStmt*>(self)->sub_stmt->ast_free();
+  } else if (self->kind == STMTKIND_IF) {
+    cast<IfStmt*>(self)->cond->base_stmt.ast_free();
+    cast<IfStmt*>(self)->then_stmt->ast_free();
+    cast<IfStmt*>(self)->else_stmt->ast_free();
+  } else if (self->kind == STMTKIND_SWITCH) {
+    cast<SwitchStmt*>(self)->cond->base_stmt.ast_free();
+    cast<SwitchStmt*>(self)->body->ast_free();
+  } else if (self->kind == STMTKIND_WHILE) {
+    cast<WhileStmt*>(self)->cond->base_stmt.ast_free();
+    cast<WhileStmt*>(self)->body->ast_free();
+  } else if (self->kind == STMTKIND_DO) {
+    cast<DoStmt*>(self)->cond->base_stmt.ast_free();
+    cast<DoStmt*>(self)->body->ast_free();
+  } else if (self->kind == STMTKIND_RETURN) {
+    cast<ReturnStmt*>(self)->ret_expr->base_stmt.ast_free();
+  } else {
+    stmt_ast_free_expr(self);
+    return;
+  }
+  free(self);
+}
+
+
+fn DeclStmt::new(start: Loc, end: Loc, decl: Decl*) -> DeclStmt* {
+  let self: DeclStmt*;
+  self = malloc(sizeof(DeclStmt));
+  self->kind = STMTKIND_DECL;
+  self->start_loc = start;
+  self->end_loc = end;
+  self->decl = decl;
+  return self;
+}
+
+fn NullStmt::new(semi_loc: Loc) -> NullStmt* {
+  let self: NullStmt*;
+  self = malloc(sizeof(NullStmt));
+  self->kind = STMTKIND_NULL;
+  self->semi_loc = semi_loc;
+  return self;
+}
+
+fn CompoundStmt::new(children: Stmt**, children_count: i64, lbrace_loc: Loc, rbrace_loc: Loc) -> CompoundStmt* {
+  let self: CompoundStmt*;
+  self = malloc(sizeof(CompoundStmt));
+  self->kind = STMTKIND_COMPOUND;
+  self->lbrace_loc = lbrace_loc;
+  self->rbrace_loc = rbrace_loc;
+  self->children = children;
+  self->children_count = children_count;
+  return self;
+}
+
+fn CaseStmt::new(kwl: Loc, cl: Loc, sub_stmt: Stmt*, case_val: i64) -> CaseStmt* {
+  let self: CaseStmt*;
+  self = malloc(sizeof(CaseStmt));
+  self->kind = STMTKIND_CASE;
+  self->keyword_loc = kwl;
+  self->colon_loc = cl;
+  self->sub_stmt = sub_stmt;
+  self->case_val = case_val;
+  self->next_switch_case = nullptr;
+  return self;
+}
+
+fn DefaultStmt::new(kwl: Loc, cl: Loc, sub_stmt: Stmt*) -> DefaultStmt* {
+  let self: DefaultStmt*;
+  self = malloc(sizeof(DefaultStmt));
+  self->kind = STMTKIND_DEFAULT;
+  self->keyword_loc = kwl;
+  self->colon_loc = cl;
+  self->sub_stmt = sub_stmt;
+  self->next_switch_case = nullptr;
+  return self;
+}
+
+fn IfStmt::new(il: Loc, cond: Expr*, lp: Loc, rp: Loc, then: Stmt*, el: Loc, els: Stmt*) -> IfStmt* {
+  let self: IfStmt*;
+  self = malloc(sizeof(IfStmt));
+  self->kind = STMTKIND_IF;
+  self->if_loc = il;
+  self->cond = cond;
+  self->then_stmt = then;
+  self->else_stmt = els;
+  self->else_loc = el;
+  self->lparen_loc = lp;
+  self->rparen_loc = rp;
+  return self;
+}
+
+fn SwitchStmt::new(sl: Loc, cond: Expr*, lp: Loc, rp: Loc, body: Stmt*) -> SwitchStmt* {
+  let self: SwitchStmt*;
+  self = malloc(sizeof(SwitchStmt));
+  self->kind = STMTKIND_SWITCH;
+  self->switch_loc = sl;
+  self->first_case = nullptr;
+  self->lparen_loc = lp;
+  self->rparen_loc = rp;
+  self->cond = cond;
+  self->body = body;
+  return self;
+}
+
+fn WhileStmt::new(wl: Loc, cond: Expr*, lp: Loc, rp: Loc, body: Stmt*) -> WhileStmt* {
+  let self: WhileStmt*;
+  self = malloc(sizeof(WhileStmt));
+  self->kind = STMTKIND_WHILE;
+  self->while_loc = wl;
+  self->lparen_loc = lp;
+  self->rparen_loc = rp;
+  self->cond = cond;
+  self->body = body;
+  return self;
+}
+
+fn DoStmt::new(body: Stmt*, cond: Expr*, dl: Loc, wl: Loc, rp: Loc) -> DoStmt* {
+  let self: DoStmt*;
+  self = malloc(sizeof(DoStmt));
+  self->kind = STMTKIND_DO;
+  self->do_loc = dl;
+  self->while_loc = wl;
+  self->rparen_loc = rp;
+  self->cond = cond;
+  self->body = body;
+  return self;
+}
+
+fn ContinueStmt::new(cl: Loc) -> ContinueStmt* {
+  let self: ContinueStmt*;
+  self = malloc(sizeof(ContinueStmt));
+  self->kind = STMTKIND_CONTINUE;
+  self->continue_loc = cl;
+  return self;
+}
+
+fn BreakStmt::new(bl: Loc) -> BreakStmt* {
+  let self: BreakStmt*;
+  self = malloc(sizeof(BreakStmt));
+  self->kind = STMTKIND_BREAK;
+  self->break_loc = bl;
+  return self;
+}
+
+fn ReturnStmt::new(rl: Loc, e: Expr*) -> ReturnStmt* {
+  let self: ReturnStmt*;
+  self = malloc(sizeof(ReturnStmt));
+  self->kind = STMTKIND_RETURN;
+  self->return_loc = rl;
+  self->ret_expr = e;
+  return self;
+}

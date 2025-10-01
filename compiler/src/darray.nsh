@@ -15,3 +15,11 @@ lib fn DArray::pop(self: DArray*) -> void*;
 lib fn DArray::pop_front(self: DArray*) -> void*;
 
 lib fn DArray::erase(self: DArray*, pos: i64);
+
+lib fn DArray::erase_it(self: DArray*, pos: void**);
+
+lib fn DArray::begin(self: DArray*) -> void**;
+
+lib fn DArray::end(self: DArray*) -> void**;
+
+lib fn range_find(begin: void**, end: void**, value: void*) -> void**;

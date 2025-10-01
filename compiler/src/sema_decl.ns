@@ -1,0 +1,130 @@
+#include sema_decl.nsh
+#include ast_nodes_decl.nsh
+#include ast_nodes_type.nsh
+#include diags.nsh
+
+fn sema::act_on_start_of_translation_unit() {}
+fn sema::act_on_end_of_translation_unit() {}
+
+lib fn sema::act_on_method_decl_name(scope: Scope*, struct_name: CStr, loc: Loc, method_name: CStr, name_loc: Loc, out_fn_name: CStr*, out_fn_scope: StructType**) {
+  let full_name: String;
+  full_name.format("%s::%s", struct_name, method_name);
+  *out_fn_name = full_name.data;
+
+  let decl: NamedDecl*;
+  decl = scope->lookup_named_decl(struct_name);
+  if (decl != nullptr) if (decl->kind == DECLKIND_STRUCT) {
+    *out_fn_scope = cast<StructType*>(cast<StructDecl*>(decl)->ty);
+    return;
+  }
+
+  let s: String;
+  s.format("'%s' does not name a type", struct_name);
+  diag(loc, s.data, DIAG_ERROR);
+  s.destroy();
+  *out_fn_scope = nullptr;
+}
+
+fn check_fn_decl_compat(old_decl: NamedDecl*, name: CStr, params: ParamDecl**, params_count: i64, return_type: Type*, fn_loc: Loc, body: bool, is_vararg: bool) -> bool {
+  if (old_decl->kind != DECLKIND_FN) {
+    let s: String;
+    s.format("name '%s' already used with different type", name);
+    diag(fn_loc, s.data, DIAG_ERROR);
+    s.destroy();
+    return true;
+  }
+
+  let fn_decl: FnDecl*;
+  let fn_ty: FunctionType*;
+  fn_decl = cast<FnDecl*>(old_decl);
+  fn_ty = cast<FunctionType*>(fn_decl->ty);
+
+  if (body) if (fn_decl->body != nullptr) {
+    let s: String;
+    s.format("function '%s' has already been defined", name);
+    diag(fn_loc, s.data, DIAG_ERROR);
+    s.destroy();
+    return true;
+  }
+ 
+  if (params_count != fn_decl->param_decls_count) {
+    let s: String;
+    s.format("function '%s' already declared with different parameters", name);
+    diag(fn_loc, s.data, DIAG_ERROR);
+    s.destroy();
+    return true;
+  }
+
+  let i: i64;
+  i = 0;
+  while (i < params_count) {
+    if (params[i]->ty != fn_ty->param_types[i]) {
+      let s: String;
+      s.format("function '%s' already declared with different parameters", name);
+      diag(fn_loc, s.data, DIAG_ERROR);
+      s.destroy();
+      return true;
+    }
+    i += 1;
+  }
+
+  if (is_vararg != fn_decl->is_vararg) {
+    let s: String;
+    s.format("function '%s' already declared with different parameters", name);
+    diag(fn_loc, s.data, DIAG_ERROR);
+    s.destroy();
+    return true;
+  }
+
+  if (return_type != fn_ty->return_type) {
+    let s: String;
+    s.format("function '%s' already declared with different return type", name);
+    diag(fn_loc, s.data, DIAG_ERROR);
+    s.destroy();
+    return true;
+  }
+  return false;
+}
+
+lib let CUR_FN_DECL: FnDecl*;
+
+lib fn sema::act_on_fn_decl(scope: Scope*, name: CStr, params: ParamDecl**, params_count: i64, return_type: Type*, fn_loc: Loc, semi_loc: Loc, is_vararg: bool) -> FnDecl* {
+  let old_decl: NamedDecl*;
+  let is_lib: bool;
+  let decl: FnDecl*;
+  old_decl = scope->lookup_named_decl(name);
+  is_lib = false;
+  if (old_decl != nullptr) {
+    if (check_fn_decl_compat(old_decl, name, params, params_count, return_type, fn_loc, false, is_vararg)) return nullptr;
+    scope->remove_decl(old_decl);
+    is_lib = old_decl->is_lib;
+  }
+  decl = FnDecl::new(fn_loc, semi_loc, name, params, params_count, return_type, is_vararg);
+  decl->is_lib = is_lib;
+  scope->add_decl(decl);
+  return decl;
+}
+
+lib fn sema::act_on_start_fn_definition(scope: Scope*, name: CStr, params: ParamDecl**, params_count: i64, return_type: Type*, fn_loc: Loc, is_vararg: bool) -> FnDecl* {
+  let old_decl: NamedDecl*;
+  let is_lib: bool;
+  let decl: FnDecl*;
+  old_decl = scope->lookup_named_decl(name);
+  is_lib = false;
+  if (old_decl != nullptr) {
+    if (check_fn_decl_compat(old_decl, name, params, params_count, return_type, fn_loc, true, is_vararg)) return nullptr;
+    scope->remove_decl(old_decl);
+    is_lib = old_decl->is_lib;
+  }
+  decl = FnDecl::new(fn_loc, 0, name, params, params_count, return_type, is_vararg);
+  decl->is_lib = is_lib;
+  scope->add_decl(decl);
+  CUR_FN_DECL = decl;
+  return decl;
+}
+
+lib fn sema::act_on_end_fn_definition(decl: FnDecl*, body: CompoundStmt*) -> FnDecl* {
+  decl->set_body(body);
+  CUR_FN_DECL = nullptr;
+  return decl;
+}
