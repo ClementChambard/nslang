@@ -1,7 +1,7 @@
 from lex import Tok, Token, Loc, LocRef
+from lex.ident_info import IdentInfo
 from ns_ast.nodes.expr import Expr
 from ns_ast.nodes.types import Type
-from ns_ast.nodes.unqualified_id import UnqualifiedId
 from semantic_analysis import actions, eval_const_expr
 from utils.diagnostic import diag, Diag
 from .prec import Prec
@@ -82,15 +82,7 @@ from typing import List, Tuple
 def parse_expression_list(exprs: List[Expr]) -> bool:
     saw_error = False
     while True:
-        expr = None
-        if parser().tok.ty == Tok.LBRACE:
-            # diag::warn_cxx98_compat_generalized_initializer_lists
-            expr = parse_brace_initializer()
-        else:
-            expr = parse_assignment_expr()
-
-        if parser().tok.ty == Tok.ELLIPSIS:
-            expr = actions.act_on_pack_expansion(expr, parser().consume_token())
+        expr = parse_assignment_expr()
 
         if expr is None:
             saw_error = True
@@ -102,11 +94,6 @@ def parse_expression_list(exprs: List[Expr]) -> bool:
             break
 
         parser().consume_token()
-    if saw_error:
-        for e in exprs:
-            expr = actions.correct_delayed_typos_in_expr(e)
-            if expr is not None:
-                e = expr
     return saw_error
 
 
@@ -131,11 +118,9 @@ def parse_postfix_expression_suffix(lhs: Expr | None) -> Expr | None:
                 has_error = False
 
                 if parse_expression_list(arg_exprs):
-                    lhs = actions.correct_delayed_typos_in_expr(lhs)
                     has_error = True
 
                 rloc = parser().tok.loc
-                lhs = actions.correct_delayed_typos_in_expr(lhs)
 
                 if lhs is not None and not has_error and parser().tok.ty == Tok.RSQUARE:
                     lhs = actions.act_on_array_subscript_expr(
@@ -150,25 +135,12 @@ def parse_postfix_expression_suffix(lhs: Expr | None) -> Expr | None:
 
                 if parser().tok.ty != Tok.RPAREN:
                     if parse_expression_list(arg_exprs):
-                        actions.correct_delayed_typos_in_expr(lhs)
                         lhs = None
-                    elif lhs is None:
-                        for e in arg_exprs:
-                            actions.correct_delayed_typos_in_expr(e)
 
                 if lhs is None:
                     parser().skip_until(Tok.RPAREN, stop_at_semi=True)
                 elif parser().tok.ty != Tok.RPAREN:
-                    had_delayed_typo = False
-                    if actions.correct_delayed_typos_in_expr(lhs) != lhs:
-                        had_delayed_typo = True
-                    for e in arg_exprs:
-                        if actions.correct_delayed_typos_in_expr(e) != e:
-                            had_delayed_typo = True
-                    if had_delayed_typo:
-                        parser().skip_until(Tok.RPAREN, stop_at_semi=True)
-                    else:
-                        parser().consume_paren()
+                    parser().skip_until(Tok.RPAREN, stop_at_semi=True)
                     lhs = None
                 else:
                     fn = lhs
@@ -202,16 +174,22 @@ def parse_postfix_expression_suffix(lhs: Expr | None) -> Expr | None:
                 #    parse_optional_cxx_scope_specifier(ss, object_type, lhs and lhs.contains_errors(), False, &False)
                 #    if ss.is_not_empty() object_type = None
 
-                name = UnqualifiedId()
-
-                if parse_unqualified_id(name):
-                    actions.correct_delayed_typos_in_expr(lhs)
-                    lhs = None
-
-                if lhs is not None:
-                    lhs = actions.act_on_member_access_expr(
-                        parser().cur_scope, lhs, oploc, opkind, ss, name
+                if parser().tok.ty != Tok.IDENT:
+                    # kw_operator
+                    # tilde (for destructor name)
+                    # transform_type_trait => parse ident
+                    diag(
+                        parser().tok.loc, "Expected unqualified identifier", Diag.ERROR
                     )
+                    lhs = None
+                else:
+                    idinf = parser().tok.value
+                    idloc = parser().consume_token()
+                    assert isinstance(idinf, IdentInfo)
+                    lhs = actions.act_on_member_access_expr(
+                        parser().cur_scope, lhs, oploc, opkind, ss, idloc, idinf
+                    )
+
                 if lhs is None and orig_lhs is not None and name is not None:
                     lhs = actions.create_recovery_expr(
                         orig_lhs.get_range()[0], name.get_range()[1], [orig_lhs]
@@ -222,20 +200,7 @@ def parse_postfix_expression_suffix(lhs: Expr | None) -> Expr | None:
     return lhs
 
 
-def parse_unqualified_id(out: UnqualifiedId) -> bool:
-    if parser().tok.ty != Tok.IDENT:
-        # kw_operator
-        # tilde (for destructor name)
-        # transform_type_trait => parse ident
-        diag(parser().tok.loc, "Expected unqualified identifier", Diag.ERROR)
-        return True
-    idinf = parser().tok.value
-    idloc = parser().consume_token()
-    out.set_identifier(idinf, idloc)
-    return False
-
-
-def parse_unit_expr(is_address_of_operand: bool = False) -> Expr | None:
+def parse_unit_expr() -> Expr | None:
     from .ty import is_start_of_type, parse_type
 
     res = None
@@ -282,32 +247,21 @@ def parse_unit_expr(is_address_of_operand: bool = False) -> Expr | None:
                 parser().cur_scope, scope_ii, scope_loc
             )
 
-        if is_address_of_operand and parser().tok.ty in [
-            Tok.LSQUARE,
-            Tok.LPAREN,
-            Tok.PERIOD,
-            Tok.ARROW,
-            Tok.PLUSPLUS,
-            Tok.MINUSMINUS,
-        ]:
-            is_address_of_operand = False
-
-        name = UnqualifiedId()
         replacement = Token()
 
-        name.set_identifier(ii, iloc)
         res = actions.act_on_id_expression(
             parser().cur_scope,
             ss,
-            name,
+            ii,
+            iloc,
             parser().tok.ty == Tok.LPAREN,
-            is_address_of_operand,
+            False,
             False,
             replacement if parser().tok.ty == Tok.RPAREN else None,
         )
         if res is None:
             parser().unconsume_token(replacement)
-            return parse_unit_expr(is_address_of_operand)
+            return parse_unit_expr()
     elif saved_kind == Tok.CHR:
         res = actions.act_on_character_constant(parser().tok)
         parser().consume_token()
@@ -330,11 +284,11 @@ def parse_unit_expr(is_address_of_operand: bool = False) -> Expr | None:
             )
             if res is None:
                 res = actions.create_recovery_expr(
-                    saved_tok2.loc, arg.src_range[1], arg
+                    saved_tok2.loc, arg.get_range()[1], arg
                 )
     elif saved_kind == Tok.AMP:
         saved_loc = parser().consume_token()
-        res = parse_unit_expr(True)
+        res = parse_unit_expr()
         if res is not None:
             arg = res
             res = actions.act_on_unary_op(
@@ -342,7 +296,7 @@ def parse_unit_expr(is_address_of_operand: bool = False) -> Expr | None:
             )
             if res is None:
                 res = actions.create_recovery_expr(
-                    parser().tok.loc, arg.src_range[1], arg
+                    parser().tok.loc, arg.get_range()[1], arg
                 )
     elif saved_kind in [Tok.STAR, Tok.PLUS, Tok.MINUS, Tok.TILDE, Tok.EXCLAIM]:
         saved_loc = parser().consume_token()
@@ -350,11 +304,11 @@ def parse_unit_expr(is_address_of_operand: bool = False) -> Expr | None:
         if res is not None:
             arg = res
             res = actions.act_on_unary_op(
-                parser().cur_scope, saved_loc, saved_kind, arg, is_address_of_operand
+                parser().cur_scope, saved_loc, saved_kind, arg, False
             )
             if res is None:
                 res = actions.create_recovery_expr(
-                    parser().tok.loc, arg.src_range[1], arg
+                    parser().tok.loc, arg.get_range()[1], arg
                 )
     elif saved_kind == Tok.KW_CAST:
         start_loc = parser().consume_token()
@@ -442,24 +396,12 @@ def parse_rhs_of_binary_expr(lhs: Expr | None, prec: Prec) -> Expr | None:
             return lhs
         ternary_middle = None
         if next_tok_prec == Prec.COND:
-            if parser().tok.ty == Tok.LBRACE:
-                # brace_loc = parser().tok.loc
-                ternary_middle = parse_brace_initializer()
-                if ternary_middle is not None:
-                    diag(
-                        op_token.loc,
-                        "initializer list cannot be used on the left hand side of operator ':'",
-                        Diag.ERROR,
-                    )  # actions.get_expr_range(ternary_middle)
-                    ternary_middle = None
-            elif parser().tok.ty != Tok.COLON:
-                # x = ColonProtectionRAIIObject()
+            if parser().tok.ty != Tok.COLON:
                 ternary_middle = parse_expr()
             else:
                 ternary_middle = None
                 diag(op_token.loc, "ext_gnu_conditional_expr", Diag.WARNING)
             if ternary_middle is None:
-                actions.correct_delayed_typos_in_expr(lhs)
                 lhs = None
                 ternary_middle = None
             colon_loc = LocRef(colon_loc)
@@ -468,18 +410,11 @@ def parse_rhs_of_binary_expr(lhs: Expr | None, prec: Prec) -> Expr | None:
                 diag(op_token.loc, "to match this '?'", Diag.NOTE)
             colon_loc = colon_loc.value
         rhs: Expr | None = None
-        rhs_is_init_list = False
-        if parser().tok.ty == Tok.LBRACE:
-            parse_brace_initializer()
-            rhs_is_init_list = True
-        elif next_tok_prec.value <= Prec.COND.value:
+        if next_tok_prec.value <= Prec.COND.value:
             rhs = parse_assignment_expr()
         else:
             rhs = parse_unit_expr()
         if rhs is None:
-            actions.correct_delayed_typos_in_expr(lhs)
-            if ternary_middle is not None:
-                ternary_middle = actions.correct_delayed_typos_in_expr(ternary_middle)
             lhs = None
         this_prec = next_tok_prec
         next_tok_prec = Prec.from_bin_op(parser().tok.ty)
@@ -487,43 +422,12 @@ def parse_rhs_of_binary_expr(lhs: Expr | None, prec: Prec) -> Expr | None:
         if this_prec.value < next_tok_prec.value or (
             this_prec == next_tok_prec and is_right_assoc
         ):
-            if rhs is not None and rhs_is_init_list:
-                diag(
-                    parser().tok.loc,
-                    f"initializer list cannot be used on the left hand side of operator '{op_token.ty}'",
-                    Diag.ERROR,
-                )  # actions.get_expr_range(rhs)
-                rhs = None
             rhs = parse_rhs_of_binary_expr(
                 rhs, Prec(this_prec.value + int(not is_right_assoc))
             )
-            rhs_is_init_list = False
             if rhs is None:
-                actions.correct_delayed_typos_in_expr(lhs)
-                if ternary_middle is not None:
-                    ternary_middle = actions.correct_delayed_typos_in_expr(
-                        ternary_middle
-                    )
                 lhs = None
             next_tok_prec = Prec.from_bin_op(parser().tok.ty)
-        if rhs is not None and rhs_is_init_list:
-            if this_prec == Prec.ASSIGN:
-                pass
-            elif colon_loc != 0:
-                diag(
-                    colon_loc,
-                    "initializer list cannot be used on the right hand side of operator ':'",
-                    Diag.ERROR,
-                )  # actions.get_expr_range(rhs)
-                lhs = None
-            else:
-                diag(
-                    parser().tok.loc,
-                    f"initializer list cannot be used on the right hand side of operator '{op_token.ty}'",
-                    Diag.ERROR,
-                )  # get_spelling # actions.get_expr_range(rhs)
-                lhs = None
-        orig_lhs = lhs
         if lhs is not None:
             if ternary_middle is None:
                 bin_op = actions.act_on_bin_op(
@@ -548,10 +452,6 @@ def parse_rhs_of_binary_expr(lhs: Expr | None, prec: Prec) -> Expr | None:
                         lhs.get_range()[0], rhs.get_range()[1], args
                     )
                 lhs = cond_op
-        if lhs is None:
-            actions.correct_delayed_typos_in_expr(orig_lhs)
-            actions.correct_delayed_typos_in_expr(ternary_middle)
-            actions.correct_delayed_typos_in_expr(rhs)
 
 
 def parse_expr() -> Expr | None:

@@ -85,9 +85,11 @@ def parse_decl(decl_ctx: DeclaratorContext, decl_end: LocPtr = None) -> Decl | N
             return parse_decl(decl_ctx, decl_end)
         start_loc = parser().consume_token()
         decl = parse_decl(decl_ctx, decl_end)
-        assert decl is not None, "TODO: diag here"
-        decl.is_lib = True
-        decl.src_range = (start_loc, decl.src_range[1])
+        if decl is not None:
+            decl.is_lib = True
+            decl.src_range = (start_loc, decl.src_range[1])
+        else:
+            pass  # assert decl is not None, "TODO: diag here"
     elif parser().tok.ty == Tok.KW_LET:
         decl = parse_var_decl()
     elif parser().tok.ty == Tok.KW_TYPE:
@@ -258,7 +260,11 @@ def parse_fn_decl() -> FnDecl | None:
                 is_vararg = True
                 parser().consume_token()
             else:
-                params.append(parse_param_decl())
+                param = parse_param_decl()
+                if param is not None:
+                    params.append(param)
+                else:
+                    parser().skip_until(Tok.COMMA, Tok.RPAREN, stop_before_match=True)
             if parser().tok.ty != Tok.COMMA:
                 break
             if is_vararg:
@@ -352,8 +358,15 @@ def parse_struct_decl() -> StructDecl | None:
         cur_type = cur_decl.ty
         assert isinstance(cur_type, StructType)
         if not cur_type.is_incomplete:
+            loc = parser().tok.loc
+            parser().consume_token()
+            if parser().tok.ty == Tok.SEMI:
+                parser().cur_scope.add_decl(cur_decl)
+                end_loc = parser().consume_token()
+                cur_decl.src_range = (cur_decl.src_range[0], end_loc)
+                return cur_decl
             diag(
-                parser().tok.loc,
+                loc,
                 f"struct '{type_name}' was already defined",
                 Diag.ERROR,
             )

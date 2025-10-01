@@ -240,7 +240,8 @@ class Scope:
         self.decls_in_scope.append(d)
 
     def remove_decl(self, d: Decl):
-        self.decls_in_scope.remove(d)
+        if d in self.decls_in_scope:
+            self.decls_in_scope.remove(d)
 
     def contains_decl(self, d: Decl):
         return d in self.decls_in_scope

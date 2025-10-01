@@ -28,7 +28,16 @@ class DeclRefExpr(Expr):
     loc: Loc
     qualifier: None
 
-    def __init__(self, nns: None, d: ValueDecl, name: str, ii: IdentInfo, nameloc: Loc, ty: Type, vk: ValueKind):
+    def __init__(
+        self,
+        nns: None,
+        d: ValueDecl,
+        name: str,
+        ii: IdentInfo,
+        nameloc: Loc,
+        ty: Type,
+        vk: ValueKind,
+    ):
         self.decl = d
         self.ii = ii
         self.loc = nameloc
@@ -62,7 +71,7 @@ class BoolLiteral(Expr):
 
     def __init__(self, val: bool, ty: Type, loc: Loc):
         self.ty = ty
-        self.value_kind = ValueKind.PRVALUE #ok ordinary
+        self.value_kind = ValueKind.PRVALUE  # ok ordinary
         self.value = val
         self.loc = loc
 
@@ -86,11 +95,13 @@ class StringLiteral(Expr):
     def get_range(self) -> LocRge:
         return (self.locs[0], self.locs[-1])
 
+
 @dataclass
 class ParenExpr(Expr):
     l: Loc
     r: Loc
     val: Expr
+
     def __init__(self, l: Loc, r: Loc, val: Expr):
         self.l = l
         self.r = r
@@ -120,28 +131,45 @@ class UnaryOperatorKind(enum.Enum):
     @classmethod
     def from_tok(cls, t: Tok):
         match t:
-            case Tok.PLUSPLUS: return cls.PREINC
-            case Tok.MINUSMINUS: return cls.PREDEC
-            case Tok.AMP: return cls.ADDROF
-            case Tok.STAR: return cls.DEREF
-            case Tok.PLUS: return cls.PLUS
-            case Tok.MINUS: return cls.MINUS
-            case Tok.TILDE: return cls.NOT
-            case Tok.EXCLAIM: return cls.LNOT
-
+            case Tok.PLUSPLUS:
+                return cls.PREINC
+            case Tok.MINUSMINUS:
+                return cls.PREDEC
+            case Tok.AMP:
+                return cls.ADDROF
+            case Tok.STAR:
+                return cls.DEREF
+            case Tok.PLUS:
+                return cls.PLUS
+            case Tok.MINUS:
+                return cls.MINUS
+            case Tok.TILDE:
+                return cls.NOT
+            case Tok.EXCLAIM:
+                return cls.LNOT
 
     def __str__(self) -> str:
         match self:
-            case self.POSTINC: return "post ++"
-            case self.POSTDEC: return "post --"
-            case self.PREINC: return "++"
-            case self.PREDEC: return "--"
-            case self.ADDROF: return "&"
-            case self.DEREF: return "*"
-            case self.PLUS: return "+"
-            case self.MINUS: return "-"
-            case self.NOT: return "~"
-            case self.LNOT: return "!"
+            case self.POSTINC:
+                return "post ++"
+            case self.POSTDEC:
+                return "post --"
+            case self.PREINC:
+                return "++"
+            case self.PREDEC:
+                return "--"
+            case self.ADDROF:
+                return "&"
+            case self.DEREF:
+                return "*"
+            case self.PLUS:
+                return "+"
+            case self.MINUS:
+                return "-"
+            case self.NOT:
+                return "~"
+            case self.LNOT:
+                return "!"
 
 
 @dataclass
@@ -152,7 +180,9 @@ class UnaryExpr(Expr):
     loc: Loc
     arg: Expr
 
-    def __init__(self, arg: Expr, opc: UnaryOperatorKind, ty: Type, vk: ValueKind, l: Loc): #ctx, ok, can_overflow, fp_features
+    def __init__(
+        self, arg: Expr, opc: UnaryOperatorKind, ty: Type, vk: ValueKind, l: Loc
+    ):  # ctx, ok, can_overflow, fp_features
         self.opc = opc
         self.loc = l
         self.value_kind = vk
@@ -161,10 +191,17 @@ class UnaryExpr(Expr):
         # ok, can_overflow and fp_fearures ...
 
     def is_postfix(self) -> bool:
-        return self.opc == UnaryOperatorKind.POSTINC or self.opc == UnaryOperatorKind.POSTDEC
+        return (
+            self.opc == UnaryOperatorKind.POSTINC
+            or self.opc == UnaryOperatorKind.POSTDEC
+        )
 
     def get_range(self) -> LocRge:
-        return (self.arg.get_range()[0], self.loc) if self.is_postfix() else (self.loc, self.arg.get_range()[1])
+        return (
+            (self.arg.get_range()[0], self.loc)
+            if self.is_postfix()
+            else (self.loc, self.arg.get_range()[1])
+        )
 
     def children(self) -> List[StmtChild]:
         return [self.arg]
@@ -178,15 +215,15 @@ class BinaryOperatorKind(enum.Enum):
     SUB = enum.auto()
     SHL = enum.auto()
     SHR = enum.auto()
+    AND = enum.auto()
+    XOR = enum.auto()
+    OR = enum.auto()
     LT = enum.auto()
     GT = enum.auto()
     LE = enum.auto()
     GE = enum.auto()
     EQ = enum.auto()
     NE = enum.auto()
-    AND = enum.auto()
-    XOR = enum.auto()
-    OR = enum.auto()
     LAND = enum.auto()
     LOR = enum.auto()
     ASSIGN = enum.auto()
@@ -204,71 +241,134 @@ class BinaryOperatorKind(enum.Enum):
     def is_compound_assignment(self) -> bool:
         return self.value >= self.MULASSIGN.value and self.value <= self.ORASSIGN.value
 
+    def to_non_compound(self):
+        assert self.is_compound_assignment()
+        return BinaryOperatorKind(self.value + (self.MUL.value - self.MULASSIGN.value))
+
     @classmethod
-    def from_tok(cls, t: Tok): #  -> Self
+    def from_tok(cls, t: Tok):  #  -> Self
         match t:
-            case Tok.STAR: return cls.MUL
-            case Tok.SLASH: return cls.DIV
-            case Tok.PERCENT: return cls.REM
-            case Tok.PLUS: return cls.ADD
-            case Tok.MINUS: return cls.SUB
-            case Tok.LESSLESS: return cls.SHL
-            case Tok.GREATERGREATER: return cls.SHR
-            case Tok.LESS: return cls.LT
-            case Tok.GREATER: return cls.GT
-            case Tok.LESSEQUAL: return cls.LE
-            case Tok.GREATEREQUAL: return cls.GE
-            case Tok.EQUALEQUAL: return cls.EQ
-            case Tok.EXCLAIMEQUAL: return cls.NE
-            case Tok.AMP: return cls.AND
-            case Tok.CARET: return cls.XOR
-            case Tok.PIPE: return cls.OR
-            case Tok.AMPAMP: return cls.LAND
-            case Tok.PIPEPIPE: return cls.LOR
-            case Tok.EQUAL: return cls.ASSIGN
-            case Tok.STAREQUAL: return cls.MULASSIGN
-            case Tok.SLASHEQUAL: return cls.DIVASSIGN
-            case Tok.PERCENTEQUAL: return cls.REMASSIGN
-            case Tok.PLUSEQUAL: return cls.ADDASSIGN
-            case Tok.MINUSEQUAL: return cls.SUBASSIGN
-            case Tok.LESSLESSEQUAL: return cls.SHLASSIGN
-            case Tok.GREATERGREATEREQUAL: return cls.SHRASSIGN
-            case Tok.AMPEQUAL: return cls.ANDASSIGN
-            case Tok.CARETEQUAL: return cls.XORASSIGN
-            case Tok.PIPEEQUAL: return cls.ORASSIGN
-            case _: assert False, "Invalid token for bin op"
+            case Tok.STAR:
+                return cls.MUL
+            case Tok.SLASH:
+                return cls.DIV
+            case Tok.PERCENT:
+                return cls.REM
+            case Tok.PLUS:
+                return cls.ADD
+            case Tok.MINUS:
+                return cls.SUB
+            case Tok.LESSLESS:
+                return cls.SHL
+            case Tok.GREATERGREATER:
+                return cls.SHR
+            case Tok.LESS:
+                return cls.LT
+            case Tok.GREATER:
+                return cls.GT
+            case Tok.LESSEQUAL:
+                return cls.LE
+            case Tok.GREATEREQUAL:
+                return cls.GE
+            case Tok.EQUALEQUAL:
+                return cls.EQ
+            case Tok.EXCLAIMEQUAL:
+                return cls.NE
+            case Tok.AMP:
+                return cls.AND
+            case Tok.CARET:
+                return cls.XOR
+            case Tok.PIPE:
+                return cls.OR
+            case Tok.AMPAMP:
+                return cls.LAND
+            case Tok.PIPEPIPE:
+                return cls.LOR
+            case Tok.EQUAL:
+                return cls.ASSIGN
+            case Tok.STAREQUAL:
+                return cls.MULASSIGN
+            case Tok.SLASHEQUAL:
+                return cls.DIVASSIGN
+            case Tok.PERCENTEQUAL:
+                return cls.REMASSIGN
+            case Tok.PLUSEQUAL:
+                return cls.ADDASSIGN
+            case Tok.MINUSEQUAL:
+                return cls.SUBASSIGN
+            case Tok.LESSLESSEQUAL:
+                return cls.SHLASSIGN
+            case Tok.GREATERGREATEREQUAL:
+                return cls.SHRASSIGN
+            case Tok.AMPEQUAL:
+                return cls.ANDASSIGN
+            case Tok.CARETEQUAL:
+                return cls.XORASSIGN
+            case Tok.PIPEEQUAL:
+                return cls.ORASSIGN
+            case _:
+                assert False, "Invalid token for bin op"
 
     def __str__(self) -> str:
         match self:
-            case self.MUL: return "*"
-            case self.DIV: return "/"
-            case self.REM: return "%"
-            case self.ADD: return "+"
-            case self.SUB: return "-"
-            case self.SHL: return "<<"
-            case self.SHR: return ">>"
-            case self.LT: return "<"
-            case self.GT: return ">"
-            case self.LE: return "<="
-            case self.GE: return ">="
-            case self.EQ: return "=="
-            case self.NE: return "!="
-            case self.AND: return "&"
-            case self.XOR: return "^"
-            case self.OR: return "|"
-            case self.LAND: return "&&"
-            case self.LOR: return "||"
-            case self.ASSIGN: return "="
-            case self.MULASSIGN: return "*="
-            case self.DIVASSIGN: return "/="
-            case self.REMASSIGN: return "%="
-            case self.ADDASSIGN: return "+="
-            case self.SUBASSIGN: return "-="
-            case self.SHLASSIGN: return "<<="
-            case self.SHRASSIGN: return ">>="
-            case self.ANDASSIGN: return "&="
-            case self.XORASSIGN: return "^="
-            case self.ORASSIGN: return "|="
+            case self.MUL:
+                return "*"
+            case self.DIV:
+                return "/"
+            case self.REM:
+                return "%"
+            case self.ADD:
+                return "+"
+            case self.SUB:
+                return "-"
+            case self.SHL:
+                return "<<"
+            case self.SHR:
+                return ">>"
+            case self.LT:
+                return "<"
+            case self.GT:
+                return ">"
+            case self.LE:
+                return "<="
+            case self.GE:
+                return ">="
+            case self.EQ:
+                return "=="
+            case self.NE:
+                return "!="
+            case self.AND:
+                return "&"
+            case self.XOR:
+                return "^"
+            case self.OR:
+                return "|"
+            case self.LAND:
+                return "&&"
+            case self.LOR:
+                return "||"
+            case self.ASSIGN:
+                return "="
+            case self.MULASSIGN:
+                return "*="
+            case self.DIVASSIGN:
+                return "/="
+            case self.REMASSIGN:
+                return "%="
+            case self.ADDASSIGN:
+                return "+="
+            case self.SUBASSIGN:
+                return "-="
+            case self.SHLASSIGN:
+                return "<<="
+            case self.SHRASSIGN:
+                return ">>="
+            case self.ANDASSIGN:
+                return "&="
+            case self.XORASSIGN:
+                return "^="
+            case self.ORASSIGN:
+                return "|="
 
 
 @dataclass
@@ -280,9 +380,17 @@ class BinaryExpr(Expr):
     lhs: Expr
     rhs: Expr
 
-    def __init__(self, lhs: Expr, rhs: Expr, opc: BinaryOperatorKind, res_ty: Type, vk: ValueKind, op_loc: Loc): # ctx, ok, fpfeatures
+    def __init__(
+        self,
+        lhs: Expr,
+        rhs: Expr,
+        opc: BinaryOperatorKind,
+        res_ty: Type,
+        vk: ValueKind,
+        op_loc: Loc,
+    ):  # ctx, ok, fpfeatures
         self.ty = res_ty
-        self.value_kind = vk # ok
+        self.value_kind = vk  # ok
         self.opc = opc
         # assert(!is_compound_assignment_op())
         self.op_loc = op_loc
@@ -299,9 +407,17 @@ class BinaryExpr(Expr):
 
 @dataclass
 class CompoundAssignExpr(BinaryExpr):
-    def __init__(self, lhs: Expr, rhs: Expr, opc: BinaryOperatorKind, res_ty: Type, vk: ValueKind, op_loc: Loc): # ctx, ok, fpfeatures
+    def __init__(
+        self,
+        lhs: Expr,
+        rhs: Expr,
+        opc: BinaryOperatorKind,
+        res_ty: Type,
+        vk: ValueKind,
+        op_loc: Loc,
+    ):  # ctx, ok, fpfeatures
         self.ty = res_ty
-        self.value_kind = vk # ok
+        self.value_kind = vk  # ok
         self.opc = opc
         # assert(is_compound_assignment_op())
         self.op_loc = op_loc
@@ -316,7 +432,9 @@ class CallExpr(Expr):
     fn: Expr
     args: List[Expr]
 
-    def __init__(self, fn: Expr, args: List[Expr], ty: Type, vk: ValueKind, rparen_loc: Loc): # fpfeatures, min_num_args = 0, uses_adl = NotADL
+    def __init__(
+        self, fn: Expr, args: List[Expr], ty: Type, vk: ValueKind, rparen_loc: Loc
+    ):  # fpfeatures, min_num_args = 0, uses_adl = NotADL
         self.ty = ty
         self.value_kind = vk
         self.fn = fn
@@ -332,7 +450,9 @@ class CallExpr(Expr):
 
 @dataclass
 class MethodCallExpr(CallExpr):
-    def __init__(self, method: Expr, args: List[Expr], ty: Type, vk: ValueKind, rparen_loc: Loc):
+    def __init__(
+        self, method: Expr, args: List[Expr], ty: Type, vk: ValueKind, rparen_loc: Loc
+    ):
         super().__init__(method, args, ty, vk, rparen_loc)
 
 
@@ -345,6 +465,7 @@ class SizeofExpr(Expr):
 
     def __init__(self, ty, expr, sl, rl):
         from semantic_analysis import TYPES
+
         self.sizeof_loc = sl
         self.rparen_loc = rl
         self.expr = expr
@@ -368,7 +489,9 @@ class MemberExpr(Expr):
     is_arrow: bool
     oploc: Loc
 
-    def __init__(self, base, is_arrow, oploc, name: str, ty: Type, vk: ValueKind, field_offset):
+    def __init__(
+        self, base, is_arrow, oploc, name: str, ty: Type, vk: ValueKind, field_offset
+    ):
         self.ty = ty
         self.value_kind = vk
         self.name = name
@@ -412,7 +535,9 @@ class ArraySubscriptExpr(Expr):
     rhs: Expr
     rbracket_loc: Loc
 
-    def __init__(self, lhs: Expr, rhs: Expr, t: Type, vk: ValueKind, rbracket_loc: Loc): # ok
+    def __init__(
+        self, lhs: Expr, rhs: Expr, t: Type, vk: ValueKind, rbracket_loc: Loc
+    ):  # ok
         self.ty = t
         self.value_kind = vk
         self.lhs = lhs
@@ -434,9 +559,18 @@ class ConditionalExpr(Expr):
     colon_loc: Loc
     rhs: Expr
 
-    def __init__(self, cond: Expr, qloc: Loc, lhs: Expr, cloc: Loc, rhs: Expr, t: Type, vk: ValueKind): # ok
+    def __init__(
+        self,
+        cond: Expr,
+        qloc: Loc,
+        lhs: Expr,
+        cloc: Loc,
+        rhs: Expr,
+        t: Type,
+        vk: ValueKind,
+    ):  # ok
         self.ty = t
-        self.value_kind = vk # ok
+        self.value_kind = vk  # ok
         self.question_loc = qloc
         self.colon_loc = cloc
         self.cond = cond
@@ -457,8 +591,8 @@ class RecoveryExpr(Expr):
     sub_exprs: List[Expr]
 
     def __init__(self, t: Type, begin_loc: Loc, end_loc: Loc, sub_exprs: List[Expr]):
-        self.ty = t # more complex
-        self.value_kind = ValueKind.PRVALUE # more complex
+        self.ty = t  # more complex
+        self.value_kind = ValueKind.PRVALUE  # more complex
         self.begin_loc = begin_loc
         self.end_loc = end_loc
         self.sub_exprs = sub_exprs
@@ -566,7 +700,7 @@ class VAArgExpr(Expr):
 def ignore_parens_single_step(e: Expr) -> Expr:
     if isinstance(e, ParenExpr):
         return e.val
-    return e;
+    return e
 
 
 def ignore_expr_nodes(e: Expr, *args):

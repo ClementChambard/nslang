@@ -369,9 +369,7 @@ def parse_do_stmt() -> DoStmt | None:
 
     cond = parse_expr()
 
-    if cond is not None:
-        cond = actions.correct_delayed_typos_in_expr(cond, None, True)
-    else:
+    if cond is None:
         if parser().tok.ty not in [Tok.RPAREN, Tok.RSQUARE, Tok.RBRACE]:
             parser().skip_until(Tok.SEMI)
         cond = actions.create_recovery_expr(

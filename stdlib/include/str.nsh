@@ -221,3 +221,5 @@ lib fn String::clear(self: String*);
 ///   @object self
 ///   @param[in] clone_from the string to copy
 lib fn String::clone_from(self: String*, clone_from: String*);
+
+lib fn String::last(self: String*) -> char;

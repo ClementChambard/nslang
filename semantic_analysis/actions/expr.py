@@ -42,7 +42,6 @@ from ns_ast.nodes.types import (
     StructType,
     Type,
 )
-from ns_ast.nodes.unqualified_id import UnqualifiedId
 from semantic_analysis import (
     TYPES,
     StringLiteralParser,
@@ -65,23 +64,22 @@ def get_expr_range(e: Expr | None) -> Tuple[int, int]:
     return e.get_range()
 
 
-def correct_delayed_typos_in_expr_inner(
-    er: Expr,
-    init_decl,
-    recover_uncorrected_typos: bool,
-    filter_: Callable[[Expr], Expr],
-) -> Expr:
-    # TODO:
-    _ = init_decl, recover_uncorrected_typos, filter_  # UNUSED
-    return er
-
-
 def correct_delayed_typos_in_expr(
     er: Expr | None,
     init_decl=None,
     recover_uncorrected_typos: bool = False,
     filter_: Callable[[Expr], Expr] = lambda e: e,
 ) -> Expr | None:
+    def correct_delayed_typos_in_expr_inner(
+        er: Expr,
+        init_decl,
+        recover_uncorrected_typos: bool,
+        filter_: Callable[[Expr], Expr],
+    ) -> Expr:
+        # TODO:
+        _ = init_decl, recover_uncorrected_typos, filter_  # UNUSED
+        return er
+
     if er is None:
         return None
     return correct_delayed_typos_in_expr_inner(
@@ -1135,14 +1133,10 @@ def build_member_reference_expr(
     base_type: Type,
     oploc: Loc,
     is_arrow: bool,
-    ss,
-    first_qualifier_in_scope,
-    name_info,
-    scope: Scope,
-    name: UnqualifiedId,
+    name_loc: Loc,
+    name_id: IdentInfo,
 ) -> Expr:
     # TODO:
-    _ = ss, first_qualifier_in_scope, scope  # UNUSED
     struct_type = None
     if is_arrow:
         if not (
@@ -1155,7 +1149,8 @@ def build_member_reference_expr(
                 Diag.ERROR,
                 [base.get_range()],
             )
-            assert False
+            # TODO: What type should the expression have ?
+            return create_recovery_expr(base.get_range()[0], oploc, [base])
         base = default_lvalue_conversion(base)
         struct_type = base_type.subtype
     else:
@@ -1166,35 +1161,32 @@ def build_member_reference_expr(
                 Diag.ERROR,
                 [base.get_range()],
             )
-            assert False
+            # TODO: What type should the expression have ?
+            return create_recovery_expr(base.get_range()[0], oploc, [base])
         struct_type = base_type
-    field, offset = lookup_field_in_struct(struct_type, name_info)
+    field, offset = lookup_field_in_struct(struct_type, name_id.val)
     if field is not None:
         return MemberExpr(
-            base, is_arrow, oploc, name_info, field[1], ValueKind.LVALUE, offset
+            base, is_arrow, oploc, name_id.val, field[1], ValueKind.LVALUE, offset
         )
-    method = lookup_method_in_struct(struct_type, name_info, oploc)
+    method = lookup_method_in_struct(struct_type, name_id.val, oploc)
     if method is not None:
         return MethodExpr(base, is_arrow, oploc, method)
-    assert name.value is not None
     diag(
-        name.start_location,
-        f"unknown field or method '{name.value.val}' for '{struct_type}'",
+        name_loc,
+        f"unknown field or method '{name_id.val}' for '{struct_type}'",
         Diag.ERROR,
     )
-    assert False
+    # TODO: What type should the expression have ?
+    return create_recovery_expr(base.get_range()[0], oploc, [base])
 
 
 def act_on_member_access_expr(
-    scope, base: Expr, oploc: Loc, opkind: Tok, ss, name: UnqualifiedId
+    scope, base: Expr, oploc: Loc, opkind: Tok, ss, name_loc: Loc, name_id: IdentInfo
 ) -> Expr:
-    # DeclarationNameInfo name_info
-    assert name.value is not None
-    name_info = name.value.val  # set_name
+    _ = scope, ss  # UNUSED
 
     is_arrow = opkind == Tok.ARROW
-
-    first_qualifier_in_scope = None  # (!SS.isSet() ? nullptr : FindFirstQualifierInScope(S, SS.getScopeRep()));
 
     # result = maybe_convert_paren_list_expr_to_paren_expr(scope, base)
     # if result is None: return None
@@ -1205,11 +1197,8 @@ def act_on_member_access_expr(
         base.ty,
         oploc,
         is_arrow,
-        ss,
-        first_qualifier_in_scope,
-        name_info,
-        scope,
-        name,
+        name_loc,
+        name_id,
     )
     # if res is not None and isinstance(res, MemberExpr):
     #     check_member_access_of_no_deref(res)
@@ -1268,10 +1257,8 @@ def create_builtin_array_subscript_expr(
         if (f := lhs_ty.deepest_super_field()) is not None:
             name, ty = f
             if isinstance(ty, PointerType):  # TODO: or array type ?
-                uid = UnqualifiedId()
-                uid.set_identifier(IdentInfo.find(name), lloc)
                 lhs_expr = act_on_member_access_expr(
-                    None, base, lloc, Tok.PERIOD, None, uid
+                    None, base, lloc, Tok.PERIOD, None, lloc, IdentInfo.find(name)
                 )
                 lhs_expr = default_lvalue_conversion(lhs_expr)
                 if lhs_expr is None:
@@ -1554,7 +1541,7 @@ def perform_implicit_conversion(
             Diag.ERROR,
             [f.get_range()],
         )
-        print(f, to_type)
+        # print(f, to_type)
     assert ics.conversion_kind == 0  # TODO:
     scs = ics.val
     from_type = f.ty
@@ -1833,7 +1820,8 @@ def build_declaration_name_expr(
 def act_on_id_expression(
     s: Scope,
     ss,
-    i: UnqualifiedId,
+    ident: IdentInfo,
+    ident_loc: Loc,
     has_trailing_lparen: bool,
     is_address_of_operand: bool,
     is_inline_asm_identifier: bool,
@@ -1845,24 +1833,21 @@ def act_on_id_expression(
     )
     # if (SS.isInvalid()) return ExprError();
 
-    assert i.value is not None
-    name = i.value.val
-    ii = i.value
-    nameloc = i.start_location
+    name = ident.val
 
     if ss is not None:
         name = f"{ss.name}::{name}"
     lookup_decl = s.lookup_named_decl(name)
 
     if lookup_decl is None:
-        diag(nameloc, f"Undeclared identifier '{name}'", Diag.ERROR)
+        diag(ident_loc, f"Undeclared identifier '{name}'", Diag.ERROR)
         # fill keyword_replacement
         return None
 
     # if (isPotentialImplicitMemberAccess(SS, R, IsAddressOfOperand))
     #   return BuildPossibleImplicitMemberExpr(SS, 0, R, nullptr, S);
 
-    return build_declaration_name_expr(ss, name, ii, nameloc, lookup_decl)
+    return build_declaration_name_expr(ss, name, ident, ident_loc, lookup_decl)
 
 
 def act_on_paren_expr(lp_loc: Loc, rp_loc: Loc, e: Expr | None) -> ParenExpr:
@@ -1942,10 +1927,6 @@ def act_on_finish_full_expr(
     if fe.value_kind != ValueKind.PRVALUE:
         fe = default_lvalue_conversion(fe)
 
-    fe = correct_delayed_typos_in_expr(fe, None, True)
-    if fe is None:
-        return None
-
     check_completed_expr(fe, cc, is_constexpr)
 
     # LambdaScopeInfo *const CurrentLSI = getCurLambda(/*IgnoreCapturedRegions=*/true);
@@ -1989,7 +1970,7 @@ def act_on_scoped_identifier(
 ) -> StructType | None:
     maybe_struct_decl = scope.lookup_named_decl(ii.val)
     if maybe_struct_decl is None or not isinstance(maybe_struct_decl, StructDecl):
-        diag(loc, "'{ii.val}' does not name a struct type", Diag.ERROR)
+        diag(loc, f"'{ii.val}' does not name a struct type", Diag.ERROR)
         return None
     assert isinstance(maybe_struct_decl.ty, StructType)
     return maybe_struct_decl.ty

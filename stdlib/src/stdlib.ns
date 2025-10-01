@@ -1,3 +1,5 @@
 #include stdlib.nsh
 
-// TODO
+fn exit(code: i64) {
+    __builtin_syscall(231, code);
+}

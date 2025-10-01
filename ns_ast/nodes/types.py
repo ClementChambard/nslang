@@ -33,6 +33,9 @@ class Type:
     def get_pointer_type(self) -> "PointerType":
         return PointerType(self)
 
+    def is_signed(self) -> bool:
+        return False
+
 
 class BuiltinTypeKind(enum.Enum):
     I8 = enum.auto()

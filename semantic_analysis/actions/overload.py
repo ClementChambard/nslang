@@ -439,8 +439,8 @@ def is_pointer_conversion(from_e, from_type, to_type, is_explicit) -> bool:
         # TODO: always allow explicit pointer conversion ?
         return True
     # Check struct supertype
-    if isinstance(from_type, StructType):
-        f_ty = from_type
+    if isinstance(from_type.subtype, StructType):
+        f_ty = from_type.subtype
         found = False
         while isinstance(f_ty, StructType) and f_ty.super_type() is not None:
             super_type = f_ty.super_type()
@@ -451,7 +451,9 @@ def is_pointer_conversion(from_e, from_type, to_type, is_explicit) -> bool:
         if found:
             return True
     # Convert to or from void* is always allowed
-    return type_is_void(from_type.subtype) or type_is_void(to_type.subtype)
+    if type_is_void(from_type.subtype) or type_is_void(to_type.subtype):
+        return True
+    return False
 
 
 def is_function_conversion(from_type, to_type, result_ty) -> bool:

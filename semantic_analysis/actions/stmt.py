@@ -19,13 +19,14 @@ from ns_ast.nodes.stmt import (
 )
 from lex import Loc
 from typing import List
+from semantic_analysis.actions.overload import try_implicit_conversion
 from utils.diagnostic import Diag, diag
 from .expr import (
     act_on_finish_full_expr,
     check_boolean_condition,
-    correct_delayed_typos_in_expr,
     ignored_value_conversions,
     imp_cast_expr_to_type,
+    perform_implicit_conversion,
 )
 from . import state
 
@@ -231,11 +232,6 @@ def act_on_return_stmt(
     allow_recovery: bool = False,
 ):
     _ = scope, allow_recovery  # UNUSED
-    if ret_val_expr is not None:
-        ret_val_expr = correct_delayed_typos_in_expr(ret_val_expr, None, True)
-        if ret_val_expr is None:
-            return None
-
     fd = state.CUR_FN_DECL
     if fd is None:
         return None
@@ -274,6 +270,8 @@ def act_on_return_stmt(
         # if (Res.isInvalid() && AllowRecovery) Res = CreateRecoveryExpr(RetValExp->getBeginLoc(), RetValExp->getEndLoc(), RetValExp, FnRetType);
         # if ret_val_expr is None: return None
         # CheckReturnValExpr(RetValExp, FnRetType, ReturnLoc, false, Attrs, getCurFunctionDecl());
+        ics = try_implicit_conversion(ret_val_expr, fn_ret_type)
+        ret_val_expr = perform_implicit_conversion(ret_val_expr, fn_ret_type, ics)
         ret_val_expr = act_on_finish_full_expr(ret_val_expr, return_loc, False)
         if ret_val_expr is None:
             return None

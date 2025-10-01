@@ -10,6 +10,8 @@ fn isspace(c: char) -> bool {
 
 fn strcmp(str_1: CStr, str_2: CStr) -> i64 {
     if (str_1 == str_2) return 0;
+    if (str_1 == nullptr) return -1;
+    if (str_2 == nullptr) return 1;
     while (*str_1 != 0) {
         if (*str_1 != *str_2) return *str_1 - *str_2;
         str_1 = &str_1[1];
@@ -19,6 +21,7 @@ fn strcmp(str_1: CStr, str_2: CStr) -> i64 {
 }
 
 fn strlen(str: CStr) -> i64 {
+    if (str == nullptr) return 0;
     let len: i64;
     len = 0;
     while (str[len] != 0) len += 1;
@@ -415,4 +418,8 @@ fn String::from_raw_parts(self: String*, data: char*, len: i64, capacity: i64) {
     self->data = data;
     self->len = len;
     self->capacity = capacity;
+}
+
+fn String::last(self: String*) -> char {
+  return self->data[self->len - 1];
 }

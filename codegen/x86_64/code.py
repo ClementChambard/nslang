@@ -111,8 +111,9 @@ def fn_params(params: List[ParamEntry]) -> Tuple[X86_Body, int, int, int]:
             int_param_i += 1
         else:
             arg_stack_loc = get_variable_memory(stack_param_i, True, size=8)
-            out.append(X86_Instr("mov", "rdi", arg_stack_loc))
-            out.append(X86_Instr("mov", arg_memory, "rdi"))
+            param_reg = X86_Register.get("rdi")
+            out.append(X86_Instr("mov", param_reg, arg_stack_loc))
+            out.append(X86_Instr("mov", arg_memory, param_reg.with_size(arg_memory.size)))
             stack_param_i += 1
     return out, int_param_i, float_param_i, stack_param_i
 

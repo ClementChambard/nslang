@@ -48,7 +48,7 @@ def new_label_name(name: str) -> str:
 def scope_lookup(cur_scope: dict, scope_stack: list, name: str) -> int:
     if name in cur_scope.keys():
         return cur_scope[name]
-    assert len(scope_stack) > 0
+    assert len(scope_stack) > 0, f"while looking up {name}, {cur_scope}"
     return scope_lookup(scope_stack[-1], scope_stack[:-1], name)
 
 
@@ -326,7 +326,12 @@ def generate_cast_expr_ir(
                 var_id = scope_lookup(cur_scope, scope_stack, e.op.decl.name)
                 return [IrInstr(IrInstrKind.PSH, 1, var_id)]
         elif isinstance(e.op, ParenExpr):
-            return generate_cast_expr_ir(CastExpr(e.ty, e.value_kind, e.kind, e.op.val), ir, cur_scope, scope_stack)
+            return generate_cast_expr_ir(
+                CastExpr(e.ty, e.value_kind, e.kind, e.op.val),
+                ir,
+                cur_scope,
+                scope_stack,
+            )
             pass
         elif isinstance(e.op, ArraySubscriptExpr):
             out = []
