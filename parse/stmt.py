@@ -14,19 +14,8 @@ from ns_ast.nodes.stmt import (
 )
 from semantic_analysis import actions, ScopeFlags, TYPES
 from utils.diagnostic import diag, Diag
-import enum
 from .parser import parser
 from .expr import parse_expr
-
-
-class ParsedStmtContext(enum.Flag):
-    ALLOW_DECLARATION_IN_C = 1
-    IN_STMT_EXPR = 4
-    SUB_STMT = 0
-    COMPOUND = 1
-
-    def in_stmt_expr(self) -> bool:
-        return (self.value & 4) != 0
 
 
 def parse_if_stmt(trailing_else_loc: LocPtr) -> IfStmt | None:
@@ -74,9 +63,7 @@ def parse_if_stmt(trailing_else_loc: LocPtr) -> IfStmt | None:
 
     then_stmt_loc = parser().tok.loc
     inner_statement_trailing_else_loc = LocRef(0)
-    then_stmt = parse_stmt(
-        ParsedStmtContext.SUB_STMT, inner_statement_trailing_else_loc
-    )
+    then_stmt = parse_stmt(inner_statement_trailing_else_loc)
     if is_braced:
         parser().exit_scope()
 
@@ -95,7 +82,7 @@ def parse_if_stmt(trailing_else_loc: LocPtr) -> IfStmt | None:
             parser().enter_scope(ScopeFlags.DECL)
 
         else_stmt_loc = parser().tok.loc
-        else_stmt = parse_stmt(ParsedStmtContext.SUB_STMT, None)
+        else_stmt = parse_stmt(None)
         if is_braced:
             parser().exit_scope()
     elif inner_statement_trailing_else_loc.value != 0:
@@ -121,7 +108,7 @@ def parse_if_stmt(trailing_else_loc: LocPtr) -> IfStmt | None:
 
 
 def parse_case_stmt(
-    stmt_ctx: ParsedStmtContext, missing_case: bool = False, expr: Expr | None = None
+    missing_case: bool = False, expr: Expr | None = None
 ) -> Stmt | None:
     assert missing_case or parser().tok.ty == Tok.KW_CASE, "Not a case stmt!"
     top_level_case = None
@@ -162,7 +149,7 @@ def parse_case_stmt(
         case_stmt = actions.act_on_case_stmt(case_loc, lhs, colon_loc.value)
         if case_stmt is None:
             if top_level_case is None:
-                return parse_stmt(stmt_ctx, None)
+                return parse_stmt(None)
         else:
             next_deepest = case_stmt
             if top_level_case is None:
@@ -177,7 +164,7 @@ def parse_case_stmt(
     if parser().tok.ty == Tok.RBRACE:
         sub_stmt = actions.act_on_null_stmt(colon_loc.value)
     else:
-        sub_stmt = parse_stmt(stmt_ctx, None)
+        sub_stmt = parse_stmt(None)
 
     if deepest_parsed_case_stmt is not None:
         if sub_stmt is None:
@@ -188,7 +175,7 @@ def parse_case_stmt(
     return top_level_case
 
 
-def parse_default_stmt(stmt_ctx: ParsedStmtContext) -> DefaultStmt | None:
+def parse_default_stmt() -> DefaultStmt | None:
     assert parser().tok.ty == Tok.KW_DEFAULT, "Not a default stmt!"
     default_loc = parser().consume_token()
     colon_loc = LocRef(0)
@@ -208,7 +195,7 @@ def parse_default_stmt(stmt_ctx: ParsedStmtContext) -> DefaultStmt | None:
     if parser().tok.ty == Tok.RBRACE:
         sub_stmt = actions.act_on_null_stmt(colon_loc.value)
     else:
-        sub_stmt = parse_stmt(stmt_ctx, None)
+        sub_stmt = parse_stmt(None)
 
     if sub_stmt is None:
         sub_stmt = actions.act_on_null_stmt(colon_loc.value)
@@ -275,7 +262,7 @@ def parse_switch_stmt(trailing_else_loc: LocPtr) -> SwitchStmt | None:
     if has_lbrace:
         parser().enter_scope(ScopeFlags.DECL)
 
-    body = parse_stmt(ParsedStmtContext.SUB_STMT, trailing_else_loc)
+    body = parse_stmt(trailing_else_loc)
     assert body is not None
 
     if has_lbrace:
@@ -322,7 +309,7 @@ def parse_while_stmt(trailing_else_loc: LocPtr) -> WhileStmt | None:
     if has_brace:
         parser().enter_scope(ScopeFlags.DECL)
 
-    body = parse_stmt(ParsedStmtContext.SUB_STMT, trailing_else_loc)
+    body = parse_stmt(trailing_else_loc)
 
     if has_brace:
         parser().exit_scope()
@@ -344,7 +331,7 @@ def parse_do_stmt() -> DoStmt | None:
     if has_lbrace:
         parser().enter_scope(ScopeFlags.DECL)
 
-    body = parse_stmt(ParsedStmtContext.SUB_STMT, None)
+    body = parse_stmt(None)
 
     if has_lbrace:
         parser().exit_scope()
@@ -417,7 +404,7 @@ def parse_return_stmt() -> ReturnStmt | None:
     return actions.act_on_return_stmt(return_loc, r, parser().cur_scope)
 
 
-def parse_expr_stmt(stmt_ctx: ParsedStmtContext) -> Stmt | None:
+def parse_expr_stmt() -> Stmt | None:
     old_token = parser().tok
 
     expr = parse_expr()
@@ -435,7 +422,7 @@ def parse_expr_stmt(stmt_ctx: ParsedStmtContext) -> Stmt | None:
         diag(
             old_token.loc, "expected 'case' keyword before expression", Diag.ERROR
         )  # FixItHint::CreateInsertion(OldToken.getLocation(), "case ");
-        return parse_case_stmt(stmt_ctx, True, expr)
+        return parse_case_stmt(True, expr)
 
     parser().expect_and_consume_semi("expected ';' after expression")
 
@@ -448,10 +435,9 @@ def parse_compound_stmt_body() -> CompoundStmt | None:
     open_loc = parser().consume_brace()
     # actions.push_compound_scope(False)
     stmts = []
-    sub_stmt_ctx = ParsedStmtContext.COMPOUND
 
     while parser().tok.ty not in [Tok.RBRACE, Tok.EOF]:
-        r = parse_stmt(sub_stmt_ctx)
+        r = parse_stmt()
         if r is not None:
             stmts.append(r)
 
@@ -471,8 +457,7 @@ def parse_compound_stmt(
     return out
 
 
-def parse_stmt(
-    stmt_ctx: ParsedStmtContext, trailing_else_loc: LocPtr = None
+def parse_stmt(trailing_else_loc: LocPtr = None
 ) -> Stmt | None:
     semi_error = ""
     res = None
@@ -484,9 +469,9 @@ def parse_stmt(
     #         if it is now a keyword, retry
     match parser().tok.ty:
         case Tok.KW_CASE:
-            return parse_case_stmt(stmt_ctx)
+            return parse_case_stmt()
         case Tok.KW_DEFAULT:
-            return parse_default_stmt(stmt_ctx)
+            return parse_default_stmt()
         case Tok.LBRACE:
             return parse_compound_stmt()
         case Tok.SEMI:
@@ -516,16 +501,16 @@ def parse_stmt(
             semi_error = "return"
         case _:
             if is_declaration_statement():
-                from .decl import parse_decl, DeclaratorContext
+                from .decl import parse_decl
 
                 decl_start = parser().tok.loc
                 decl_end = LocRef(0)
-                decl = parse_decl(DeclaratorContext.BLOCK, decl_end)
+                decl = parse_decl(True, decl_end)
                 return actions.act_on_decl_stmt(decl, decl_start, decl_end.value)
             if parser().tok.ty == Tok.RBRACE:
                 diag(parser().tok.loc, "expected statement", Diag.ERROR)
                 return None
-            return parse_expr_stmt(stmt_ctx)
+            return parse_expr_stmt()
     if not parser().try_consume_token(Tok.SEMI) and res is not None:
         parser().expect_and_consume(
             Tok.SEMI, "expected ';' after {} statement", semi_error

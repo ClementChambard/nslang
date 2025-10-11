@@ -40,10 +40,7 @@ from typing import List, Tuple
 #            | 'cast' '<' Type '>' '(' Expr ')'
 #            | 'sizeof' '(' Type ')'
 #            | 'sizeof' '(' Expr ')'
-#            | BuiltinExpr
 #            ;
-#
-# BuiltinExpr ::= '__builtin_syscall' '(' ExprList ')' ;
 #
 # Expr ::= UnitExpr
 #        | Expr '?' Expr ':' Expr
@@ -271,8 +268,6 @@ def parse_unit_expr() -> Expr | None:
             string_toks.append(parser().tok)
             parser().consume_any_token()
         res = actions.act_on_string_literal(string_toks)
-    elif saved_kind.is_builtin():
-        return parse_builtin_expression()
     elif saved_kind == Tok.PLUSPLUS or saved_kind == Tok.MINUSMINUS:
         saved_tok2 = parser().tok
         parser().consume_token()
@@ -346,32 +341,6 @@ def parse_unit_expr() -> Expr | None:
     # ...
 
     return parse_postfix_expression_suffix(res)
-
-
-def parse_builtin_expression() -> Expr | None:
-    assert parser().tok.ty.is_builtin(), "not a builtin expression"
-    builtin_tok = parser().tok
-    parser().consume_token()
-    if parser().tok.ty != Tok.LPAREN:
-        return None
-    parser().consume_paren()
-    if parser().tok.ty == Tok.RPAREN:
-        rparen_loc = parser().consume_paren()
-        return actions.act_on_builtin_expr(builtin_tok, rparen_loc, [])
-    args = []
-    while True:
-        arg = parse_assignment_expr()
-        if arg is None:
-            diag(parser().tok.loc, "Expected an expression", Diag.ERROR)
-            parser().skip_until(Tok.RPAREN)
-            break
-        args.append(arg)
-        if parser().tok.ty != Tok.COMMA:
-            break
-        parser().consume_token()
-    rparen_loc = parser().tok.loc
-    parser().expect_and_consume(Tok.RPAREN)
-    return actions.act_on_builtin_expr(builtin_tok, rparen_loc, args)
 
 
 def parse_assignment_expr() -> Expr | None:

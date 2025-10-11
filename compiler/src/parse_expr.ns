@@ -280,8 +280,6 @@ fn parse_unit_expr() -> Expr* {
       parser()->consume_any_token();
     }
     res = sema::act_on_string_literal(cast<Token**>(string_toks.data), string_toks.len);
-  } else if (tok_is_builtin(saved_kind)) {
-    return parse_builtin_expression();
   } else if ((saved_kind == TOK_PLUSPLUS) | (saved_kind == TOK_MINUSMINUS)) {
     let saved_loc: Loc;
     saved_loc = parser()->consume_token();
@@ -346,29 +344,6 @@ fn parse_unit_expr() -> Expr* {
     res = sema::act_on_sizeof_expr(ty, expr, start_loc, end_loc);
   }
   return parse_postfix_expression_suffix(res);
-}
-
-fn parse_builtin_expression() -> Expr* {
-  // assert parser().tok.ty.is_builtin(), "not a builtin expression"
-  let builtin_tok: Token*;
-  let rparen_loc: Loc;
-  let arg_exprs: Expr**;
-  let arg_count: i64;
-  builtin_tok = parser()->tok;
-  parser()->consume_token();
-  if (parser()->tok->ty != TOK_LPAREN) return nullptr;
-  parser()->consume_paren();
-  if (parser()->tok->ty == TOK_RPAREN) {
-    rparen_loc = parser()->consume_paren();
-    return sema::act_on_builtin_expr(builtin_tok, rparen_loc, nullptr, 0);
-  }
-
-  if (parse_expression_list(&arg_exprs, &arg_count)) {
-    return nullptr; // ?
-  }
-  rparen_loc = parser()->tok->loc;
-  parser()->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
-  return sema::act_on_builtin_expr(builtin_tok, rparen_loc, arg_exprs, arg_count);
 }
 
 fn parse_assignment_expr() -> Expr* {

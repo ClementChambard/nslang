@@ -105,7 +105,6 @@
   "bool" 
 ] @type.builtin
 
-"__builtin_syscall" @function.builtin
 "cast" @function.builtin
 
 "super" @keyword.modifier

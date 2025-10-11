@@ -217,17 +217,6 @@ struct RecoveryExpr {
 
 lib fn RecoveryExpr::new(t: Type*, bl: Loc, el: Loc, sub: Expr**, sub_cnt: i64) -> RecoveryExpr*;
 
-struct BuiltinExpr {
-  super base: Expr;
-  builtin_name: CStr;
-  builtin_loc: Loc;
-  args: Expr**;
-  args_count: i64;
-  rparen_loc: Loc;
-};
-
-lib fn BuiltinExpr::new(builtin: CStr, loc: Loc, args: Expr**, args_count: i64, rp: Loc) -> BuiltinExpr*;
-
 enum CastKind {
   CK_NOOP,
   CK_TO_VOID,

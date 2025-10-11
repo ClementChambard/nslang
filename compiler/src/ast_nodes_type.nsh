@@ -74,7 +74,7 @@ struct BuiltinType {
 };
 
 lib fn BuiltinType::get_from_tok(token: Token*) -> BuiltinType*;
-lib fn BuiltinType::max_value(self: BuiltinType*) -> u64;
+lib fn BuiltinType::max_value(self: BuiltinType*) -> i64;
 lib fn BuiltinType::get_bit_width(self: BuiltinType*) -> i64;
 lib fn BuiltinType::is_signed(self: BuiltinType*) -> bool;
 

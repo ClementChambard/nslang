@@ -15,36 +15,9 @@ from ns_ast.nodes.decl import (
 from ns_ast.nodes.types import Type, EnumType, StructType, AliasType
 from semantic_analysis import actions, ScopeFlags
 from utils.diagnostic import diag, Diag
-import enum
 from .parser import parser
 
 from typing import Tuple
-
-
-class DeclaratorContext(enum.Enum):
-    FILE = enum.auto()  # File scope declaration.
-    PROTOTYPE = enum.auto()  # Within a function prototype.
-    KNR_TYPE_LIST = enum.auto()  # K&R type definition list for formals.
-    TYPE_NAME = enum.auto()  # Abstract declarator for types.
-    FUNCTIONAL_CAST = enum.auto()  # Type in a C++ functional cast expression.
-    MEMBER = enum.auto()  # Struct/Union field.
-    BLOCK = enum.auto()  # Declaration within a block in a function.
-    FOR_INIT = enum.auto()  # Declaration within first part of a for loop.
-    SELECTION_INIT = enum.auto()  # Declaration within optional init stmt of if/switch.
-    CONDITION = enum.auto()  # Condition declaration in a C++ if/switch/while/for.
-    TEMPLATE_PARAM = enum.auto()  # Within a template parameter list.
-    CXX_NEW = enum.auto()  # C++ new-expression.
-    CXX_CATCH = enum.auto()  # C++ catch exception-declaration
-    BLOCK_LITERAL = enum.auto()  # Block literal declarator.
-    LAMBDA_EXPR = enum.auto()  # Lambda-expression declarator.
-    LAMBDA_EXPR_PARAMETER = enum.auto()  # Lambda-expression parameter declarator.
-    CONVERSION_ID = enum.auto()  # C++ conversion-type-id.
-    TRAILING_RETURN = enum.auto()  # C++11 trailing-type-specifier.
-    TRAILING_RETURN_VAR = enum.auto()  # C++11 trailing-type-specifier for variable.
-    ALIAS_DECL = enum.auto()  # C++11 alias-declaration.
-    ALIAS_TEMPLATE = enum.auto()  # C++11 alias-declaration template.
-    REQUIRES_EXPR = enum.auto()  # C++2a requires-expression.
-    ASSOCIATION = enum.auto()  # C11 _Generic selection expression association.
 
 
 def parse_translation_unit() -> TranslationUnitDecl:
@@ -59,11 +32,11 @@ def parse_translation_unit() -> TranslationUnitDecl:
 
 
 def parse_top_level_decl() -> Decl | None:
-    return parse_decl(DeclaratorContext.FILE)
+    return parse_decl(False)
 
 
-def parse_decl(decl_ctx: DeclaratorContext, decl_end: LocPtr = None) -> Decl | None:
-    filectx = decl_ctx == DeclaratorContext.FILE
+def parse_decl(in_func: bool, decl_end: LocPtr = None) -> Decl | None:
+    filectx = not in_func
     decl = None
     if parser().tok.ty == Tok.KW_FN:
         if not filectx:
@@ -82,9 +55,9 @@ def parse_decl(decl_ctx: DeclaratorContext, decl_end: LocPtr = None) -> Decl | N
                 Diag.ERROR,
             )
             parser().consume_token()
-            return parse_decl(decl_ctx, decl_end)
+            return parse_decl(in_func, decl_end)
         start_loc = parser().consume_token()
-        decl = parse_decl(decl_ctx, decl_end)
+        decl = parse_decl(in_func, decl_end)
         if decl is not None:
             decl.is_lib = True
             decl.src_range = (start_loc, decl.src_range[1])

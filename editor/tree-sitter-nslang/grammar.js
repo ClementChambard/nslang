@@ -124,7 +124,6 @@ module.exports = grammar({
       prec.right(11, seq('*', $.expr)),
       prec.right(11, seq('&', $.expr)),
       prec.right(11, seq('cast', '<', $.type, '>', '(', $.expr, ')')),
-      prec.right(11, seq('__builtin_syscall', '(', $.expr_list, ')')),
       prec.right(11, seq('sizeof', '(', $.type, ')')), // TODO: could be type or expr
       prec.left(12, seq($.expr, '++')),
       prec.left(12, seq($.expr, '--')),

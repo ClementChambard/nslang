@@ -26,7 +26,7 @@ struct __Internal_CreatedTypes {
 let __internal_created_types: __Internal_CreatedTypes;
 
 //--- builtins
-fn __type_internal__get_builtin_type_for(kind: BuiltinTypeKind) -> Type* {
+fn __type_internal__get_builtin_type_for(kind: BuiltinTypeKind) -> BuiltinType* {
   return &__internal_created_types.builtins[kind];
 }
 
@@ -203,7 +203,7 @@ fn init_type_data() {
   i = 0;
   while (i < BTK_COUNT) {
     __internal_created_types.builtins[i].kind = TYPEKIND_BUILTIN;
-    __internal_created_types.builtins[i].builtin_kind = i;
+    __internal_created_types.builtins[i].builtin_kind = cast<BuiltinTypeKind>(i);
     i += 1;
   }
 }
@@ -556,7 +556,7 @@ fn __i64_from_4_words(a: i64, b: i64, c: i64, d: i64) -> i64 {
   return (a << 48) + (b << 32) + (c << 16) + d;
 }
 
-fn BuiltinType::max_value(self: BuiltinType*) -> u64 {
+fn BuiltinType::max_value(self: BuiltinType*) -> i64 {
   if (self->builtin_kind == BTK_I8) return 0x7F;
   if (self->builtin_kind == BTK_I16) return 0x7FFF;
   if (self->builtin_kind == BTK_I32) return 0x7FFFFFFF;

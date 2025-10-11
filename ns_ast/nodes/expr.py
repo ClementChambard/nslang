@@ -604,28 +604,6 @@ class RecoveryExpr(Expr):
         return list(self.sub_exprs)
 
 
-@dataclass
-class BuiltinExpr(Expr):
-    builtin_name: str
-    builtin_loc: Loc
-    args: List[Expr]
-    rparen_loc: Loc
-
-    def __init__(self, builtin: str, loc: Loc, args: List[Expr], rparen_loc: Loc):
-        self.ty = BuiltinType(BuiltinTypeKind.I64)
-        self.value_kind = ValueKind.PRVALUE
-        self.builtin_name = builtin
-        self.builtin_loc = loc
-        self.args = args
-        self.rparen_loc = rparen_loc
-
-    def get_range(self) -> LocRge:
-        return (self.builtin_loc, self.rparen_loc)
-
-    def children(self) -> List[StmtChild]:
-        return list(self.args)
-
-
 class CastKind(enum.Enum):
     NOOP = enum.auto()
     TO_VOID = enum.auto()

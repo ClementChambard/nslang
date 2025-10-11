@@ -100,14 +100,8 @@ class Tok(Enum):
     KW_BREAK = auto()
     KW_RETURN = auto()
 
-    # BUILTINS
-    BUILTIN_SYSCALL = auto()
-
     def is_keyword(self):
         return self.value >= self.KW_FN.value and self.value <= self.KW_RETURN.value
-
-    def is_builtin(self):
-        return self.value >= self.BUILTIN_SYSCALL.value and self.value <= self.BUILTIN_SYSCALL.value
 
     def is_builtin_type(self):
         return self.value >= self.KW_I8.value and self.value <= self.KW_BOOL.value
@@ -203,5 +197,4 @@ class Tok(Enum):
             case self.KW_CONTINUE: return "continue"
             case self.KW_BREAK: return "break"
             case self.KW_RETURN: return "return"
-            case self.BUILTIN_SYSCALL: return "__builtin_syscall"
             case _: return "????"

@@ -24,7 +24,6 @@ class CompileSingleFileOptions:
     link_libraries: List[str]
     use_tst_emit: bool
     no_runtime: bool
-    interpret: bool
     debug: bool
     to_remove: List[str]
     clang_args: List[str]
@@ -39,7 +38,6 @@ class CompileSingleFileOptions:
         self.input_files = []
         self.output_files = []
         self.compile_only = False
-        self.interpret = False
         self.debug = False
         self.include_paths = ["/home/clement/dev/nslang/stdlib/include"]
         self.link_libraries = [
@@ -84,8 +82,6 @@ class CompileSingleFileOptions:
             self.output_files = ["a.out"]
         if self.comment_ir_in_asm and not self.print_asm:
             fatal_error("cannot specify '-irinasm' without '-asm'")
-        if self.debug and not self.interpret:
-            fatal_error("cannot specify '-dbg' without '-interpret'")
 
     def read_from_args(self, args):
         i = 0
@@ -111,8 +107,6 @@ class CompileSingleFileOptions:
                 self.print_asm = True
             elif args[i] == "-ir":
                 self.print_ir = True
-            elif args[i] == "-interpret":
-                self.interpret = True
             elif args[i] == "-dbg":
                 self.debug = True
             elif args[i] == "-tstllvm":
@@ -232,17 +226,6 @@ def compile(input_file, output_file, options: CompileSingleFileOptions):
     ir = generate_ir(ast)
     if options.optimize_ir:
         ir = optimize_ir(ir)
-
-    if options.interpret:
-        from ir import Interpreter
-
-        interp = Interpreter(ir)
-        if options.debug:
-            interp.debug()
-            exit(0)
-        else:
-            interp.run()
-            exit(interp.exit_code)
 
     if options.print_ir:
         print_ir(ir)

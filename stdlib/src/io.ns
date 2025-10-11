@@ -1,14 +1,6 @@
 #include io.nsh
 #include str.nsh
 
-fn read(fd: i64, buf: void*, count: i64) -> i64 {
-    return __builtin_syscall(0, fd, buf, count);
-}
-
-fn write(fd: i64, buf: void*, count: i64) -> i64 {
-    return __builtin_syscall(1, fd, buf, count);
-}
-
 fn print_str(str: i8*) {
     let size: i64;
 

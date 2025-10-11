@@ -21,3 +21,5 @@ fn main() {
     print("%X %x %i %i %u %c %s\n", 30, 30, 3, -3, 4, 'a', "test");
     my_namespace::test();
 }
+
+fn tst(a: bool, b: u8, c: i32, d: i32, e: i32) {}

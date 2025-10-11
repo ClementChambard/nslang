@@ -1,9 +1,5 @@
 #include mem.nsh
 
-fn brk(addr: void*) -> i64 {
-    return __builtin_syscall(12, addr);
-}
-
 let __curbrk: void *;
 
 fn sbrk(size: i64) -> void* {
@@ -13,9 +9,9 @@ fn sbrk(size: i64) -> void* {
     update_brk = __curbrk == nullptr;
 
     if (update_brk) {
-        __curbrk = brk(nullptr);
-        if (__curbrk < 0)
-            return -1;
+        __curbrk = cast<void*>(brk(nullptr));
+        if (cast<i64>(__curbrk) < 0)
+            return cast<void*>(-1);
     }
 
     if (size == 0)
@@ -24,20 +20,20 @@ fn sbrk(size: i64) -> void* {
     oldbrk = __curbrk;
 
     if (size > 0) {
-        if (oldbrk + size < oldbrk) {
+        if (cast<i64>(oldbrk) + size < cast<i64>(oldbrk)) {
             // overflow
-            return -1;
+            return cast<void*>(-1);
         }
     }
     if (size < 0) {
-        if (oldbrk < -size) {
-            return -1;
+        if (cast<i64>(oldbrk) < -size) {
+            return cast<void*>(-1);
         }
     }
 
-    __curbrk = brk(oldbrk + size);
-    if (__curbrk < 0)
-        return -1;
+    __curbrk = cast<void*>(brk(oldbrk + size));
+    if (cast<i64>(__curbrk) < 0)
+        return cast<void*>(-1);
 
     return oldbrk;
 }
@@ -112,7 +108,7 @@ fn __malloc_request_space(last: __malloc_block_meta*, size: i64) -> __malloc_blo
     block = sbrk(0);
     let request: void*;
     request = sbrk(size + sizeof(__malloc_block_meta));
-    if (request == -1) {
+    if (cast<i64>(request) == -1) {
         return nullptr;
     }
     if (request != block) {
@@ -141,7 +137,7 @@ fn __malloc_data_to_block(data: void*) -> __malloc_block_meta* {
     let block_bytes: i8*;
     block_voidptr = data;
     block_bytes = block_voidptr;
-    return &block_bytes[-sizeof(__malloc_block_meta)];
+    return cast<__malloc_block_meta*>(&block_bytes[-sizeof(__malloc_block_meta)]);
 }
 
 fn malloc(size: i64) -> void* {

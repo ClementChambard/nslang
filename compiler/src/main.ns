@@ -6,7 +6,6 @@
 #include lexer.nsh
 #include mem.nsh
 #include diags.nsh
-#include ir.nsh
 #include parser.nsh
 #include ast_print.nsh
 

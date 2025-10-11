@@ -61,7 +61,6 @@ fn IdentInfo::add_keywords() {
     IdentInfo::add(TOK_KW_CONTINUE, "continue", 8);
     IdentInfo::add(TOK_KW_BREAK, "break", 5);
     IdentInfo::add(TOK_KW_RETURN, "return", 6);
-    IdentInfo::add(TOK_BUILTIN_SYSCALL, "__builtin_syscall", 17);
 }
 
 fn IdentInfo::needs_handling(self: IdentInfo *) -> bool {

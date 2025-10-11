@@ -29,16 +29,12 @@ class Scope:
     any_parent: Self | None
     flags: int
     depth: int
-    prototype_depth: int
-    prototype_index: int
     fn_parent: Self | None
     break_parent: Self | None
     continue_parent: Self | None
     block_parent: Self | None
     decl_parent: Self | None
     decls_in_scope: List[Decl]
-    decl_context: Any
-    # using directives
 
     def set_flags_pr(self, parent: Self | None, f: int):
         self.any_parent = parent
@@ -53,8 +49,6 @@ class Scope:
 
         if parent is not None:
             self.depth = parent.depth + 1
-            self.prototype_depth = parent.prototype_depth
-            self.prototype_index = 0
             self.fn_parent = parent.fn_parent
             self.block_parent = parent.block_parent
             self.decl_parent = parent.decl_parent
@@ -70,8 +64,6 @@ class Scope:
                 self.flags |= parent.flags
         else:
             self.depth = 0
-            self.prototype_depth = 0
-            self.prototype_index = 0
             self.decl_parent = None
             self.fn_parent = None
             self.block_parent = None
@@ -87,9 +79,6 @@ class Scope:
 
         if (f & ScopeFlags.BLOCK) != 0:
             self.block_parent = self
-
-        if (f & ScopeFlags.FUNCTION_PROTO) != 0 and (f & ScopeFlags.LAMBDA) == 0:
-            self.prototype_depth += 1
 
         if (f & ScopeFlags.DECL) != 0:
             self.decl_parent = self
@@ -221,20 +210,12 @@ class Scope:
         if self.any_parent is not None:
             out += f"Parent: {self.any_parent}\n"
         out += f"Depth: {self.depth}\n"
-        if self.decl_context is not None:
-            out += f"Entity: {self.decl_context}\n"
         return out
 
     def set_is_condition_var_scope(self, val: bool):
         self.flags = (self.flags & ~ScopeFlags.CONDITION_VAR) | (
             int(val) * ScopeFlags.CONDITION_VAR
         )
-
-    def get_next_function_prototype_index(self) -> int:
-        assert (self.flags & ScopeFlags.FUNCTION_PROTO) != 0
-        i = self.prototype_index
-        self.prototype_index += 1
-        return i
 
     def add_decl(self, d: Decl):
         self.decls_in_scope.append(d)
@@ -250,15 +231,12 @@ class Scope:
         self.any_parent = None
         self.flags = 0
         self.depth = 0
-        self.prototype_depth = 0
-        self.prototype_index = 0
         self.fn_parent = None
         self.break_parent = None
         self.continue_parent = None
         self.block_parent = None
         self.decl_parent = None
         self.decls_in_scope = []
-        self.decl_context = None
 
         self.set_flags_pr(parent, flags)
         self.parent_scope = parent

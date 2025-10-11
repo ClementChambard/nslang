@@ -99,10 +99,6 @@ def _optimize_conditional_expr(expr: ConditionalExpr) -> OptimizeExprResult:
     else:
         return _optimize_expr(expr.rhs)
 
-def _optimize_builtin_expr(expr: BuiltinExpr) -> OptimizeExprResult:
-    expr.args = [_optimize_expr(e).result for e in expr.args]
-    return OptimizeExprResult(expr, False)
-
 def _optimize_array_subscript_expr(expr: ArraySubscriptExpr) -> OptimizeExprResult:
     # TODO:
     return OptimizeExprResult(expr, False)
@@ -139,8 +135,6 @@ def _optimize_expr(expr: Expr) -> OptimizeExprResult:
         expr.rhs = _optimize_expr(expr.rhs).result
         expr.lhs = _optimize_expr(expr.lhs).result
         return OptimizeExprResult(expr, False)
-    elif isinstance(expr, BuiltinExpr):
-        return _optimize_builtin_expr(expr)
     elif isinstance(expr, UnaryExpr):
         return _optimize_unary_expr(expr)
     elif isinstance(expr, ConditionalExpr):

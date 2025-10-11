@@ -13,7 +13,6 @@ from ns_ast.nodes.expr import (
     BinaryExpr,
     BinaryOperatorKind,
     BoolLiteral,
-    BuiltinExpr,
     CallExpr,
     CastKind,
     CompoundAssignExpr,
@@ -1864,24 +1863,6 @@ def create_recovery_expr(
     # if t.is_null() or t->is_undeduced_type() or not context.recovery_ast_type: t = context.dependent_ty
     return RecoveryExpr(t, begin, end, sub_exprs)
 
-
-def act_on_builtin_syscall_expr(
-    builtin_tok: Token, rparen_loc: Loc, args: List[Expr]
-) -> BuiltinExpr:
-    out_args = []
-    for a in args:
-        out_args.append(default_function_array_lvalue_conversion(a))
-    return BuiltinExpr(builtin_tok.value_str(), builtin_tok.loc, out_args, rparen_loc)
-
-
-def act_on_builtin_expr(
-    builtin_tok: Token, rparen_loc: Loc, args: List[Expr]
-) -> BuiltinExpr:
-    match builtin_tok.ty:
-        case Tok.BUILTIN_SYSCALL:
-            return act_on_builtin_syscall_expr(builtin_tok, rparen_loc, args)
-        case _:
-            assert False, "unhandled builtin tok kind"
 
 
 def check_completed_expr(e: Expr, check_loc: Loc, is_constexpr: bool):

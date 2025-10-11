@@ -21,7 +21,6 @@ class IrInstrKind(Enum):
 
     # call
     CAL = auto()  # CALL          CAL  fn: str       nparams: int        => calls a function by name with nparams on the stack. puts the return value on the stack if it exists
-    BUI = auto()  # BUILTIN       BUI  fn: str       nparams: int        => same as call but for builtins
     RET = auto()  # RET           RET                                    => exits the function
     RTV = auto()  # RETVAL        RTV                                    => pops the top of the stack and returns it
 
@@ -107,7 +106,7 @@ class IrInstr:
                 | IrInstrKind.STA
             ):
                 operand_count = 1
-            case IrInstrKind.CAL | IrInstrKind.BUI:
+            case IrInstrKind.CAL:
                 operand_count = 2
             case _:
                 operand_count = 0

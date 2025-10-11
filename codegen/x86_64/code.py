@@ -451,20 +451,6 @@ def instr_codegen(ins: IrInstr, ir: FullIr) -> X86_Body:
             out.append(X86_Instr("pop", "rdi"))
             out.append(X86_Instr("test", "rdi", "rdi"))
             out.append(X86_Instr("jne", X86_Label("." + ins.operand1)))
-        case IrInstrKind.BUI:
-            builtin_name = ins.operand1
-            param_count = ins.operand2
-            if builtin_name == "__builtin_syscall":
-                for i in range(param_count):
-                    out.append(
-                        X86_Instr(
-                            "pop", ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"][i]
-                        )
-                    )
-                out.append(X86_Instr("syscall"))
-                out.append(X86_Instr("push", "rax"))
-            else:
-                assert False, builtin_name
     return out
 
 

@@ -26,7 +26,6 @@ lib fn parse_expression_list(exprs: Expr***, exprs_count: i64*) -> bool;
 lib fn parse_postfix_expression_suffix(lhs: Expr*) -> Expr*;
 lib fn parse_unqualified_id(out: UnqualifiedId*) -> bool;
 lib fn parse_unit_expr() -> Expr*;
-lib fn parse_builtin_expression() -> Expr*;
 lib fn parse_assignment_expr() -> Expr*;
 lib fn parse_rhs_of_binary_expr(lhs: Expr*, prec: Prec) -> Expr*;
 lib fn parse_expr() -> Expr*;

@@ -15,7 +15,6 @@ from ns_ast.nodes import (
     UnaryOperatorKind,
     ConditionalExpr,
     CallExpr,
-    BuiltinExpr,
     ArraySubscriptExpr,
     MemberExpr,
     RecoveryExpr,
@@ -162,14 +161,6 @@ def eval_const_expr(e: Expr) -> int:
         diag(
             e.get_range()[0],
             "function calls are not constexpr",
-            Diag.ERROR,
-            [e.get_range()],
-        )
-        return 0
-    if isinstance(e, BuiltinExpr):
-        diag(
-            e.get_range()[0],
-            "builtin calls are not constexpr",
             Diag.ERROR,
             [e.get_range()],
         )

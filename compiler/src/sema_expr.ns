@@ -456,7 +456,7 @@ fn sema::scalar_type_to_boolean_cast_kind(scalar_ty: Type*) -> CastKind {
   if (scalar_ty->is_integer_type()) return CK_INTEGRAL_TO_BOOLEAN;
   if (scalar_ty->kind == TYPEKIND_POINTER) return CK_POINTER_TO_BOOLEAN;
   // assert False
-  return 0;
+  // return cast<CastKind>(0);
 }
 
 // fn sema::create_materialize_temporary_expr(*args) -> Expr*;
@@ -984,24 +984,6 @@ fn sema::create_recovery_expr(begin: Loc, end: Loc, sub_exprs: Expr**, expr_coun
   return RecoveryExpr::new(ty, begin, end, sub_exprs, expr_count);
 }
 
-fn sema::act_on_builtin_syscall_expr(builtin_tok: Token*, rparen_loc: Loc, args: Expr**, args_count: i64) -> BuiltinExpr* {
-  let i: i64;
-  i = 0;
-  while (i < args_count) {
-    args[i] = sema::default_function_array_lvalue_conversion(args[i], true);
-    i += 1;
-  }
-  return BuiltinExpr::new("__builtin_syscall", builtin_tok->loc, args, args_count, rparen_loc);
-}
-
-fn sema::act_on_builtin_expr(builtin_tok: Token*, rparen_loc: Loc, args: Expr**, args_count: i64) -> BuiltinExpr* {
-  if (builtin_tok->ty == TOK_BUILTIN_SYSCALL) {
-     return sema::act_on_builtin_syscall_expr(builtin_tok, rparen_loc, args, args_count);
-  }
-  // assert False, "unhandled builtin tok kind"
-  return nullptr;
-}
-
 fn sema::check_completed_expr(e: Expr*, check_loc: Loc, is_constexpr: bool) {
   // llvm::SaveAndRestore ConstantContext(isConstantEvaluatedOverride, IsConstexpr || isa<ConstantExpr>(E));
   // CheckImplicitConversions(E, CheckLoc);
@@ -1450,7 +1432,8 @@ fn sema::convert_arguments_for_call(call: CallExpr*, fun: Expr*, fdecl: FnDecl*,
 }
 
 
-fn sema::perform_implicit_conversion(f: Expr*, to_type: Type*, ics: ImplicitConversionSequence*) {
+fn sema::perform_implicit_conversion(f: Expr*, to_type: Type*, ics: ImplicitConversionSequence*) -> Expr * {
+  return f;
   // XXX:
 //     // TODO: doit
 //     if ics.conversion_kind != 0:

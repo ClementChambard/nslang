@@ -70,9 +70,6 @@
 (defconst nslang-preprocessors
   `("#include"))
 
-(defconst nslang-builtins
-  `("__builtin_syscall"))
-
 (defconst nslang-literals
   `("true" "false" "nullptr" "vaarg"))
 
@@ -82,13 +79,11 @@
   (let ((types-regexp (regexp-opt nslang-types 'words))
         (preprocessors-regexp (regexp-opt nslang-preprocessors))
         (keywords-regexp (regexp-opt nslang-keywords 'words))
-        (builtins-regexp (regexp-opt nslang-builtins 'words))
         (literals-regexp (regexp-opt nslang-literals 'words)))
     (setq nslang-mode-keywords
           `(
             ;; All kinds of keywords here
             (,types-regexp (0 font-lock-type-face))
-            (,builtins-regexp (0 font-lock-builtin-face))
             (,preprocessors-regexp (0 font-lock-preprocessor-face))
             (,keywords-regexp (0 font-lock-keyword-face))
             (,literals-regexp (0 font-lock-constant-face))))))

@@ -52,7 +52,6 @@ class StmtVisitor:
         elif isinstance(s, VAArgExpr):             return self.visit_vaarg_expr          (s, *args, **kwargs)
         elif isinstance(s, ImplicitCastExpr):      return self.visit_implicit_cast_expr  (s, *args, **kwargs)
         elif isinstance(s, CastExpr):              return self.visit_cast_expr           (s, *args, **kwargs)
-        elif isinstance(s, BuiltinExpr):           return self.visit_builtin_expr        (s, *args, **kwargs)
         elif isinstance(s, RecoveryExpr):          return self.visit_recovery_expr       (s, *args, **kwargs)
         elif isinstance(s, ConditionalExpr):       return self.visit_conditional_expr    (s, *args, **kwargs)
         elif isinstance(s, ArraySubscriptExpr):    return self.visit_array_subscript_expr(s, *args, **kwargs)
@@ -173,8 +172,6 @@ class StmtVisitor:
     def visit_implicit_cast_expr(self, s: ImplicitCastExpr, *args, **kwargs):
         return self.visit_cast_expr(s, *args, **kwargs)
     def visit_cast_expr(self, s: CastExpr, *args, **kwargs):
-        return self.visit_expr(s, *args, **kwargs)
-    def visit_builtin_expr(self, s: BuiltinExpr, *args, **kwargs):
         return self.visit_expr(s, *args, **kwargs)
     def visit_recovery_expr(self, s: RecoveryExpr, *args, **kwargs):
         return self.visit_expr(s, *args, **kwargs)

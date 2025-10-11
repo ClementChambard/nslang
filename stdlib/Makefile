@@ -1,14 +1,17 @@
 all: bin/stdlib.a bin/runtime.a
 
-bin/stdlib.a: bin/stdlib.o bin/mem.o bin/io.o bin/file.o bin/net.o bin/str.o
+bin/stdlib.a: bin/io.o bin/mem.o bin/str.o bin/sys_gnu_linux_x86_64.O
 	ar -crs $@ $^
 
-bin/runtime.a:
-	../nslang -c -o bin/runtime.o runtime/start.ns
+bin/runtime.a: runtime/start.S
+	nasm -f elf64 -o bin/runtime.o runtime/start.S
 	ar -crs bin/runtime.a bin/runtime.o
 
 bin/%.o: src/%.ns
-	../nslang -c -o $@ -nostdlib -Iinclude $^
+	../cppver/build/compiler/nslang $^ | opt -S -passes=sroa,simplifycfg | llc | as -o $@
+
+bin/%.O: src/%.S
+	nasm -f elf64 -o $@ $^
 
 clean:
 	rm bin/*

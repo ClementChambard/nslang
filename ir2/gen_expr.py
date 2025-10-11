@@ -48,7 +48,6 @@ from ns_ast.nodes.expr import (
     BinaryExpr,
     BinaryOperatorKind,
     BoolLiteral,
-    BuiltinExpr,
     CallExpr,
     CastExpr,
     CastKind,
@@ -476,9 +475,6 @@ def ir2_call_expr(e: CallExpr) -> IrValue:
     assert False, "call expr"
 
 
-def ir2_builtin_expr(e: BuiltinExpr) -> IrValue:
-    assert False, "builtin expr"
-
 
 def ir2_method_expr(e: MethodExpr) -> IrValue:
     assert False, "method expr"
@@ -545,8 +541,6 @@ def ir2_expr(e: Expr) -> IrValue:
         return ir2_unary_expr(e)
     elif isinstance(e, CallExpr):
         return ir2_call_expr(e)
-    elif isinstance(e, BuiltinExpr):
-        return ir2_builtin_expr(e)
     elif isinstance(e, MemberExpr):
         # try constant emission
         return ir2_load_of_lvalue(ir2_lvalue(e), e.ty)

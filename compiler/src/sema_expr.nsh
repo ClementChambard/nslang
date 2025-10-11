@@ -64,7 +64,7 @@ lib fn sema::build_resolved_call_expr(fun: Expr*, ndecl: NamedDecl*, lparen_loc:
 lib fn sema::build_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rparen_loc: Loc, is_exec_config: bool, allow_recovery: bool) -> Expr*;
 lib fn sema::act_on_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rparen_loc: Loc) -> Expr*;
 lib fn sema::act_on_array_subscript_expr(scope: Scope*, base: Expr*, lbloc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rbloc: Loc) -> Expr*;
-lib fn sema::perform_implicit_conversion(f: Expr*, to_type: Type*, ics: ImplicitConversionSequence*);
+lib fn sema::perform_implicit_conversion(f: Expr*, to_type: Type*, ics: ImplicitConversionSequence*) -> Expr *;
 lib fn sema::check_boolean_condition(loc: Loc, cond_expr: Expr*, is_constexpr: bool, fst_checks: bool) -> Expr*;
 lib fn sema::check_conditional_operands(cond: Expr*, lhs: Expr*, rhs: Expr*, vk: ValueKind, question_loc: Loc, res: CondOperandResult*);
 lib fn sema::act_on_conditional_op(question_loc: Loc, colon_loc: Loc, cond_expr: Expr*, lhs: Expr*, rhs: Expr*) -> ConditionalExpr*;
@@ -78,8 +78,6 @@ lib fn sema::build_declaration_name_expr(ss: void*, name: CStr, ii: IdentInfo*, 
 lib fn sema::act_on_id_expression(s: Scope*, ss: void*, i: UnqualifiedId*, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr*;
 lib fn sema::act_on_paren_expr(lp_loc: Loc, rp_loc: Loc, e: Expr*) -> ParenExpr*;
 lib fn sema::create_recovery_expr(begin: Loc, end: Loc, sub_exprs: Expr**, expr_count: i64, ty: Type*) -> RecoveryExpr*;
-lib fn sema::act_on_builtin_syscall_expr(builtin_tok: Token*, rparen_loc: Loc, args: Expr**, args_count: i64) -> BuiltinExpr*;
-lib fn sema::act_on_builtin_expr(builtin_tok: Token*, rparen_loc: Loc, args: Expr**, args_count: i64) -> BuiltinExpr*;
 lib fn sema::check_completed_expr(e: Expr*, check_loc: Loc, is_constexpr: bool);
 lib fn sema::maybe_create_expr_with_cleanups(sub_expr: Expr*) -> Expr*;
 lib fn sema::act_on_finish_full_expr(fe: Expr*, cc: Loc, discarded_value: bool, is_constexpr: bool) -> Expr*;

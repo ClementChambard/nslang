@@ -1,0 +1,20 @@
+#include io.nsh
+
+struct TestStruct {
+  int: i64;
+  ptr: void*;
+  array: i8[20];
+  struct_ptr: TestStruct*;
+};
+
+let test_var: TestStruct;
+
+lib fn main() {
+  let a: i64;
+  a = test_var.int;
+
+  print("Hello, %s!", "world");
+}
+
+
+

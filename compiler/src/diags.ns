@@ -3,10 +3,11 @@
 #include str.nsh
 #include mem.nsh
 #include opened_file.nsh
+#include stdlib.nsh
 
 fn fatal_error(msg: i8*) {
     print("\x1b[1;32mfatal error: \x1b[0;1m%s\x1b[0m\n", msg);
-    __builtin_syscall(60, 1);
+    exit(1);
 }
 
 let __last_loc: Loc;

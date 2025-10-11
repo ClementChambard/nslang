@@ -63,7 +63,6 @@ fn sema::eval_const_expr(e: Expr*) -> i64 {
   }
   // if (e->kind == EXPRKIND_STRLIT) { print("String literal in constexpr context\n"); exit(1); }
   // if (e->kind == EXPRKIND_CALL) { diag(e.get_range()[0], "function calls are not constexpr", Diag.ERROR, [e.get_range()]) return 0 }
-  // if (e->kind == EXPRKIND_BUILTIN) { diag(e.get_range()[0], "builtin calls are not constexpr", Diag.ERROR, [e.get_range()]) return 0 }
   // if (e->kind == EXPRKIND_ARRAYSUBSCRIPT) { diag(e.get_range()[0], "array subscripts are not constexpr (TODO: what if subscript in global const array ?)", Diag.ERROR, [e.get_range()]) return 0 }
   // if (e->kind == EXPRKIND_MEMBER) { diag(e.get_range()[0], "member access is not constexpr (TODO: what if access in global const struct ?)", Diag.ERROR, [e.get_range()]) return 0 }
   // if isinstance(e, RecoveryExpr): # TODO: should this emit a diagnostic ? return 0

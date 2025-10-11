@@ -150,7 +150,6 @@ lib fn CallExpr::get_range(self: CallExpr*, out: LocRge*) { stmt_get_range_expr(
 lib fn MethodCallExpr::get_range(self: MethodCallExpr*, out: LocRge*) { cast<CallExpr*>(self)->get_range(out); }
 lib fn SizeofExpr::get_range(self: SizeofExpr*, out: LocRge*) { out->start = self->sizeof_loc; out->end = self->rp_loc; }
 lib fn RecoveryExpr::get_range(self: RecoveryExpr*, out: LocRge*) { out->start = self->begin_loc; out->end = self->end_loc; }
-lib fn BuiltinExpr::get_range(self: BuiltinExpr*, out: LocRge*) { out->start = self->builtin_loc; out->end = self->rparen_loc; }
 lib fn CastExpr::get_range(self: CastExpr*, out: LocRge*) { stmt_get_range_expr(cast<Stmt*>(self->expr), out); }
 lib fn ImplicitCastExpr::get_range(self: ImplicitCastExpr*, out: LocRge*) { cast<CastExpr*>(self)->get_range(out); }
 lib fn VAArgExpr::get_range(self: VAArgExpr*, out: LocRge*) { out->start = self->s; out->end = self->e; }
@@ -178,7 +177,6 @@ lib fn stmt_get_range_expr(self: Stmt*, out: LocRge*) {
   if (self->kind == EXPRKIND_ARRAYSUBSCRIPT) cast<ArraySubscriptExpr*>(self)->get_range(out);
   if (self->kind == EXPRKIND_CONDITIONAL)    cast<ConditionalExpr*>(self)->get_range(out);
   if (self->kind == EXPRKIND_RECOVERY)       cast<RecoveryExpr*>(self)->get_range(out);
-  if (self->kind == EXPRKIND_BUILTIN)        cast<BuiltinExpr*>(self)->get_range(out);
   if (self->kind == EXPRKIND_CAST)           cast<CastExpr*>(self)->get_range(out);
   if (self->kind == EXPRKIND_IMPLICITCAST)   cast<ImplicitCastExpr*>(self)->get_range(out);
   if (self->kind == EXPRKIND_VAARG)          cast<VAArgExpr*>(self)->get_range(out);
@@ -323,17 +321,6 @@ lib fn RecoveryExpr::ctor(self: RecoveryExpr*, t: Type*, bl: Loc, el: Loc, sub: 
   self->sub_cnt = sub_cnt;
 }
 
-lib fn BuiltinExpr::ctor(self: BuiltinExpr*, builtin: CStr, loc: Loc, args: Expr**, args_count: i64, rp: Loc) {
-  self->kind = EXPRKIND_BUILTIN;
-  self->ty = Type::get_builtin(BTK_I64);
-  self->value_kind = VK_PRVALUE;
-  self->builtin_name = strdup(builtin);
-  self->builtin_loc = loc;
-  self->args = args;
-  self->args_count = args_count;
-  self->rparen_loc = rp;
-}
-
 lib fn CastExpr::ctor(self: CastExpr*, ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) {
   self->kind = EXPRKIND_CAST;
   self->ty = ty;
@@ -370,7 +357,6 @@ lib fn MethodExpr::dtor(self: MethodExpr*) { stmt_ast_free_expr(cast<Stmt*>(self
 lib fn ArraySubscriptExpr::dtor(self: ArraySubscriptExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
 lib fn ConditionalExpr::dtor(self: ConditionalExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->cond)); stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
 lib fn RecoveryExpr::dtor(self: RecoveryExpr*) { let i: i64; i = 0; while (i < self->sub_cnt) { stmt_ast_free_expr(cast<Stmt*>(self->sub[i])); i += 1; } free(self->sub); }
-lib fn BuiltinExpr::dtor(self: BuiltinExpr*) { free(self->builtin_name); let i: i64; i = 0; while (i < self->args_count) { stmt_ast_free_expr(cast<Stmt*>(self->args[i])); i += 1; } free(self->args); }
 lib fn CastExpr::dtor(self: CastExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->expr)); }
 lib fn ImplicitCastExpr::dtor(self: ImplicitCastExpr*) { cast<CastExpr*>(self)->dtor(); }
 lib fn VAArgExpr::dtor(self: VAArgExpr*) {}
@@ -392,7 +378,6 @@ lib fn stmt_ast_free_expr(self: Stmt*) {
   if (self->kind == EXPRKIND_ARRAYSUBSCRIPT) cast<ArraySubscriptExpr*>(self)->dtor();
   if (self->kind == EXPRKIND_CONDITIONAL)    cast<ConditionalExpr*>(self)->dtor();
   if (self->kind == EXPRKIND_RECOVERY)       cast<RecoveryExpr*>(self)->dtor();
-  if (self->kind == EXPRKIND_BUILTIN)        cast<BuiltinExpr*>(self)->dtor();
   if (self->kind == EXPRKIND_CAST)           cast<CastExpr*>(self)->dtor();
   if (self->kind == EXPRKIND_IMPLICITCAST)   cast<ImplicitCastExpr*>(self)->dtor();
   if (self->kind == EXPRKIND_VAARG)          cast<VAArgExpr*>(self)->dtor();
@@ -415,7 +400,6 @@ lib fn MethodExpr::new(self_object: Expr*, is_arrow: bool, oploc: Loc, method: F
 lib fn ArraySubscriptExpr::new(lhs: Expr*, rhs: Expr*, t: Type*, vk: ValueKind, rbracket_loc: Loc) -> ArraySubscriptExpr* { let out: ArraySubscriptExpr*; out = malloc(sizeof(ArraySubscriptExpr)); out->ctor(lhs, rhs, t, vk, rbracket_loc); return out; }
 lib fn ConditionalExpr::new(cond: Expr*, qloc: Loc, lhs: Expr*, cloc: Loc, rhs: Expr*, t: Type*, vk: ValueKind) -> ConditionalExpr* { let out: ConditionalExpr*; out = malloc(sizeof(ConditionalExpr)); out->ctor(cond, qloc, lhs, cloc, rhs, t, vk); return out; }
 lib fn RecoveryExpr::new(t: Type*, bl: Loc, el: Loc, sub: Expr**, sub_cnt: i64) -> RecoveryExpr* { let out: RecoveryExpr*; out = malloc(sizeof(RecoveryExpr)); out->ctor(t, bl, el, sub, sub_cnt); return out; }
-lib fn BuiltinExpr::new(builtin: CStr, loc: Loc, args: Expr**, args_count: i64, rp: Loc) -> BuiltinExpr* { let out: BuiltinExpr*; out = malloc(sizeof(BuiltinExpr)); out->ctor(builtin, loc, args, args_count, rp); return out; }
 lib fn CastExpr::new(ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) -> CastExpr* { let out: CastExpr*; out = malloc(sizeof(CastExpr)); out->ctor(ty, vk, kind, expr); return out; }
 lib fn ImplicitCastExpr::new(ty: Type*, vk: ValueKind, kind: CastKind, expr: Expr*) -> ImplicitCastExpr* { let out: ImplicitCastExpr*; out = malloc(sizeof(ImplicitCastExpr)); out->ctor(ty, vk, kind, expr); return out; }
 lib fn VAArgExpr::new(ty: Type*, s: Loc, e: Loc) -> VAArgExpr* { let out: VAArgExpr*; out = malloc(sizeof(VAArgExpr)); out->ctor(ty, s, e); return out; }

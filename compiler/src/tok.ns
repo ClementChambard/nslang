@@ -5,10 +5,6 @@ fn tok_is_keyword(self: Tok) -> bool {
     return self <= TOK_KW_RETURN;
 }
 
-fn tok_is_builtin(self: Tok) -> bool {
-    return self == TOK_BUILTIN_SYSCALL;
-}
-
 fn tok_is_builtin_type(self: Tok) -> bool {
     if (self < TOK_KW_I8) return false;
     return self <= TOK_KW_BOOL;
@@ -103,6 +99,5 @@ fn tok_get_name(self: Tok) -> i8* {
     else if (self == TOK_KW_CONTINUE) return cast<i8*>("continue");
     else if (self == TOK_KW_BREAK) return cast<i8*>("break");
     else if (self == TOK_KW_RETURN) return cast<i8*>("return");
-    else if (self == TOK_BUILTIN_SYSCALL) return cast<i8*>("__builtin_syscall");
     else return cast<i8*>("????");
 }

@@ -1,5 +1,0 @@
-#include stdlib.nsh
-
-fn exit(code: i64) {
-    __builtin_syscall(231, code);
-}

@@ -97,13 +97,9 @@ enum Tok: i64 {
     TOK_KW_CONTINUE,
     TOK_KW_BREAK,
     TOK_KW_RETURN,
-
-    // BUILTINS
-    TOK_BUILTIN_SYSCALL,
 };
 
 // TODO: methods for named enums
 lib fn tok_is_keyword(self: Tok) -> bool;
-lib fn tok_is_builtin(self: Tok) -> bool;
 lib fn tok_is_builtin_type(self: Tok) -> bool;
 lib fn tok_get_name(self: Tok) -> i8*;

@@ -404,11 +404,6 @@ def generate_expr_ir(e, ir: FullIr, cur_scope, scope_stack) -> List[IrInstr]:
         return [IrInstr(IrInstrKind.PSH, 0, e.decl.val)]
     if isinstance(e, ParenExpr):
         return generate_expr_ir(e.val, ir, cur_scope, scope_stack)
-    if isinstance(e, BuiltinExpr):
-        out = []
-        for a in e.args[::-1]:
-            out += generate_expr_ir(a, ir, cur_scope, scope_stack)
-        return out + [IrInstr(IrInstrKind.BUI, e.builtin_name, len(e.args))]
     if isinstance(e, IntegerLiteral) or isinstance(e, BoolLiteral):
         try:
             return [IrInstr(IrInstrKind.PSH, 0, int(e.value))]
