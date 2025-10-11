@@ -1,0 +1,114 @@
+#ifndef LEXER_TOK_HPP_INCLUDED
+#define LEXER_TOK_HPP_INCLUDED
+
+#include <defines.hpp>
+
+namespace tok {
+
+enum Tok : u8 {
+  // SPECIAL
+  UNKNOWN,
+  END_OF_FILE,
+
+  // IDENTIFIER
+  IDENT,
+
+  // CONSTANTS
+  NUM,
+  STR,
+  CHR,
+
+  // PUNCTUATION
+  LPAREN,
+  RPAREN,
+  LBRACE,
+  RBRACE,
+  LSQUARE,
+  RSQUARE,
+  SEMI,
+  COLON,
+  COLONCOLON,
+  PERIOD,
+  ARROW,
+  ELLIPSIS,
+  GREATER,
+  GREATERGREATER,
+  COMMA,
+  EQUAL,
+  EXCLAIM,
+  STAREQUAL,
+  SLASHEQUAL,
+  PERCENTEQUAL,
+  PLUSEQUAL,
+  MINUSEQUAL,
+  LESSLESSEQUAL,
+  GREATERGREATEREQUAL,
+  AMPEQUAL,
+  CARETEQUAL,
+  PIPEEQUAL,
+  QUESTION,
+  PIPEPIPE,
+  AMPAMP,
+  PIPE,
+  TILDE,
+  CARET,
+  AMP,
+  EXCLAIMEQUAL,
+  EQUALEQUAL,
+  LESSEQUAL,
+  LESS,
+  GREATEREQUAL,
+  LESSLESS,
+  PLUS,
+  PLUSPLUS,
+  MINUS,
+  MINUSMINUS,
+  PERCENT,
+  SLASH,
+  STAR,
+
+  // KEYWORDS
+  KW_FN,
+  KW_LET,
+  KW_LIB,
+  KW_TYPE,
+  KW_STRUCT,
+  KW_ENUM,
+  KW_I8,
+  KW_I16,
+  KW_I32,
+  KW_I64,
+  KW_U8,
+  KW_U16,
+  KW_U32,
+  KW_U64,
+  KW_BOOL,
+  KW_VOID,
+  KW_SIZEOF,
+  KW_CAST,
+  KW_IF,
+  KW_ELSE,
+  KW_TRUE,
+  KW_FALSE,
+  KW_NULLPTR,
+  KW_VAARG,
+  KW_CASE,
+  KW_DEFAULT,
+  KW_SWITCH,
+  KW_WHILE,
+  KW_DO,
+  KW_FOR,
+  KW_CONTINUE,
+  KW_BREAK,
+  KW_RETURN,
+};
+
+bool is_keyword(Tok kind);
+bool is_builtin_type(Tok kind);
+cstr get_name(Tok kind);
+
+} // namespace tok
+
+using Tok = tok::Tok;
+
+#endif // LEXER_TOK_HPP_INCLUDED

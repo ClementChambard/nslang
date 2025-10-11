@@ -1,0 +1,7 @@
+a      // simple
+abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ // all chars
+_aaaa  // start with underscore
+Aaaaa  // or uppercase letter
+_____  // just underscores
+fn     // this one is a keyword
+1asdf  // can't start with a number

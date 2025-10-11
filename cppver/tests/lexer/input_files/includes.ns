@@ -1,0 +1,4 @@
+#include include0.nsh
+#include subdir1/include1.nsh
+#include subdir2/include2.nsh
+test3

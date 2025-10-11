@@ -1,0 +1,90 @@
+abc         // ident
+
+1289        // num
+"asdlkj"    // str
+'a'         // chr
+
+(           // lparen
+)           // rparen
+{           // lbrace
+}           // rbrace
+[           // lsquare
+]           // rsquare
+;           // semi
+:           // colon
+::          // coloncolon
+.           // period
+->          // arrow
+...         // ellipsis
+>           // greater
+>>          // greatergreater
+,           // comma
+=           // equal
+!           // exclaim
+*=          // starequal
+/=          // slashequal
+%=          // percentequal
++=          // plusequal
+-=          // minusequal
+<<=         // lesslessequal
+>>=         // greatergreaterequal
+&=          // ampequal
+^=          // caretequal
+|=          // pipeequal
+?           // question
+||          // pipepipe
+&&          // ampamp
+|           // pipe
+~           // tilde
+^           // caret
+&           // amp
+!=          // exclaimequal
+==          // equalequal
+<=          // lessequal
+<           // less
+>=          // greaterequal
+<<          // lessless
++           // plus
+++          // plusplus
+-           // minus
+--          // minusminus
+%           // percent
+/           // slash
+*           // star
+
+// keywords
+fn
+let
+lib
+type
+struct
+enum
+i8
+i16
+i32
+i64
+u8
+u16
+u32
+u64
+bool
+void
+sizeof
+cast
+if
+else
+true
+false
+nullptr
+vaarg
+case
+default
+switch
+while
+do
+for
+continue
+break
+return
+
+// eof
