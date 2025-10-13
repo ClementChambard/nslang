@@ -1,6 +1,5 @@
 #include parse_type.nsh
 #include tok.nsh
-#include parser.nsh
 #include io.nsh
 #include stdlib.nsh
 #include ast_nodes_type.nsh
@@ -8,33 +7,33 @@
 #include ident_info.nsh
 #include diags.nsh
 
-lib fn parse_integer_constexpr(end_loc: Loc*) -> i64;
-
-fn parse_type() -> Type* {
+lib fn Parser::parse_integer_constexpr(self: Parser *, end_loc: Loc*) -> i64;
+ 
+fn Parser::parse_type(self: Parser *) -> Type* {
   let cur_type: Type*;
   cur_type = nullptr;
   let no_type: bool;
   no_type = true;
   while (true) {
     if (no_type) {
-      if (tok_is_builtin_type(parser()->tok->ty)) {
-        cur_type = BuiltinType::get_from_tok(parser()->tok);
-        parser()->consume_token();
+      if (tok_is_builtin_type(self->tok->ty)) {
+        cur_type = BuiltinType::get_from_tok(self->tok);
+        self->consume_token();
         no_type = false;
         continue;
       }
-      if (parser()->tok->ty == TOK_KW_VOID) {
+      if (self->tok->ty == TOK_KW_VOID) {
         no_type = false;
-        parser()->consume_token();
+        self->consume_token();
         continue;
       }
-      if (parser()->tok->ty == TOK_IDENT) {
+      if (self->tok->ty == TOK_IDENT) {
         let type_name: CStr;
         let type_loc: Loc;
         let decl: NamedDecl*;
-        type_name = cast<IdentInfo*>(parser()->tok->value)->val;
-        type_loc = parser()->consume_token();
-        decl = parser()->cur_scope->lookup_named_decl(type_name);
+        type_name = cast<IdentInfo*>(self->tok->value)->val;
+        type_loc = self->consume_token();
+        decl = self->cur_scope->lookup_named_decl(type_name);
         if (decl == nullptr) {
           let s: String;
           s.format("'%s' is not a type name", type_name);
@@ -57,16 +56,16 @@ fn parse_type() -> Type* {
       }
       return cur_type;
     }
-    if (parser()->tok->ty == TOK_STAR) {
+    if (self->tok->ty == TOK_STAR) {
       cur_type = Type::get_pointer(cur_type);
-      parser()->consume_token();
+      self->consume_token();
       continue;
     }
-    if (parser()->tok->ty == TOK_LSQUARE) {
-      parser()->consume_bracket();
+    if (self->tok->ty == TOK_LSQUARE) {
+      self->consume_bracket();
       let count: i64;
-      count = parse_integer_constexpr(nullptr);
-      parser()->expect_and_consume(TOK_RSQUARE, nullptr, nullptr);
+      count = self->parse_integer_constexpr(nullptr);
+      self->expect_and_consume(TOK_RSQUARE, nullptr, nullptr);
       cur_type = Type::get_array(cur_type, count);
       continue;
     }
@@ -76,21 +75,21 @@ fn parse_type() -> Type* {
   return cur_type;
 }
 
-fn is_start_of_type() -> bool {
-  if (tok_is_builtin_type(parser()->tok->ty)) return true;
-  if (parser()->tok->ty == TOK_KW_VOID) return true;
-  if (parser()->tok->ty == TOK_IDENT) {
+fn Parser::is_start_of_type(self: Parser *) -> bool {
+  if (tok_is_builtin_type(self->tok->ty)) return true;
+  if (self->tok->ty == TOK_KW_VOID) return true;
+  if (self->tok->ty == TOK_IDENT) {
     let type_name: CStr;
     let decl: NamedDecl*;
-    type_name = cast<IdentInfo*>(parser()->tok->value)->val;
-    decl = parser()->cur_scope->lookup_named_decl(type_name);
+    type_name = cast<IdentInfo*>(self->tok->value)->val;
+    decl = self->cur_scope->lookup_named_decl(type_name);
     if (decl == nullptr) return false;
     return cast<Decl*>(decl)->is_type();
   }
   return false;
 }
 
-fn following_is_type(ctx: i64) -> bool {
+fn Parser::following_is_type(self: Parser *, ctx: i64) -> bool {
   // TODO:
   return false;
 }

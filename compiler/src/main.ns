@@ -32,16 +32,16 @@ fn main() {
 
     lexer.enter_source_file("example.ns");
 
-    let parser__: Parser*;
-    parser__ = Parser::new(&lexer);
+    let parser: Parser*;
+    parser = Parser::new(&lexer);
 
     let tu: TranslationUnitDecl*;
 
-    tu = parser()->parse();
+    tu = parser->parse();
   
     print_ast(tu);
 
-    parser__->delete();
+    parser->delete();
 
 
 

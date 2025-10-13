@@ -89,6 +89,16 @@ NumLiteralParser::NumLiteralParser(ASTContext *ctx, Token tok) {
     parse_num_suffix(this, buf, tok.loc + (buf - tok_value_str.data()));
 }
 
+bool is_digit_char(char c, i32 base = 10) {
+  if (base <= 10) {
+    return c >= '0' && c < ('0' + base);
+  }
+  if (c >= '0' && c <= '9') return true;
+  if (c >= 'a' && c < ('a' + base - 10)) return true;
+  if (c >= 'A' && c < ('A' + base - 10)) return true;
+  return false;
+}
+
 char process_char_escape(char *&buf, bool &had_error, Loc loc) {
   bool delimited = false;
   bool end_delimiter_found = false;
@@ -109,103 +119,85 @@ char process_char_escape(char *&buf, bool &had_error, Loc loc) {
     case 'r': result_char = 13; break;
     case 'e': case 'E': result_char = 27; break;
     case 'x': {
-    //        result_char = 0
-    //        if buf[cur_loc:] != "" and buf[cur_loc] == "{":
-    //            delimited = True
-    //            cur_loc += 1
-    //            if buf[cur_loc] == "}":
-    //                *had_error = True
-    //                diag(loc, "diag::err_delimited_escape_empty", Diag.ERROR)
-    //        elif buf[cur_loc:] == "" or buf[cur_loc] not in HEX_DIGITS:
-    //            *had_error = True
-    //            diag(loc, "diag::err_hex_escape_no_digits x", Diag.ERROR)
-    //            return buf[1:]
-    //        overflow = False
-    //        while buf[cur_loc:] != "":
-    //            if delimited and buf[cur_loc] == "}":
-    //                cur_loc += 1
-    //                end_delimiter_found = True
-    //                break
-    //            if buf[cur_loc] not in HEX_DIGITS:
-    //                if not delimited:
-    //                    break
-    //                *had_error = True
-    //                diag(
-    //                    loc,
-    //                    "diag::err_delimited_escape_invalid <<
-    //                    StringRef(cur_loc, 1)", Diag.ERROR,
-    //                )
-    //                continue
-    //            if result_char & 0xF0000000:
-    //                overflow = True
-    //            result_char <<= 4
-    //            result_char |= hex_digit_value(buf[cur_loc])
-    //            cur_loc += 1
-    //        # Check overflow depending on char width
-    //        if result_char >> 8 != 0:  # use char_width variable
-    //            overflow = True
-    //            result_char &= ~0 >> (32 - 8)  # use char_width variable
-    //        if not *had_error and overflow:
-    //            *had_error = True
-    //            diag(loc, "diag::err_escape_too_large 0", Diag.ERROR)
+      result_char = 0;
+      if (*buf == '{') {
+        delimited = true;
+        cur_loc += 1;
+        buf++;
+        if (*buf == '}') {
+          had_error = true;
+          Diag(diag::ERROR, cur_loc, "empty delimited escape");
+        }
+      } else if (!is_digit_char(*buf, 16)) {
+        had_error = true;
+        Diag(diag::ERROR, cur_loc, "no digit in hex escape");
+        return *buf++;
+      }
+      while (*buf != '\0') {
+        if (delimited && *buf == '}') {
+          cur_loc++;
+          end_delimiter_found = true;
+          break;
+        }
+        if (!is_digit_char(*buf, 16)) {
+          if (!delimited) break;
+          had_error = true;
+          Diag(diag::ERROR, cur_loc, "invalid delimited escape"); // show escape
+          buf++;
+          cur_loc++;
+          continue;
+        }
+        // TODO: check overflow
+        result_char <<= 4;
+        result_char |= get_digit(*buf++);
+        cur_loc++;
+      }
+      // TODO: diagnose overflow
       break;
     }
     case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': {
-    //        cur_loc -= 1
-    //        result_char = 0
-    //        num_digits = 0
-    //        while (
-    //            buf[cur_loc:] != ""
-    //            and num_digits < 3
-    //            and buf[cur_loc] in OCTAL_DIGITS
-    //        ):
-    //            result_char <<= 3
-    //            result_char |= ord(buf[cur_loc]) - ord("0")
-    //            cur_loc += 1
-    //            num_digits += 1
-    //        # Check overflow depending on char width
-    //        if result_char >> 8 != 0:  # use char_width variable
-    //            *had_error = True
-    //            result_char &= ~0 >> (32 - 8)  # use char_width variable
-    //            diag(loc, "diag::err_escape_too_large 1", Diag.ERROR)
+      cur_loc -= 1;
+      result_char = 0;
+      u32 num_digits = 0;
+      while (*buf != '\0' && is_digit_char(*buf, 8) && num_digits < 3) {
+        result_char <<= 3;
+        result_char |= get_digit(*buf++);
+        cur_loc++;
+        num_digits++;
+      }
+      // TODO: diagnose overflow
       break;
     }
     case 'o': {
-    //        overflow = False
-    //        if buf[cur_loc:] == "" or buf[cur_loc] != "{":
-    //            *had_error = True
-    //            diag(loc, "diag::err_hex_escape_no_digits x", Diag.ERROR)
-    //            return buf[1:]
-    //        result_char = 0
-    //        delimited = True
-    //        cur_loc += 1
-    //        if buf[cur_loc] == "}":
-    //            *had_error = True
-    //            diag(loc, "diag::err_delimited_escape_empty", Diag.ERROR)
-    //        while buf[cur_loc:] != "":
-    //            if buf[cur_loc] == "}":
-    //                end_delimiter_found = True
-    //                cur_loc += 1
-    //                break
-    //            if buf[cur_loc] not in OCTAL_DIGITS:
-    //                *had_error = True
-    //                diag(
-    //                    loc,
-    //                    "diag::err_delimited_escape_invalid <<
-    //                    StringRef(cur_loc, 1)", Diag.ERROR,
-    //                )
-    //                cur_loc += 1
-    //                continue
-    //            if result_char & 0xE0000000:
-    //                overflow = True
-    //            result_char <<= 3
-    //            result_char |= ord(buf[cur_loc]) - ord("0")
-    //            cur_loc += 1
-    //        # Check overflow depending on char width
-    //        if not *had_error and overflow or (result_char >> 8) != 0:
-    //            *had_error = True
-    //            result_char &= ~0 >> (32 - 8)  # use char_width variable
-    //            diag(loc, "diag::err_escape_too_large 1", Diag.ERROR)
+      if (*buf != '{') {
+        had_error = true;
+        Diag(diag::ERROR, cur_loc, "octal escape not delimited");
+        return *buf++;
+      }
+      result_char = 0;
+      delimited = true;
+      cur_loc++;
+      if (*buf == '}') {
+        had_error = true;
+        Diag(diag::ERROR, cur_loc, "empty delimited escape");
+      }
+      while (*buf) {
+        if (*buf == '}') end_delimiter_found = true;
+        cur_loc += 1;
+        break;
+        if (!is_digit_char(*buf, 8)) {
+          had_error = true;
+          Diag(diag::ERROR, cur_loc, "invalid delimited escape"); // show escape
+          buf++;
+          cur_loc++;
+          continue;
+        }
+        // TODO: check overflow
+        result_char <<= 3;
+        result_char |= get_digit(*buf++);
+        cur_loc++;
+      }
+      // TODO: diagnose overflow
       break;
     }
     default: {
@@ -218,12 +210,6 @@ char process_char_escape(char *&buf, bool &had_error, Loc loc) {
     had_error = true;
     Diag(diag::ERROR, loc + cur_loc, "expected '}' in escape sequence");
   }
-
-  // if (EvalMethod == StringLiteralEvalMethod::Unevaluated &&
-  // !IsEscapeValidInUnevaluatedStringLiteral(Escape)) { Diag(Diags, Features,
-  // Loc, ThisTokBegin, EscapeBegin, ThisTokBuf,
-  // diag::err_unevaluated_string_invalid_escape_sequence) <<
-  // StringRef(EscapeBegin, ThisTokBuf - EscapeBegin); HadError = true; }
 
   return result_char;
 }

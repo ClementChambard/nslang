@@ -38,6 +38,3 @@ lib fn Parser::exit_scope(self: Parser*);
 lib fn Parser::parse(self: Parser*) -> TranslationUnitDecl*;
 
 lib fn is_common_typo(expected: Tok, actual: Tok) -> bool;
-
-
-lib fn parser() -> Parser*;

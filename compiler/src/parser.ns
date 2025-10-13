@@ -2,9 +2,6 @@
 #include mem.nsh
 #include diags.nsh
 
-let CUR_PARSER: Parser*;
-fn parser() -> Parser* { return CUR_PARSER; }
-
 fn Parser::new(lexer: Lexer*) -> Parser* {
   let self: Parser*;
   self = malloc(sizeof(Parser));
@@ -15,7 +12,6 @@ fn Parser::new(lexer: Lexer*) -> Parser* {
   self->brace_count = 0;
   self->bracket_count = 0;
   self->cur_scope = Scope::new(nullptr, SF_NO);
-  CUR_PARSER = self;
   return self;
 }
 
@@ -30,7 +26,6 @@ fn Parser::delete(self: Parser*) {
     s = s->get_parent();
     ss->delete();
   }
-  CUR_PARSER = nullptr;
   free(self);
 }
 
@@ -209,10 +204,10 @@ fn Parser::exit_scope(self: Parser*) {
   old_scope->delete();
 }
 
-lib fn parse_translation_unit() -> TranslationUnitDecl*;
+lib fn Parser::parse_translation_unit(self: Parser *) -> TranslationUnitDecl*;
 
 fn Parser::parse(self: Parser*) -> TranslationUnitDecl* {
-  return parse_translation_unit();
+  return self->parse_translation_unit();
 }
 
 fn is_common_typo(expected: Tok, actual: Tok) -> bool {

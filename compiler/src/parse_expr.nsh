@@ -1,7 +1,7 @@
 #include loc.nsh
 #include ast_nodes_expr.nsh
 #include ast_nodes_unqualified_id.nsh
-
+#include parser.nsh
 
 enum Prec {
   PREC_UNKNOWN,
@@ -22,11 +22,11 @@ enum Prec {
 
 lib fn prec_from_bin_op(token_kind: Tok) -> Prec;
 
-lib fn parse_expression_list(exprs: Expr***, exprs_count: i64*) -> bool;
-lib fn parse_postfix_expression_suffix(lhs: Expr*) -> Expr*;
-lib fn parse_unqualified_id(out: UnqualifiedId*) -> bool;
-lib fn parse_unit_expr() -> Expr*;
-lib fn parse_assignment_expr() -> Expr*;
-lib fn parse_rhs_of_binary_expr(lhs: Expr*, prec: Prec) -> Expr*;
-lib fn parse_expr() -> Expr*;
-lib fn parse_integer_constexpr(loc: Loc*) -> i64;
+lib fn Parser::parse_expression_list(self: Parser*, exprs: Expr***, exprs_count: i64*) -> bool;
+lib fn Parser::parse_postfix_expression_suffix(self: Parser*, lhs: Expr*) -> Expr*;
+lib fn Parser::parse_unqualified_id(self: Parser*, out: UnqualifiedId*) -> bool;
+lib fn Parser::parse_unit_expr(self: Parser*) -> Expr*;
+lib fn Parser::parse_assignment_expr(self: Parser*) -> Expr*;
+lib fn Parser::parse_rhs_of_binary_expr(self: Parser*, lhs: Expr*, prec: Prec) -> Expr*;
+lib fn Parser::parse_expr(self: Parser*) -> Expr*;
+lib fn Parser::parse_integer_constexpr(self: Parser*, loc: Loc*) -> i64;

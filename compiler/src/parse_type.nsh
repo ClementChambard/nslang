@@ -1,5 +1,7 @@
+#include parser.nsh
+
 struct Type;
 
-lib fn parse_type() -> Type*;
-lib fn is_start_of_type() -> bool;
-lib fn following_is_type(ctx: i64) -> bool;
+lib fn Parser::parse_type(self: Parser *) -> Type*;
+lib fn Parser::is_start_of_type(self: Parser *) -> bool;
+lib fn Parser::following_is_type(self: Parser *, ctx: i64) -> bool;

@@ -1,4 +1,5 @@
 #include ast_nodes_decl.nsh
+#include parser.nsh
 
 enum DeclaratorContext {
     DC_FILE,
@@ -28,14 +29,14 @@ enum DeclaratorContext {
 
 struct StructType;
 
-lib fn parse_translation_unit() -> TranslationUnitDecl*;
-lib fn parse_top_level_decl() -> Decl*;
-lib fn parse_decl(decl_ctx: DeclaratorContext, decl_end: Loc*) -> Decl*;
-lib fn parse_enum_decl() -> EnumDecl*;
-lib fn parse_param_decl() -> ParamDecl*;
-lib fn parse_var_decl() -> VarDecl*;
-lib fn parse_fn_decl() -> FnDecl*;
-lib fn parse_type_alias_decl() -> TypeDecl*;
-lib fn parse_struct_decl() -> StructDecl*;
-lib fn parse_struct_decl_inner(cur_type: StructType*, cur_decl: StructDecl*) -> StructDecl*;
-lib fn parse_field_decl() -> FieldDecl*;
+lib fn Parser::parse_translation_unit(self: Parser*) -> TranslationUnitDecl*;
+lib fn Parser::parse_top_level_decl(self: Parser*) -> Decl*;
+lib fn Parser::parse_decl(self: Parser*, decl_ctx: DeclaratorContext, decl_end: Loc*) -> Decl*;
+lib fn Parser::parse_enum_decl(self: Parser*) -> EnumDecl*;
+lib fn Parser::parse_param_decl(self: Parser*) -> ParamDecl*;
+lib fn Parser::parse_var_decl(self: Parser*) -> VarDecl*;
+lib fn Parser::parse_fn_decl(self: Parser*) -> FnDecl*;
+lib fn Parser::parse_type_alias_decl(self: Parser*) -> TypeDecl*;
+lib fn Parser::parse_struct_decl(self: Parser*) -> StructDecl*;
+lib fn Parser::parse_struct_decl_inner(self: Parser*, cur_type: StructType*, cur_decl: StructDecl*) -> StructDecl*;
+lib fn Parser::parse_field_decl(self: Parser*) -> FieldDecl*;
