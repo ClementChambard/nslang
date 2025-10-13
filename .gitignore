@@ -2,3 +2,5 @@
 *.a
 a.out
 __pycache__/
+.cache/
+pyver/__pycache__/

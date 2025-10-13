@@ -33,11 +33,12 @@ struct CGContext {
   llvm::IRBuilder<> builder{llvmctx};
   CGFunctionCtx fn{};
   std::unordered_map<llvm::Constant*, llvm::GlobalVariable *> constant_string_map{};
+  std::string filename;
 
   CGContext(std::string const &filename, ASTContext &astctx) :
-    astctx(astctx), module(filename, llvmctx) {}
+    astctx(astctx), module(filename, llvmctx), filename(filename) {}
 
-  void gen_tu(TranslationUnitDecl *tu);
+  void gen_tu(TranslationUnitDecl const *tu);
 };
 
 #endif // ! CODEGEN_CONTEXT_HPP_INCLUDED

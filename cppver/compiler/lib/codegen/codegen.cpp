@@ -1,7 +1,7 @@
 #include "context.hpp"
 #include "codegen.hpp"
 
-void CGContext::gen_tu(TranslationUnitDecl *tu) {
+void CGContext::gen_tu(TranslationUnitDecl const *tu) {
   for (auto const & d : tu->decls) {
     gen_top_level_decl(*this, *d.get());
   }

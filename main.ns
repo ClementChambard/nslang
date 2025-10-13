@@ -15,11 +15,25 @@ fn add(a1: i64, a2: i64) -> i64 {
     return a1 + a2; 
 }
 
+struct S {
+  sub: i64;
+};
+
+lib fn tst() {
+  let s: S;
+  let sp: S*;
+  sp = &s;
+  sp->sub = 0;
+  do {
+    print("%i\n", sp->sub++);
+  } while (sp->sub < 10);
+}
+
 fn main() {
     if (0) {  1; 2; } else { 3; 4; }
     print("Hello, World!\n");
     print("%X %x %i %i %u %c %s\n", 30, 30, 3, -3, 4, 'a', "test");
     my_namespace::test();
+    tst();
 }
 
-fn tst(a: bool, b: u8, c: i32, d: i32, e: i32) {}
