@@ -7,7 +7,7 @@
 #include <filesystem>
 
 [[noreturn]] void fatal_error(std::string const &msg) {
-  std::fprintf(stderr, "\x1b[1;31mfatal error: \x1b[0;1m%s\[1b[0m\n", msg.c_str());
+  std::fprintf(stderr, "\x1b[1;31mfatal error: \x1b[0;1m%s\x1b[0m\n", msg.c_str());
   std::exit(1);
 }
 
