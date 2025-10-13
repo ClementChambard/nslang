@@ -69,8 +69,7 @@ Mode get_mode(Clap const &c) {
 #define STDLIB_LOC "/home/clement/dev/nslang/stdlib/"
 
 bool is_linktime_file(std::string const &filename) {
-  auto path = std::filesystem::path(filename);
-  return path.extension() == "a" || path.extension() == "o";
+  return filename.ends_with(".a") || filename.ends_with(".o");
 }
 
 CheckedClap Clap::check() const {

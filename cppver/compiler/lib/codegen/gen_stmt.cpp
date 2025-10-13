@@ -322,7 +322,11 @@ void gen_return_stmt(CGContext &ctx, ReturnStmt const &s) {
   // TODO: check validity
   if (s.return_value) {
     auto r = gen_scalar_expr(ctx, s.return_value.get());
-    ctx.builder.CreateRet(r);
+    if (s.return_value->type->is_void_type()) {
+      ctx.builder.CreateRetVoid();
+    } else {
+      ctx.builder.CreateRet(r);
+    }
     ctx.builder.ClearInsertionPoint();
   } else {
     ctx.builder.CreateRetVoid();

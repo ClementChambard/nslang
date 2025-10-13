@@ -39,12 +39,12 @@ fn sema::default_function_array_conversion(e: Expr*, diagnose: bool) -> Expr* {
   let ty: Type*;
   ty = e->ty;
   // assert ty is not None, "default_function_array_conversion - missing type"
-  if (e->kind == TYPEKIND_FUNCTION) {
+  if (ty->kind == TYPEKIND_FUNCTION) {
     // TODO: cast to function ptr
     // if (auto *DRE = dyn_cast<DeclRefExpr>(E->IgnoreParenCasts())) if (auto *FD = dyn_cast<FunctionDecl>(DRE->getDecl())) if (!checkAddressOfFunctionIsAvailable(FD, Diagnose, E->getExprLoc())) return ExprError();
     // E = ImpCastExprToType(E, Context.getPointerType(Ty), CK_FunctionToPointerDecay).get();
     return e;
-  } else if (e->kind == TYPEKIND_ARRAY) {
+  } else if (ty->kind == TYPEKIND_ARRAY) {
     return sema::imp_cast_expr_to_type(e, Type::get_pointer(cast<ArrayType*>(ty)->subtype), CK_ARRAY_TO_POINTER_DECAY, VK_PRVALUE);
   }
   return e;
@@ -776,7 +776,7 @@ fn sema::build_member_reference_expr(base: Expr*, base_type: Type*, oploc: Loc, 
   if (is_arrow) {
     if ((base_type->kind == TYPEKIND_POINTER) & (cast<PointerType*>(base_type)->subtype->kind == TYPEKIND_STRUCT)) {
       base = sema::default_lvalue_conversion(base);
-      struct_type = cast<PointerType*>(base_type)->subtype;
+      struct_type = cast<StructType*>(cast<PointerType*>(base_type)->subtype);
     } else {
       cast<Stmt*>(base)->get_range(&rge);
       diag(rge.start, "base expr of '->' is not a pointer to a struct", DIAG_ERROR); //, [base.get_range()]);
@@ -1032,7 +1032,7 @@ fn sema::act_on_finish_full_expr(fe: Expr*, cc: Loc, discarded_value: bool, is_c
 
 fn sema::act_on_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rparen_loc: Loc) -> Expr* {
   let call: CallExpr*;
-  call = sema::build_call_expr(scope, fun, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, false, true);
+  call = cast<CallExpr*>(sema::build_call_expr(scope, fun, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, false, true));
   if (call == nullptr) return nullptr;
 
   // if (const auto *ULE = dyn_cast<UnresolvedLookupExpr>(Fn); ULE && ULE->hasExplicitTemplateArgs() && ULE->decls_begin() == ULE->decls_end()) {
@@ -1135,7 +1135,7 @@ fn sema::build_resolved_call_expr(fun: Expr*, ndecl: NamedDecl*, lparen_loc: Loc
 
   let the_call: CallExpr*;
   if (fun->kind == EXPRKIND_METHOD) {
-    the_call = MethodCallExpr::new(fun, args, args_count, fnty->return_type, VK_PRVALUE, rparen_loc);
+    the_call = cast<CallExpr*>(MethodCallExpr::new(fun, args, args_count, fnty->return_type, VK_PRVALUE, rparen_loc));
   } else {
     the_call = CallExpr::new(fun, args, args_count, fnty->return_type, VK_PRVALUE, rparen_loc);
   }

@@ -17,8 +17,8 @@ bool Type::is_signed_integer_type() const {
   }
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
-    return !d->is_scoped && d->is_complete &&
-           d->int_ty->is_signed_integer_type();
+    return !d->is_scoped && d->is_complete && (!d->int_ty ||
+           d->int_ty->is_signed_integer_type());
   }
   if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_signed_integer_type();
   return false;
@@ -30,7 +30,7 @@ bool Type::is_signed_integer_or_enumeration_type() const {
   }
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
-    return d->is_complete && d->int_ty->is_signed_integer_type();
+    return d->is_complete && (!d->int_ty || d->int_ty->is_signed_integer_type());
   }
   if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_signed_integer_or_enumeration_type();
   return false;
@@ -43,7 +43,7 @@ bool Type::is_unsigned_integer_type() const {
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
     return !d->is_scoped && d->is_complete &&
-           d->int_ty->is_unsigned_integer_type();
+           d->int_ty && d->int_ty->is_unsigned_integer_type();
   }
   if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_unsigned_integer_type();
   return false;
@@ -55,7 +55,7 @@ bool Type::is_unsigned_integer_or_enumeration_type() const {
   }
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
-    return d->is_complete && d->int_ty->is_unsigned_integer_type();
+    return d->is_complete && d->int_ty && d->int_ty->is_unsigned_integer_type();
   }
   if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_unsigned_integer_or_enumeration_type();
   return false;

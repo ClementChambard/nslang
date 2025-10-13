@@ -291,9 +291,9 @@ fn StringLiteralParser::parse(self: StringLiteralParser*, string_toks: Token**, 
         output_string.push(*val);
       } else {
         val += 1;
-        if (*val == "u") exit(1);
-        if (*val == "U") exit(1);
-        if (*val == "N") exit(1);
+        if (*val == 'u') exit(1);
+        if (*val == 'U') exit(1);
+        if (*val == 'N') exit(1);
         let c: i64;
         val = process_char_escape(val, string_toks[i]->loc, &c, &self->had_error);
         output_string.push(c);

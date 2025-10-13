@@ -442,7 +442,7 @@ UPtr<StructDecl> Sema::act_on_start_struct_decl(Scope *scope, Loc kw_loc,
   }
 
   auto *old_decl = existing_decl->dyn_cast<StructDecl>();
-  auto ty = ctx.get_declared_type(decl.get())->dyn_cast<StructType>();
+  auto ty = ctx.get_declared_type(existing_decl)->dyn_cast<StructType>();
   ctx.set_declared_type(ty, decl.get());
 
   if (old_decl->is_complete) {

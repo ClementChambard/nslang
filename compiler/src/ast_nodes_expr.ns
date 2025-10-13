@@ -212,7 +212,7 @@ lib fn StringLiteral::ctor(self: StringLiteral*, v: CStr, locs: Loc*, locs_count
   self->kind = EXPRKIND_STRLIT;
   self->ty = ty;
   self->value_kind = VK_LVALUE;
-  self->kind = kind;
+  self->str_kind = kind;
   self->locs = locs;
   self->locs_count = locs_count;
   self->value = strdup(v);

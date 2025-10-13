@@ -91,7 +91,7 @@ fn parse_expression_list(exprs: Expr***, exprs_count: i64*) -> bool {
     parser()->consume_token();
   }
   return saw_error;
-  if (exprs != nullptr) *exprs = array.data;
+  if (exprs != nullptr) *exprs = cast<Expr**>(array.data);
   if (exprs_count != nullptr) *exprs_count = array.len;
 }
 
@@ -410,8 +410,8 @@ fn parse_rhs_of_binary_expr(lhs: Expr*, prec: Prec) -> Expr* {
     if ((this_prec < next_tok_prec) | ((this_prec == next_tok_prec) & is_right_assoc)) {
       let prec_new: i64;
       // XXX: weird cast with enums
-      prec_new = *cast<i64*>(&this_prec) + cast<i64>(!is_right_assoc);
-      rhs = parse_rhs_of_binary_expr(rhs, *cast<Prec*>(&prec_new));
+      prec_new = cast<i64>(this_prec) + cast<i64>(!is_right_assoc);
+      rhs = parse_rhs_of_binary_expr(rhs, cast<Prec>(prec_new));
       if (rhs == nullptr) lhs = nullptr;
       next_tok_prec = prec_from_bin_op(parser()->tok->ty);
     }

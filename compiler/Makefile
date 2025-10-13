@@ -5,9 +5,15 @@
 # @version 0.1
 
 SOURCES := $(wildcard src/*.ns)
+OBJECTS := $(patsubst src/%.ns, bin/%.o, $(SOURCES))
 
-bin/compiler: $(SOURCES)
-	../nslang -o $@ $^
+bin/compiler: $(OBJECTS)
+	@../nslang -o $@ $^
+	@echo "--> linked: " $@
+
+bin/%.o: src/%.ns
+	@../nslang -o $@ $^ -c
+	@echo "--> compiled: " $^
 
 clean:
 	rm bin/*

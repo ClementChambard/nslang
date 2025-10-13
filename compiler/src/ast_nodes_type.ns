@@ -160,7 +160,7 @@ fn __type_internal__get_function_type_of(return_type: Type*, param_types: Type**
       i += 5;
       continue;
     }
-    if (ft->param_count != cast<void*>(param_count)) {
+    if (ft->param_count != param_count) {
       i += 5;
       continue;
     }

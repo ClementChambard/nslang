@@ -285,6 +285,7 @@ UPtr<FunctionDecl> Parser::parse_fn_decl() {
   if (!decl) {
     consume_brace();
     skip_until(tok::RBRACE);
+    exit_scope();
     return nullptr;
   }
 

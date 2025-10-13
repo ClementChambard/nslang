@@ -3,6 +3,7 @@
 #include "ast/nodes/type.hpp"
 #include "codegen.hpp"
 #include "codegen/context.hpp"
+#include "diags/diagnostic.hpp"
 #include "semantic_analysis/constexpr.hpp"
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constant.h>
@@ -70,7 +71,7 @@ llvm::Value *gen_cast_expr(CGContext &ctx, CastExpr const &e) {
     auto elt_ty =
         convert_type(ctx, e.op->type->dyn_cast<ArrayType>()->element_type);
     auto idx = ctx.builder.getInt32(0);
-    return ctx.builder.CreateInBoundsGEP(elt_ty, addr, {idx, idx}, "arraydecay");
+    return ctx.builder.CreateInBoundsGEP(elt_ty, addr, idx, "arraydecay");
   }
   case CastExpr::FUNCTION_TO_POINTER_DECAY:
     return gen_lvalue(ctx, *e.op);
@@ -673,6 +674,7 @@ LValue gen_pointer(CGContext &ctx, const Expr *e) {
 LValue gen_unary_expr_lvalue(CGContext &ctx, UnaryExpr const &e) {
   switch (e.opc) {
   default:
+    Diag(diag::ERROR, e.get_start_loc(), "HERE");
     assert(false && "Unknown unary operator lvalue!");
   case UnaryExpr::DEREF: {
     return gen_pointer(ctx, e.arg.get());

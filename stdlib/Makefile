@@ -8,7 +8,7 @@ bin/runtime.a: runtime/start.S
 	ar -crs bin/runtime.a bin/runtime.o
 
 bin/%.o: src/%.ns
-	../cppver/build/compiler/nslang $^ | opt -S -passes=sroa,simplifycfg | llc | as -o $@
+	../nslang $^ -c -o $@
 
 bin/%.O: src/%.S
 	nasm -f elf64 -o $@ $^

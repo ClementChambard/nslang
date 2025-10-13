@@ -1,3 +1,4 @@
+#include "diags/diagnostic.hpp"
 #include <clap.hpp>
 #include <ast/context.hpp>
 #include <ast/print.hpp>
@@ -10,6 +11,8 @@
 #include <backend/backend.hpp>
 #include <opts.hpp>
 
+bool global_had_errors = false;
+
 void compile_one_file(Options const & opts, std::string const &input_file, std::string const &output_file) {
   Lexer lexer;
   for (auto const &ip : opts.include_path)
@@ -21,6 +24,12 @@ void compile_one_file(Options const & opts, std::string const &input_file, std::
   Parser parser(lexer, sema);
 
   auto tu = parser.parse();
+
+  if (diag::had_errors()) {
+    global_had_errors = true;
+    diag::reset_errors();
+    return;
+  }
 
   if (opts.mode == Mode::PRINT_AST) {
     print_ast(tu.get());
@@ -50,6 +59,11 @@ int main(int argc, char **argv) {
 
   for (auto &f : args.files_to_remove) {
     std::filesystem::remove(f);
+  }
+
+  if (global_had_errors) {
+    printf("\x1b[1;31mfatal error: \x1b[0;1mcompilation had errors\x1b[0m\n");
+    return 1;
   }
 
   return 0;

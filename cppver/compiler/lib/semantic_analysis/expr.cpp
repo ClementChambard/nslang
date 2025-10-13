@@ -113,6 +113,10 @@ Type *Sema::invalid_operands(Loc loc, ExprUPtr &lhs, ExprUPtr &rhs) {
   (void)lhs, (void)rhs;
   Diag(diag::ERROR, loc, "invalid operands to binary expression (%s and %s)",
        "TODO", "TODO");
+  lhs->type->dump();
+  printf(" -- ");
+  rhs->type->dump();
+  printf("\n");
   return nullptr;
 }
 
@@ -701,7 +705,25 @@ Type *Sema::check_compare_operands(ExprUPtr &lhs, ExprUPtr &rhs, Loc loc,
       (rhs->type->is_arithmetic_type() || rhs->type->is_enumeral_type()))
     return check_arithmetic_or_enumeral_compare(*this, lhs, rhs, loc, opc);
 
-  // TODO: diagnose compare int to pointer, then cast the integer to a pointer.
+  if (lhs->type->is_pointer_type() && rhs->type->is_pointer_type()) {
+    // maybe diagnose if incompatible pointers
+    return ctx.bool_ty;
+  }
+
+  if (lhs->type->is_pointer_type() && rhs->type->is_integer_type()) {
+    Diag(diag::WARNING, loc, "comparing integer to pointer") << lhs->get_range() << rhs->get_range();
+    rhs = imp_cast_expr_to_type(std::move(rhs), lhs->type, CastExpr::INTEGRAL_TO_POINTER);
+    if (!rhs) return nullptr;
+    return ctx.bool_ty;
+  }
+
+  if (rhs->type->is_pointer_type() && lhs->type->is_integer_type()) {
+    Diag(diag::WARNING, loc, "comparing integer to pointer") << lhs->get_range() << rhs->get_range();
+    lhs = imp_cast_expr_to_type(std::move(lhs), rhs->type, CastExpr::INTEGRAL_TO_POINTER);
+    if (!lhs) return nullptr;
+    return ctx.bool_ty;
+  }
+
   return ctx.bool_ty;
 }
 
@@ -1253,9 +1275,9 @@ ExprUPtr Sema::perform_implicit_conversion(ExprUPtr from, Type *to_type,
   if (cs->state != ConversionSequence::OK) {
     Diag(diag::ERROR, from->get_start_loc(), "Conversion error") << from->get_range();
     from->type->dump();
-    printf(" -> ");
+    printf(" (%p) -> ", from->type);
     to_type->dump();
-    printf("\n");
+    printf(" (%p)  is_same=%d\n", to_type, ctx.is_same_type(from->type, to_type));
     return nullptr;
   }
   assert(cs->state == ConversionSequence::OK); // TODO: diagnose
