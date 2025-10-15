@@ -1,0 +1,43 @@
+#include io.nsh
+#include sdl3/sdl.nsh
+
+struct Window {
+  window: void*;
+  gl_context: void*;
+  is_running: bool;
+};
+
+fn init(w: Window *) {
+    SDL_Init(SDL_INIT_VIDEO);
+    w->window = SDL_CreateWindow("test window", 0, 0, 1920, 1080, 2);
+    w->gl_context = SDL_GL_CreateContext(w->window);
+    w->is_running = true;
+}
+
+fn cleanup(w: Window *) {
+    SDL_GL_DestroyContext(w->gl_context);
+    SDL_DestroyWindow(w->window);
+    SDL_Quit();
+}
+
+fn main() {
+    let w: Window;
+    let ev: SDL_Event;
+
+    init(&w);
+
+    while (w.is_running) {
+        while (SDL_PollEvent(&ev)) {
+            if (ev.type_ == 0x100) w.is_running = false;
+            if (ev.type_ == 0x300) {
+                // Keydown
+                let key_event: SDL_KeyboardEvent*;
+                key_event = cast<SDL_KeyboardEvent*>(&ev);
+                print("%u\n", key_event->keysym.sym);
+            }
+        }
+        SDL_GL_SwapWindow(w.window);
+    }
+
+    cleanup(&w);
+}
