@@ -169,12 +169,26 @@ lib fn String::push_str(self: String*, s: Str*);
 ///   @param s the C-String to append
 lib fn String::push_cstr(self: String*, s: CStr);
 
+/// method[String] push_format_va
+///   Appends formatted content at the end of a string.
+///   @object self
+///   @param fmt the format string
+///   @param ...* the format parameters
+lib fn String::push_format_va(self: String*, fmt: CStr, ...*);
+
 /// method[String] push_format
 ///   Appends formatted content at the end of a string.
 ///   @object self
 ///   @param fmt the format string
 ///   @vararg the format parameters
 lib fn String::push_format(self: String*, fmt: CStr, ...);
+//
+/// constructor[String] format_va
+///   Creates a string from formatted data.
+///   @object self
+///   @param fmt the format string
+///   @param ...* the format parameters
+lib fn String::format_va(self: String*, fmt: CStr, ...*);
 
 /// constructor[String] format
 ///   Creates a string from formatted data.

@@ -27,8 +27,19 @@ lib fn read(fd: i64, buf: void*, count: i64) -> i64;
 ///   @returns the number of bytes written, or -ERRNO on error
 lib fn write(fd: i64, buf: void*, count: i64) -> i64;
 
+/// function fprint
+///   Prints formatted data to a file.
+///   @param fd the file descriptor
+///   @param fmt the format string
+///   @vararg the format parameters
+lib fn fprint(fd: i64, fmt: i8*, ...);
+
 /// function print
 ///   Prints formatted data to the standard output.
 ///   @param fmt the format string
 ///   @vararg the format parameters
 lib fn print(fmt: i8*, ...);
+
+// va functions
+lib fn fprint_va(fd: i64, fmt: i8*, ...*);
+lib fn print_va(fmt: i8*, ...*);

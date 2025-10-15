@@ -1,114 +1,21 @@
-#include io.nsh
 #include str.nsh
+#include io.nsh
 
-fn print_str(str: i8*) {
-    let size: i64;
-
-    size = 0;
-    while (str[size] != 0) {
-        size += 1;
-    }
-    write(STDOUT, str, size);
+fn fprint(fd: i64, fmt: i8 *, ...) {
+  fprint_va(fd, fmt, vaargs);
 }
 
-fn print_num(num: i64, signed: bool) {
-    let buf: i8[22];
-    let p: i8*;
-    let digit: i64;
-    let neg: bool;
-
-    if (signed) {
-        neg = num < 0;
-        if (neg) num = -num; // technically, this could overflow
-    } else {
-        neg = false;
-    }
-
-    p = &buf[21];
-    *p = 0;
-    do {
-        p -= 1;
-        digit = num % 10; // TODO: this assumes signed integers => some chars are invalid
-        num /= 10;
-        *p = digit + '0';
-    } while (num != 0);
-
-    if (neg) {
-       p -= 1;
-       *p = '-';
-    }
-
-    print_str(p);
+fn print(fmt: i8 *, ...) {
+  fprint_va(STDOUT, fmt, vaargs);
 }
 
-fn print_hex(num: i64, upper: bool) {
-    let buf: i8[19];
-    let p: i8*;
-    let digit: i64;
-    p = &buf[18];
-    *p = 0;
-    do {
-        p -= 1;
-        digit = num & 0xF;
-        num >>= 4;
-        if (digit <= 9) {
-            *p = digit + '0';
-        } else if (upper) {
-            *p = digit + (-10 + 'A');
-        } else {
-            *p = digit + (-10 + 'a');
-        }
-    } while (num != 0);
-    print_str(p);
+fn print_va(fmt: i8*, ...*) {
+  fprint_va(STDOUT, fmt, vaargs);
 }
 
-// TODO: better formatting
-// TODO: print_file
-fn print(fmt: i8*, ...) {
-    let i: i64;
-    let last_i: i64;
-    let pc_buf: i8;
-    pc_buf = '%';
-
-    i = 0;
-    last_i = 0;
-
-    while (fmt[i] != 0) {
-        if (fmt[i] != '%') {
-            i += 1;
-            continue;
-        }
-        if (i != last_i) {
-            write(STDOUT, &fmt[last_i], i - last_i);
-            last_i = i;
-        }
-        i += 1;
-        if (fmt[i] == '%') {
-            write(STDOUT, &pc_buf, 1);
-        } else if (fmt[i] == 'i') {
-            print_num(vaarg<i64>, true);
-        } else if (fmt[i] == 'u') {
-            print_num(vaarg<i64>, false);
-        } else if (fmt[i] == 'x') {
-            print_hex(vaarg<i64>, false);
-        } else if (fmt[i] == 'X') {
-            print_hex(vaarg<i64>, true);
-        } else if (fmt[i] == 's') {
-            print_str(vaarg<i8*>);
-        } else if (fmt[i] == 'S') {
-            let s: Str*;
-            s = vaarg<Str*>;
-            write(STDOUT, s->data, s->len);
-        } else if (fmt[i] == 'c') {
-            let c: i8;
-            c = vaarg<i8>;
-            write(STDOUT, &c, 1);
-        }
-
-        i += 1;
-        last_i = i;
-    }
-    if (i != last_i) {
-        write(STDOUT, &fmt[last_i], i - last_i);
-    }
+fn fprint_va(fd: i64, fmt: i8*, ...*) {
+  let s: String;
+  s.format_va(fmt, vaargs);
+  write(fd, s.data, s.len);
+  s.destroy();
 }

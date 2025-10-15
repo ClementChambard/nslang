@@ -184,58 +184,21 @@ fn fmt_hex(self: String*, num: i64, upper: bool) {
     self->push_cstr(p);
 }
 
-fn String::format(self: String*, fmt: CStr, ...) { // TODO: forward varargs
-    let i: i64;
-    let last_i: i64;
-    let str_to_add: Str;
-    self->len = 0;
-    self->data = nullptr;
-    self->capacity = 0;
-
-    i = 0;
-    last_i = 0;
-
-    while (fmt[i] != 0) {
-        if (fmt[i] != '%') {
-            i += 1;
-            continue;
-        }
-        if (i != last_i) {
-            str_to_add.len = i - last_i;
-            str_to_add.data = &fmt[last_i];
-            self->push_str(&str_to_add);
-            last_i = i;
-        }
-        i += 1;
-        if (fmt[i] == '%') {
-            self->push('%');
-        } else if (fmt[i] == 'i') {
-            fmt_num(self, vaarg<i64>, true);
-        } else if (fmt[i] == 'u') {
-            fmt_num(self, vaarg<i64>, false);
-        } else if (fmt[i] == 'x') {
-            fmt_hex(self, vaarg<i64>, false);
-        } else if (fmt[i] == 'X') {
-            fmt_hex(self, vaarg<i64>, true);
-        } else if (fmt[i] == 's') {
-            self->push_cstr(vaarg<CStr>);
-        } else if (fmt[i] == 'S') {
-            self->push_str(vaarg<Str*>);
-        } else if (fmt[i] == 'c') {
-            self->push(vaarg<char>);
-        }
-
-        i += 1;
-        last_i = i;
-    }
-    if (i != last_i) {
-        str_to_add.len = i - last_i;
-        str_to_add.data = &fmt[last_i];
-        self->push_str(&str_to_add);
-    }
+fn String::format(self: String*, fmt: CStr, ...) {
+  self->format_va(fmt, vaargs);
 }
 
-fn String::push_format(self: String*, fmt: CStr, ...) {
+fn String::format_va(self: String*, fmt: CStr, ...*) {
+  self->init();
+  self->push_format_va(fmt, vaargs);
+}
+
+fn String::push_format(self: String *, fmt: CStr, ...) {
+  self->push_format_va(fmt, vaargs);
+}
+
+// TODO: better formatting
+fn String::push_format_va(self: String*, fmt: CStr, ...*) {
     let i: i64;
     let last_i: i64;
     let str_to_add: Str;
