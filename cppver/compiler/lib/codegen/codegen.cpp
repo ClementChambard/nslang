@@ -1,3 +1,4 @@
+#include "ast/nodes/type.hpp"
 #include "context.hpp"
 #include "codegen.hpp"
 
@@ -33,6 +34,11 @@ llvm::Type *convert_type(CGContext &ctx, Type* type) {
       return llvm::IntegerType::get(ctx.llvmctx, 1);
     case BuiltinType::NULLPTR:
       return llvm::PointerType::getUnqual(ctx.llvmctx);
+    case BuiltinType::VALIST: {
+      auto i32_ty = ctx.builder.getInt32Ty();
+      auto ptr_ty = ctx.builder.getPtrTy();
+      return llvm::StructType::get(i32_ty, i32_ty, ptr_ty, ptr_ty);
+    }
     }
   } else if (type->isa<PointerType>()) {
     return llvm::PointerType::getUnqual(ctx.llvmctx);
@@ -54,11 +60,14 @@ llvm::Type *convert_type(CGContext &ctx, Type* type) {
     for (auto &d : ft->param_types) {
       args.push_back(convert_type(ctx, d));
     }
+    if (ft->function.variadic == Type::FunctionTypeBits::VALIST_IN_ARGS) {
+      args.push_back(convert_type(ctx, ctx.astctx.get_pointer_type(ctx.astctx.valist_ty)));
+    }
     auto res_ty = llvm::Type::getVoidTy(ctx.llvmctx);
     if (!ft->result_type->is_void_type()) {
       res_ty = convert_type(ctx, ft->result_type);
     }
-    return llvm::FunctionType::get(res_ty, args, ft->function.is_variadic);
+    return llvm::FunctionType::get(res_ty, args, ft->function.variadic == Type::FunctionTypeBits::VARIADIC);
   }
   assert(false && "unknown type kind ...");
   return nullptr;

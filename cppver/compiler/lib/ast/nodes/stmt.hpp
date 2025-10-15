@@ -41,7 +41,8 @@ struct Stmt {
     RECOVERY_EXPR,
     IMPLICIT_CAST_EXPR,
     EXPLICIT_CAST_EXPR,
-    VAARG_EXPR
+    VAARG_EXPR,
+    VAARGS_EXPR,
   };
   union {
     u32 kind : 6;

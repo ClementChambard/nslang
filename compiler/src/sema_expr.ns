@@ -1092,21 +1092,19 @@ fn sema::build_decl_ref_expr(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr
   return sema::build_decl_ref_expr_nns(d, ty, vk, name, ii, nameloc, nullptr);
 }
 
-fn sema::act_on_id_expression(s: Scope*, ss: void*, i: UnqualifiedId*, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr* {
+fn sema::act_on_id_expression(s: Scope*, ss: void*, ii: IdentInfo *, iloc: Loc, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr* {
   // if (SS.isInvalid()) return ExprError();
-  // assert i.value is not None
+  // assert ii is not None
   let name_string: String;
-  name_string.from_cstr(i->value->val);
-  let ii: IdentInfo*;
-  ii = i->value;
+  name_string.from_cstr(ii->val);
   let nameloc: Loc;
-  nameloc = i->start_location;
+  nameloc = iloc;
 
   let ssname: CStr;
   // XXX: ssname = ss->name;
 
   if (ss != nullptr)
-      name_string.format("%s::%s", ssname, i->value->val);
+      name_string.format("%s::%s", ssname, ii->val);
   let lookup_decl: NamedDecl*;
   lookup_decl = s->lookup_named_decl(name_string.data);
 

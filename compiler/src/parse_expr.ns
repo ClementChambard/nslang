@@ -258,12 +258,9 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
       iloc = self->consume_token();
       ss = sema::act_on_scoped_identifier(self->cur_scope, scope_ii, scope_loc);
     }
-    let name: UnqualifiedId*;
     let replacement: Token*;
-    name = UnqualifiedId::new();
     replacement = nullptr; // new Token
-    name->set_identifier(ii, iloc);
-    res = sema::act_on_id_expression(self->cur_scope, ss, name, self->tok->ty == TOK_LPAREN, replacement); // if self->tok->ty == TOK_RPAREN else None
+    res = sema::act_on_id_expression(self->cur_scope, ss, ii, iloc, self->tok->ty == TOK_LPAREN, replacement); // if self->tok->ty == TOK_RPAREN else None
     if (res == nullptr) {
       self->unconsume_token(replacement);
       return self->parse_unit_expr();

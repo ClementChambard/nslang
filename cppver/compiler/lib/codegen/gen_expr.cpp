@@ -609,6 +609,8 @@ llvm::Value *gen_scalar_expr(CGContext &ctx, Expr const *e, bool ignore) {
   }
   case Expr::VAARG_EXPR:
     return gen_vaarg_expr(ctx, *e->dyn_cast<VAArgExpr>());
+  case Expr::VAARGS_EXPR:
+    return gen_or_get_valist(ctx);
   }
 }
 

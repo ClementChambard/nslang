@@ -27,6 +27,8 @@ u32 ASTContext::get_type_size(Type *t) {
     return 8;
   if (t->is_specific_builtin_type(BuiltinType::NULLPTR))
     return 8;
+  if (t->is_specific_builtin_type(BuiltinType::VALIST))
+    assert(false && "getting sizeof valist");
   if (t->is_pointer_type())
     return 8;
   if (auto *at = t->dyn_cast<ArrayType>()) {
@@ -88,6 +90,7 @@ ASTContext::ASTContext() {
   prepare_builtin_type(this, bool_ty, BuiltinType::BOOL);
   prepare_builtin_type(this, void_ty, BuiltinType::VOID);
   prepare_builtin_type(this, nullptr_ty, BuiltinType::NULLPTR);
+  prepare_builtin_type(this, valist_ty, BuiltinType::VALIST);
 }
 
 ASTContext::~ASTContext() {
@@ -124,10 +127,21 @@ ArrayType *ASTContext::get_array_type(Type *base_type, u64 size) {
 FunctionType *ASTContext::get_function_type(Type *result_type,
                                             std::span<Type *> args,
                                             bool is_variadic) {
+  auto variadic = Type::FunctionTypeBits::ValistKind::NONE;
+  if (is_variadic) variadic = Type::FunctionTypeBits::ValistKind::VARIADIC;
+  if (args.size() > 0) { 
+    if (auto *p = args.back()->dyn_cast<PointerType>()) {
+      if (p->pointee_type->is_specific_builtin_type(BuiltinType::VALIST)) {
+        variadic = Type::FunctionTypeBits::ValistKind::VALIST_IN_ARGS;
+        args = args.subspan(0, args.size() - 1);
+      }
+    }
+  }
+
   for (auto ty : function_types) {
     if (ty->result_type != result_type)
       continue;
-    if (ty->function.is_variadic != is_variadic)
+    if (ty->function.variadic != variadic)
       continue;
     if (ty->param_types.size() != args.size())
       continue;
@@ -142,7 +156,7 @@ FunctionType *ASTContext::get_function_type(Type *result_type,
       continue;
     return ty;
   }
-  auto ty = new FunctionType(result_type, args, is_variadic);
+  auto ty = new FunctionType(result_type, args, variadic);
   function_types.push_back(ty);
   types.push_back(ty);
   return ty;

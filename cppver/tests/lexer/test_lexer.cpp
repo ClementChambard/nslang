@@ -189,6 +189,7 @@ TEST_CASE("lex each token once") {
   CHECK(lexer.lex().kind == tok::KW_FALSE);
   CHECK(lexer.lex().kind == tok::KW_NULLPTR);
   CHECK(lexer.lex().kind == tok::KW_VAARG);
+  CHECK(lexer.lex().kind == tok::KW_VAARGS);
   CHECK(lexer.lex().kind == tok::KW_CASE);
   CHECK(lexer.lex().kind == tok::KW_DEFAULT);
   CHECK(lexer.lex().kind == tok::KW_SWITCH);

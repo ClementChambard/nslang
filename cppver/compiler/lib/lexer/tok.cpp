@@ -158,6 +158,8 @@ cstr tok::get_name(Tok kind) {
     return "nullptr";
   case KW_VAARG:
     return "vaarg";
+  case KW_VAARGS:
+    return "vaargs";
   case KW_CASE:
     return "case";
   case KW_DEFAULT:

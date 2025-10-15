@@ -86,11 +86,20 @@ ExprUPtr Sema::act_on_explicit_cast(Type *ty, ExprUPtr e, Loc sl, Loc el) {
 
 UPtr<VAArgExpr> Sema::act_on_vaarg_expr(Type *ty, Loc sl, Loc el) {
   if (!cur_fn_decl ||
-      !cur_fn_decl->type->dyn_cast<FunctionType>()->function.is_variadic) {
+      !cur_fn_decl->type->dyn_cast<FunctionType>()->function.variadic) {
     Diag(diag::ERROR, sl, "cannot use vararg expr in non vararg function");
     return nullptr;
   }
   return std::make_unique<VAArgExpr>(LocRge{sl, el}, ty);
+}
+
+UPtr<VAArgsExpr> Sema::act_on_vaargs_expr(Loc loc) {
+  if (!cur_fn_decl ||
+      !cur_fn_decl->type->dyn_cast<FunctionType>()->function.variadic) {
+    Diag(diag::ERROR, loc, "cannot use varargs expr in non vararg function");
+    return nullptr;
+  }
+  return std::make_unique<VAArgsExpr>(loc, ctx.get_pointer_type(ctx.valist_ty));
 }
 
 UPtr<SizeofExpr> Sema::act_on_sizeof_expr(Type *ty, ExprUPtr expr, Loc sl,
@@ -1439,7 +1448,7 @@ ExprUPtr Sema::build_call_expr(Scope *scope, ExprUPtr fn, Loc lp,
 
   FunctionDecl const *fdecl = ndecl->dyn_cast<FunctionDecl>();
   assert(fdecl);
-  bool is_variadic = func_ty->function.is_variadic;
+  bool is_variadic = func_ty->function.variadic == Type::FunctionTypeBits::VARIADIC;
 
   if (the_call->args.size() + method < fdecl->params.size()) {
     if (fdecl->params.size() == 1 && fdecl->params[0]->name)
@@ -1492,9 +1501,9 @@ ExprUPtr Sema::build_call_expr(Scope *scope, ExprUPtr fn, Loc lp,
   u32 argix = 0;
   for (u32 i = method ? 1 : 0; i < fdecl->params.size(); i++) {
     auto cs = try_implicit_conversion(the_call->args[argix].get(),
-                                      func_ty->param_types[i]);
+                                      fdecl->params[i]->type);
     the_call->args[argix] = perform_implicit_conversion(
-        std::move(the_call->args[argix]), func_ty->param_types[i], &cs);
+        std::move(the_call->args[argix]), fdecl->params[i]->type, &cs);
     // TODO: diagnose errors ?
     if (!the_call->args[argix])
       return nullptr;

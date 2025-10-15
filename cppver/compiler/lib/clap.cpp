@@ -41,6 +41,8 @@ Clap Clap::parse(int argc, char **argv) {
       out.included_dirs.push_back(*argv + 2);
     } else if (std::memcmp(*argv, "-L", 2) == 0) {
       out.linked_libs.push_back(*argv + 2);
+    } else if (std::memcmp(*argv, "-l", 2) == 0) {
+      out.linked_libs.push_back(*argv);
     } else {
       out.supplied_filenames.push_back(*argv);
     }
@@ -85,7 +87,7 @@ CheckedClap Clap::check() const {
   }
 
   out.opts.include_path.insert(out.opts.include_path.end(), included_dirs.begin(), included_dirs.end());
-  out.opts.link_libraries.insert(out.opts.link_libraries.end(), linked_libs.begin(), included_dirs.end());
+  out.opts.link_libraries.insert(out.opts.link_libraries.end(), linked_libs.begin(), linked_libs.end());
 
   if (supplied_filenames.size() == 0) fatal_error("no input file");
 

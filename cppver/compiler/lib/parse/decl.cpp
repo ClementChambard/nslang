@@ -245,7 +245,11 @@ UPtr<FunctionDecl> Parser::parse_fn_decl() {
     while (true) {
       if (tok.kind == tok::ELLIPSIS) {
         is_vararg = true;
-        consume_token();
+        Loc sl = consume_token();
+        if (tok.kind == tok::STAR) {
+          Loc el = consume_token();
+          params.push_back(sema.act_on_valist_param_decl(sl, el));
+        }
       } else {
         auto param = parse_param_decl();
         if (param)

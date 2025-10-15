@@ -70,6 +70,7 @@ static Cl::Kinds classify_internal(const Expr *e) {
   case Expr::NULLPTR_LITERAL:
   case Expr::INTEGER_LITERAL:
   case Expr::CHAR_LITERAL:
+  case Expr::VAARGS_EXPR:
     return Cl::CL_PRValue;
   case Expr::ARRAY_SUBSCRIPT_EXPR: {
     Expr *base = static_cast<const ArraySubscriptExpr*>(e)->lhs->ignore_imp_casts();

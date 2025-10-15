@@ -46,6 +46,7 @@ struct Sema {
                                 i64 val);
   UPtr<ParamDecl> act_on_param_decl(Scope *scope, Loc id_loc, Loc end_loc,
                                     IdentInfo *name, Type *type);
+  UPtr<ParamDecl> act_on_valist_param_decl(Loc sl, Loc el);
   UPtr<VarDecl> act_on_var_decl(Scope *scope, Loc kw_loc, Loc id_loc,
                                 Loc end_loc, IdentInfo *name, Type *type, bool global);
   void act_on_field_decl(StructDecl *scope, Loc id_loc, Loc end_loc,
@@ -198,6 +199,7 @@ struct Sema {
   ExprUPtr act_on_explicit_cast(Type *ty, ExprUPtr e, Loc sl, Loc el);
   UPtr<NullptrLiteral> act_on_nullptr_literal(Loc loc);
   UPtr<VAArgExpr> act_on_vaarg_expr(Type *ty, Loc sl, Loc el);
+  UPtr<VAArgsExpr> act_on_vaargs_expr(Loc loc);
   UPtr<SizeofExpr> act_on_sizeof_expr(Type *ty, ExprUPtr expr, Loc sl, Loc el);
   StructDecl *act_on_scoped_identifier(Scope *scope, IdentInfo *ii, Loc loc);
   struct ConversionSequence try_implicit_conversion(Expr *f, Type *to_type,

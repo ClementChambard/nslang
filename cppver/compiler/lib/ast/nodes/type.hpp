@@ -37,9 +37,14 @@ struct Type {
   };
 
   struct FunctionTypeBits {
+    enum ValistKind {
+      NONE,
+      VARIADIC,
+      VALIST_IN_ARGS,
+    };
     u32 _ : 8;
-    u32 num_params : 16;
-    u32 is_variadic : 1;
+    u32 num_params : 8;
+    ValistKind variadic : 2;
   };
 
   union {
@@ -78,6 +83,7 @@ struct Type {
   bool is_integral_type() const;
   bool is_unscoped_enumeration_type() const;
   bool is_void_pointer_type() const;
+  bool is_valist_pointer_type() const;
   bool is_arithmetic_type() const;
   bool is_signed_integer_type() const;
   bool is_signed_integer_or_enumeration_type() const;
@@ -121,6 +127,7 @@ struct BuiltinType : public Type {
     BOOL,
     NULLPTR,
     VOID,
+    VALIST,
   };
 
   BuiltinType(BuiltinType::Kind k) : Type(BUILTIN_TYPE) { builtin.kind = k; }
@@ -206,11 +213,11 @@ struct FunctionType : public Type {
   std::vector<Type *> param_types;
 
   FunctionType(Type *result_type, std::span<Type *> param_types,
-               bool is_variadic)
+                            FunctionTypeBits::ValistKind variadic)
       : Type(FUNCTION_TYPE), result_type(result_type),
         param_types(param_types.begin(), param_types.end()) {
-    function.is_variadic = is_variadic;
     function.num_params = param_types.size();
+    function.variadic = variadic;
   }
 
   static bool is_class(Kind k) { return k == FUNCTION_TYPE; }

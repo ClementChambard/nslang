@@ -55,7 +55,7 @@ void run_backend(Options const &opts, CGContext &ctx, std::string const &output_
     return print_and_remove_file(f_tmp);
   }
 
-  char const *ar2[] = {"llc", f_tmp.c_str(), "-o", f_s.c_str()};
+  char const *ar2[] = {"llc", f_tmp.c_str(), "--relocation-model=pic", "-o", f_s.c_str()};
   subprocess_run(ar2);
   
   std::filesystem::remove(f_tmp);
@@ -88,6 +88,10 @@ void link_files(Options const &opts, std::span<std::string> files_to_link, std::
 
   std::vector<char const *> cstr_args;
   for (auto &s : link_libs_args) cstr_args.push_back(s.c_str());
+
+  // TODO: why is that ? can this be determined at runtime ?
+  cstr_args.push_back("--dynamic-linker=/lib64/ld-linux-x86-64.so.2");
+  cstr_args.push_back("-pie");
 
   subprocess_run(cstr_args);
 }

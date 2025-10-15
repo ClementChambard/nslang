@@ -75,7 +75,7 @@ lib fn sema::act_on_string_literal(string_toks: Token**, string_toks_count: i64)
 lib fn sema::build_decl_ref_expr_nns(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr, ii: IdentInfo*, nameloc: Loc, nns: void*) -> DeclRefExpr*;
 lib fn sema::build_decl_ref_expr(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr, ii: IdentInfo*, nameloc: Loc, ss: void*) -> DeclRefExpr*;
 lib fn sema::build_declaration_name_expr(ss: void*, name: CStr, ii: IdentInfo*, nameloc: Loc, d: NamedDecl*, accept_invalid_decl: bool) -> Expr*;
-lib fn sema::act_on_id_expression(s: Scope*, ss: void*, i: UnqualifiedId*, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr*;
+lib fn sema::act_on_id_expression(s: Scope*, ss: void*, ii: IdentInfo *, iloc: Loc, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr*;
 lib fn sema::act_on_paren_expr(lp_loc: Loc, rp_loc: Loc, e: Expr*) -> ParenExpr*;
 lib fn sema::create_recovery_expr(begin: Loc, end: Loc, sub_exprs: Expr**, expr_count: i64, ty: Type*) -> RecoveryExpr*;
 lib fn sema::check_completed_expr(e: Expr*, check_loc: Loc, is_constexpr: bool);

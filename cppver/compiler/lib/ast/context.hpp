@@ -19,6 +19,7 @@ struct ASTContext {
   Type *bool_ty;
   Type *void_ty;
   Type *nullptr_ty;
+  Type *valist_ty;
   std::vector<PointerType *> pointer_types; // TODO: better datastructure ?
   std::vector<ArrayType *> array_types;
   std::vector<FunctionType *> function_types;

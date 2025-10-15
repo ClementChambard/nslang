@@ -92,6 +92,7 @@ enum Tok : u8 {
   KW_FALSE,
   KW_NULLPTR,
   KW_VAARG,
+  KW_VAARGS,
   KW_CASE,
   KW_DEFAULT,
   KW_SWITCH,

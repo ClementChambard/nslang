@@ -33,6 +33,7 @@ void IdentInfo::create_ident_info_list() {
   ident_map["nullptr"] =
       std::make_unique<IdentInfo>("nullptr", tok::KW_NULLPTR);
   ident_map["vaarg"] = std::make_unique<IdentInfo>("vaarg", tok::KW_VAARG);
+  ident_map["vaargs"] = std::make_unique<IdentInfo>("vaargs", tok::KW_VAARGS);
   ident_map["case"] = std::make_unique<IdentInfo>("case", tok::KW_CASE);
   ident_map["default"] =
       std::make_unique<IdentInfo>("default", tok::KW_DEFAULT);

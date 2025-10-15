@@ -1,5 +1,6 @@
 #include "type.hpp"
 #include "decl.hpp"
+#include <algorithm>
 
 EnumType::EnumType(EnumDecl *decl) : DeclaredType(ENUM_TYPE, decl) {}
 EnumDecl *EnumType::get_decl() { return static_cast<EnumDecl *>(decl); }
@@ -17,10 +18,11 @@ bool Type::is_signed_integer_type() const {
   }
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
-    return !d->is_scoped && d->is_complete && (!d->int_ty ||
-           d->int_ty->is_signed_integer_type());
+    return !d->is_scoped && d->is_complete &&
+           (!d->int_ty || d->int_ty->is_signed_integer_type());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_signed_integer_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_signed_integer_type();
   return false;
 }
 
@@ -30,9 +32,11 @@ bool Type::is_signed_integer_or_enumeration_type() const {
   }
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
-    return d->is_complete && (!d->int_ty || d->int_ty->is_signed_integer_type());
+    return d->is_complete &&
+           (!d->int_ty || d->int_ty->is_signed_integer_type());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_signed_integer_or_enumeration_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_signed_integer_or_enumeration_type();
   return false;
 }
 
@@ -42,10 +46,11 @@ bool Type::is_unsigned_integer_type() const {
   }
   if (auto *et = dyn_cast<EnumType>()) {
     auto *d = et->get_decl();
-    return !d->is_scoped && d->is_complete &&
-           d->int_ty && d->int_ty->is_unsigned_integer_type();
+    return !d->is_scoped && d->is_complete && d->int_ty &&
+           d->int_ty->is_unsigned_integer_type();
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_unsigned_integer_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_unsigned_integer_type();
   return false;
 }
 
@@ -57,14 +62,16 @@ bool Type::is_unsigned_integer_or_enumeration_type() const {
     auto *d = et->get_decl();
     return d->is_complete && d->int_ty && d->int_ty->is_unsigned_integer_type();
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_unsigned_integer_or_enumeration_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_unsigned_integer_or_enumeration_type();
   return false;
 }
 
 Type *Type::get_pointee_type() const {
   if (auto *pt = dyn_cast<PointerType>())
     return pt->pointee_type;
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->get_pointee_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->get_pointee_type();
   return nullptr;
 }
 
@@ -76,19 +83,24 @@ AliasDecl *Type::get_as_alias_decl() const {
 }
 
 EnumDecl *Type::get_as_enum_decl() const {
-  if (auto *et = dyn_cast<EnumType>()) return et->decl->dyn_cast<EnumDecl>();
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->get_as_enum_decl();
+  if (auto *et = dyn_cast<EnumType>())
+    return et->decl->dyn_cast<EnumDecl>();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->get_as_enum_decl();
   return nullptr;
 }
 
 StructDecl *Type::get_as_struct_decl() const {
-  if (auto *et = dyn_cast<StructType>()) return et->decl->dyn_cast<StructDecl>();
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->get_as_struct_decl();
+  if (auto *et = dyn_cast<StructType>())
+    return et->decl->dyn_cast<StructDecl>();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->get_as_struct_decl();
   return nullptr;
 }
 
 const Type *Type::get_base_element_type() const {
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->get_base_element_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->get_base_element_type();
   const Type *type = this;
   while (auto *at = type->dyn_cast<ArrayType>()) {
     type = at->element_type;
@@ -100,7 +112,8 @@ bool Type::is_unscoped_enumeration_type() const {
   if (auto *et = dyn_cast<EnumType>()) {
     return !is_enum_decl_scoped(et->get_decl());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_unscoped_enumeration_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_unscoped_enumeration_type();
   return false;
 }
 
@@ -113,7 +126,8 @@ bool Type::is_arithmetic_type() const {
     return !is_enum_decl_scoped(et->get_decl()) &&
            is_enum_decl_complete(et->get_decl());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_arithmetic_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_arithmetic_type();
   return false;
 }
 
@@ -134,7 +148,8 @@ bool Type::is_integral_type() const {
   if (auto *bt = dyn_cast<BuiltinType>()) {
     return bt->is_integer();
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_integral_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_integral_type();
   return false;
 }
 
@@ -146,7 +161,8 @@ bool Type::is_scoped_enumeral_type() const {
   if (auto *et = dyn_cast<EnumType>()) {
     return is_enum_decl_scoped(et->get_decl());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_scoped_enumeral_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_scoped_enumeral_type();
   return false;
 }
 
@@ -154,7 +170,17 @@ bool Type::is_void_pointer_type() const {
   if (auto *pt = dyn_cast<PointerType>()) {
     return pt->get_pointee_type()->is_void_type();
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_void_pointer_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_void_pointer_type();
+  return false;
+}
+
+bool Type::is_valist_pointer_type() const {
+  if (auto *pt = dyn_cast<PointerType>()) {
+    return pt->get_pointee_type()->is_specific_builtin_type(BuiltinType::VALIST);
+  }
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_valist_pointer_type();
   return false;
 }
 
@@ -191,7 +217,8 @@ bool Type::is_specific_builtin_type(unsigned k) const {
   if (auto *bt = dyn_cast<BuiltinType>()) {
     return bt->get_kind() == BuiltinType::Kind(k);
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_specific_builtin_type(k);
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_specific_builtin_type(k);
   return false;
 }
 
@@ -206,7 +233,8 @@ bool Type::is_integer_type() const {
     return is_enum_decl_complete(et->get_decl()) &&
            !is_enum_decl_scoped(et->get_decl());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_integer_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_integer_type();
   return false;
 }
 
@@ -217,7 +245,8 @@ bool Type::is_integral_or_enumeration_type() const {
   if (auto *et = dyn_cast<EnumType>()) {
     return is_enum_decl_complete(et->get_decl());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_integral_or_enumeration_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_integral_or_enumeration_type();
   return false;
 }
 
@@ -228,21 +257,24 @@ bool Type::is_scalar_type() const {
   if (auto *et = dyn_cast<EnumType>()) {
     return is_enum_decl_complete(et->get_decl());
   }
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_scalar_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_scalar_type();
   return isa<PointerType>();
 }
 
 bool Type::is_object_pointer_type() const {
   if (auto *t = dyn_cast<PointerType>())
     return !t->get_pointee_type()->is_function_type();
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_object_pointer_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_object_pointer_type();
   return false;
 }
 
 bool Type::is_function_pointer_type() const {
   if (auto *t = dyn_cast<PointerType>())
     return t->get_pointee_type()->is_function_type();
-  if (auto *ad = get_as_alias_decl()) return ad->underlying_type->is_function_pointer_type();
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_function_pointer_type();
   return false;
 }
 
@@ -267,9 +299,11 @@ cstr BuiltinType::get_name() const {
   case BOOL:
     return "bool";
   case NULLPTR:
-    return "nullptr";
+    return "nullptr_t";
   case VOID:
     return "void";
+  case VALIST:
+    return "valist_t";
   }
   return "";
 }
@@ -303,9 +337,12 @@ void Type::dump() const {
       }
       ft->param_types[i]->dump();
     }
-    if (ft->function.is_variadic) {
-      if (i) printf(", ");
+    if (ft->function.variadic) {
+      if (i)
+        printf(", ");
       printf("...");
+      if (ft->function.variadic == FunctionTypeBits::VALIST_IN_ARGS)
+        printf("*");
     }
     printf(")");
   }

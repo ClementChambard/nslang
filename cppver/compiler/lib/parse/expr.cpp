@@ -139,6 +139,11 @@ ExprUPtr Parser::parse_unit_expr() {
     res = sema.act_on_vaarg_expr(type, start_loc, end_loc);
     break;
   }
+  case tok::KW_VAARGS: {
+    auto loc = consume_token();
+    res = sema.act_on_vaargs_expr(loc);
+    break;
+  }
   case tok::PLUSPLUS:
   case tok::MINUSMINUS:
   case tok::PLUS:

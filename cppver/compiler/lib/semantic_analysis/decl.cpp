@@ -45,7 +45,7 @@ bool check_fn_decl_compat(NamedDecl *old_decl, IdentInfo *name,
       return true;
     }
   }
-  if (is_vararg != old_fnty->function.is_variadic) {
+  if (bool(is_vararg) != bool(old_fnty->function.variadic)) {
     Diag(diag::ERROR, loc,
          "function '%s' already declared with different parameters",
          name->name.c_str());
@@ -203,6 +203,12 @@ UPtr<ParamDecl> Sema::act_on_param_decl(Scope *scope, Loc id_loc, Loc end_loc,
   auto decl =
       std::make_unique<ParamDecl>(LocRge{id_loc, end_loc}, id_loc, name, type);
   scope->add_decl(decl.get());
+  return decl;
+}
+
+UPtr<ParamDecl> Sema::act_on_valist_param_decl(Loc sl, Loc el) {
+  auto decl =
+    std::make_unique<ParamDecl>(LocRge{sl, el}, sl, IdentInfo::find("...*"), ctx.get_pointer_type(ctx.valist_ty));
   return decl;
 }
 

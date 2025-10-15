@@ -1,20 +1,21 @@
 #include io.nsh
 
-struct TestStruct {
-  int: i64;
-  ptr: void*;
-  array: i8[20];
-  struct_ptr: TestStruct*;
-};
-
-let test_var: TestStruct;
-
-lib fn main() {
-  let a: i64;
-  a = test_var.int;
-
-  print("Hello, %s!", "world");
+fn vfprintf(f: i64, s: i8*, ...*) {
+  print("%i %s %i", f, s, vaarg<i64>);
 }
 
+fn vprintf(s: i8*, ...*) {
+  return vfprintf(0, s, vaargs);
+}
 
+fn fprintf(f: i64, s: i8*, ...) {
+  return vfprintf(f, s, vaargs);
+}
 
+fn printf(s: i8*, ...) {
+  return vprintf(s, vaargs);
+}
+
+fn main() {
+  printf("test", 1, 2, 3);
+}

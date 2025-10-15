@@ -48,6 +48,12 @@ llvm::AllocaInst *gen_temp_alloca(CGContext &ctx, llvm::Type *ty, u32 align, std
 
 
 void gen_param_decl(CGContext &ctx, ParamDecl const &d, llvm::Value *arg) {
+  if (d.type->is_valist_pointer_type()) {
+    arg->setName("valist");
+    ctx.fn.valist = arg;
+    return;
+  }
+
   if (!isa<llvm::GlobalValue>(arg)) arg->setName(d.get_name());
   Type *ty = d.type;
   llvm::Value *decl_ptr = gen_temp_alloca(ctx, convert_type_for_mem(ctx, ty), ctx.astctx.get_type_align(ty), d.get_name() + ".addr");
@@ -56,15 +62,12 @@ void gen_param_decl(CGContext &ctx, ParamDecl const &d, llvm::Value *arg) {
   ctx.fn.local_decl_map[&d] = decl_ptr;
 }
 
-llvm::Type *get_valist_type(CGContext &ctx) {
-  auto i32_ty = ctx.builder.getInt32Ty();
-  auto ptr_ty = ctx.builder.getPtrTy();
-  return llvm::StructType::get(i32_ty, i32_ty, ptr_ty, ptr_ty);
-}
-
 llvm::Value *gen_or_get_valist(CGContext &ctx) {
   if (ctx.fn.valist) return ctx.fn.valist;
-  ctx.fn.valist = gen_temp_alloca(ctx, get_valist_type(ctx), 16, "valist");
+
+  auto valist_ty = convert_type(ctx, ctx.astctx.valist_ty);
+
+  ctx.fn.valist = gen_temp_alloca(ctx, valist_ty, 16, "valist");
   // after all allocas
   auto it = ctx.fn.alloca_insert_pt->getIterator();
   it++;

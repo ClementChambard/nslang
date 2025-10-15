@@ -110,9 +110,11 @@ void print_type_inner(Type *t) {
       }
       print_type_inner(ft->param_types[i]);
     }
-    if (ft->function.is_variadic) {
+    if (ft->function.variadic) {
       if (i) fprintf(stderr, ", ");
       fprintf(stderr, "...");
+      if (ft->function.variadic == Type::FunctionTypeBits::VALIST_IN_ARGS)
+        fprintf(stderr, "*");
     }
     fprintf(stderr, ")");
   }
@@ -334,6 +336,9 @@ void print_expr(Expr *expr) {
     break;
   case Stmt::VAARG_EXPR:
     fprintf(stderr, "VAArgExpr");
+    break;
+  case Stmt::VAARGS_EXPR:
+    fprintf(stderr, "VAArgsExpr");
     break;
   }
   fprintf(stderr, "%s", COL::RESET);

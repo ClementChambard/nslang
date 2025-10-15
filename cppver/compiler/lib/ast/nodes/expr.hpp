@@ -497,4 +497,13 @@ struct VAArgExpr : public Expr {
   static bool is_class(Kind k) { return k == VAARG_EXPR; }
 };
 
+struct VAArgsExpr : public Expr {
+  Loc l;
+
+  VAArgsExpr(Loc l, Type *ty) : Expr(VAARGS_EXPR, ty, ValueKind::PRVALUE), l(l) {}
+  Loc get_start_loc() const override { return l; }
+  Loc get_end_loc() const override { return l; }
+  static bool is_class(Kind k) { return k == VAARGS_EXPR; }
+};
+
 #endif // AST_NODES_EXPR_HPP_INCLUDED
