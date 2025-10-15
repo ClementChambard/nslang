@@ -1,6 +1,8 @@
 #include "ast/nodes/decl.hpp"
+#include "ast/nodes/expr.hpp"
 #include "ast/nodes/stmt.hpp"
 #include "ast/nodes/type.hpp"
+#include "convert.hpp"
 #include "diags/diagnostic.hpp"
 #include "lexer/ident.hpp"
 #include "lexer/loc.hpp"
@@ -57,7 +59,22 @@ bool check_fn_decl_compat(NamedDecl *old_decl, IdentInfo *name,
 UPtr<FunctionDecl> Sema::act_on_fn_decl(Scope *scope, IdentInfo *name,
                                         std::vector<UPtr<ParamDecl>> &params,
                                         Type *return_type, Loc fn_loc,
-                                        Loc semi_loc, bool is_vararg, StructDecl *struct_scope) {
+                                        Loc semi_loc, bool is_vararg,
+                                        StructDecl *struct_scope,
+                                        bool has_init) {
+  // check init methods
+  if (has_init) {
+    assert(struct_scope);
+    if (params.size() == 0 || !params[0]->type->is_pointer_type() ||
+        params[0]
+                ->type->dyn_cast<PointerType>()
+                ->get_pointee_type()
+                ->get_as_struct_decl() != struct_scope) {
+      Diag(diag::ERROR, fn_loc, "method marked 'init' should be a non static method");
+      return nullptr;
+    }
+  }
+
   NamedDecl *old_decl = nullptr;
   if (struct_scope) {
     // TODO: better use struct_scope
@@ -77,11 +94,14 @@ UPtr<FunctionDecl> Sema::act_on_fn_decl(Scope *scope, IdentInfo *name,
       return nullptr;
     }
     if (struct_scope) {
-      struct_scope->methods.erase(std::find(struct_scope->methods.begin(), struct_scope->methods.end(), old_decl));
+      struct_scope->methods.erase(std::find(struct_scope->methods.begin(),
+                                            struct_scope->methods.end(),
+                                            old_decl));
     } else {
       scope->remove_decl(old_decl);
     }
     is_lib = old_decl->is_lib;
+    has_init = has_init || old_decl->has_init_ident;
   }
   std::vector<Type *> arg_types;
   arg_types.reserve(params.size());
@@ -93,6 +113,7 @@ UPtr<FunctionDecl> Sema::act_on_fn_decl(Scope *scope, IdentInfo *name,
       std::make_unique<FunctionDecl>(LocRge{fn_loc, semi_loc}, name, ty);
   decl->params = std::move(params);
   decl->is_lib = is_lib;
+  decl->has_init_ident = has_init;
   if (struct_scope) {
     struct_scope->methods.push_back(decl.get());
     decl->struct_scope = struct_scope;
@@ -102,9 +123,24 @@ UPtr<FunctionDecl> Sema::act_on_fn_decl(Scope *scope, IdentInfo *name,
   return decl;
 }
 
-UPtr<FunctionDecl> Sema::act_on_start_fn_definition(
-    Scope *scope, IdentInfo *name, std::vector<UPtr<ParamDecl>> &params,
-    Type *return_type, Loc fn_loc, bool is_vararg, StructDecl *struct_scope) {
+UPtr<FunctionDecl>
+Sema::act_on_start_fn_definition(Scope *scope, IdentInfo *name,
+                                 std::vector<UPtr<ParamDecl>> &params,
+                                 Type *return_type, Loc fn_loc, bool is_vararg,
+                                 StructDecl *struct_scope, bool has_init) {
+  // check init methods
+  if (has_init) {
+    assert(struct_scope);
+    if (params.size() == 0 || !params[0]->type->is_pointer_type() ||
+        params[0]
+                ->type->dyn_cast<PointerType>()
+                ->get_pointee_type()
+                ->get_as_struct_decl() != struct_scope) {
+      Diag(diag::ERROR, fn_loc, "method marked 'init' should be a non static method");
+      return nullptr;
+    }
+  }
+
   NamedDecl *old_decl = nullptr;
   if (struct_scope) {
     // TODO: better use struct_scope
@@ -124,11 +160,14 @@ UPtr<FunctionDecl> Sema::act_on_start_fn_definition(
       return nullptr;
     }
     if (struct_scope) {
-      struct_scope->methods.erase(std::find(struct_scope->methods.begin(), struct_scope->methods.end(), old_decl));
+      struct_scope->methods.erase(std::find(struct_scope->methods.begin(),
+                                            struct_scope->methods.end(),
+                                            old_decl));
     } else {
       scope->remove_decl(old_decl);
     }
     is_lib = old_decl->is_lib;
+    has_init = has_init || old_decl->has_init_ident;
   }
   std::vector<Type *> arg_types;
   arg_types.reserve(params.size());
@@ -140,6 +179,7 @@ UPtr<FunctionDecl> Sema::act_on_start_fn_definition(
       std::make_unique<FunctionDecl>(LocRge{fn_loc, LOC_INVALID}, name, ty);
   decl->params = std::move(params);
   decl->is_lib = is_lib;
+  decl->has_init_ident = has_init;
   if (struct_scope) {
     struct_scope->methods.push_back(decl.get());
     decl->struct_scope = struct_scope;
@@ -208,17 +248,56 @@ UPtr<ParamDecl> Sema::act_on_param_decl(Scope *scope, Loc id_loc, Loc end_loc,
 
 UPtr<ParamDecl> Sema::act_on_valist_param_decl(Loc sl, Loc el) {
   auto decl =
-    std::make_unique<ParamDecl>(LocRge{sl, el}, sl, IdentInfo::find("...*"), ctx.get_pointer_type(ctx.valist_ty));
+      std::make_unique<ParamDecl>(LocRge{sl, el}, sl, IdentInfo::find("...*"),
+                                  ctx.get_pointer_type(ctx.valist_ty));
   return decl;
 }
 
 UPtr<VarDecl> Sema::act_on_var_decl(Scope *scope, Loc kw_loc, Loc id_loc,
-                                    Loc end_loc, IdentInfo *name, Type *type, bool global) {
+                                    Loc end_loc, IdentInfo *name, Type *type,
+                                    bool global, ExprUPtr initializer) {
   // TODO: check name availability
   auto decl =
       std::make_unique<VarDecl>(LocRge{kw_loc, end_loc}, id_loc, name, type);
   decl->is_global = global;
+  if (initializer) {
+    auto cs = try_implicit_conversion(initializer.get(), type);
+    initializer =
+        perform_implicit_conversion(std::move(initializer), type, &cs);
+  }
+  decl->initializer = std::move(initializer);
   scope->add_decl(decl.get());
+  return decl;
+}
+
+UPtr<VarDecl> Sema::act_on_var_decl_init_method(Scope *scope, Loc kw_loc,
+                                                Loc id_loc, Loc end_loc,
+                                                Loc mname_loc, IdentInfo *name,
+                                                Type *type,
+                                                FunctionDecl const *method,
+                                                std::vector<ExprUPtr> &&args) {
+  auto decl = act_on_var_decl(scope, kw_loc, id_loc, end_loc, name, type, false,
+                              nullptr);
+
+  ExprUPtr this_ptr = std::make_unique<DeclRefExpr>(decl.get(), name, id_loc,
+                                                    type, ValueKind::LVALUE);
+
+  this_ptr =
+      Sema::act_on_unary_op(scope, id_loc, tok::AMP, std::move(this_ptr));
+
+  args.insert(args.begin(), std::move(this_ptr));
+
+  auto fn_declref = std::make_unique<DeclRefExpr>(
+      method, method->name, mname_loc, method->type, ValueKind::LVALUE);
+
+  auto initializer = act_on_call_expr(scope, std::move(fn_declref), mname_loc,
+                                      std::move(args), end_loc);
+
+  // TODO: this is a hack
+  initializer->kind = Stmt::INIT_CALL_EXPR;
+
+  decl->initializer = std::move(initializer);
+
   return decl;
 }
 
@@ -243,7 +322,6 @@ UPtr<EnumDecl> Sema::act_on_enum_decl(Scope *scope, Loc kw_loc, Loc end_loc,
   decl->int_ty = aliased_type;
   decl->is_complete = false;
 
-
   auto existing_decl = scope->lookup_named_decl_norec(name);
 
   // name not in use
@@ -267,7 +345,9 @@ UPtr<EnumDecl> Sema::act_on_enum_decl(Scope *scope, Loc kw_loc, Loc end_loc,
 
   // different underlying types
   if (old_decl->int_ty != aliased_type) {
-    Diag(diag::ERROR, kw_loc, "enum '%s' already defined with different int type", name->name.c_str());
+    Diag(diag::ERROR, kw_loc,
+         "enum '%s' already defined with different int type",
+         name->name.c_str());
     Diag(diag::NOTE, existing_decl->get_loc(), "defined here")
         << existing_decl->src_range;
     (void)ctx.get_declared_type(decl.get());
@@ -305,7 +385,8 @@ UPtr<EnumDecl> Sema::act_on_start_enum_decl(Scope *scope, Loc kw_loc,
   // name not in use
   if (!existing_decl) {
     (void)ctx.get_declared_type(decl.get());
-    if (!annonymous) scope->add_decl(decl.get());
+    if (!annonymous)
+      scope->add_decl(decl.get());
     return decl;
   }
 
@@ -327,7 +408,9 @@ UPtr<EnumDecl> Sema::act_on_start_enum_decl(Scope *scope, Loc kw_loc,
 
   // different underlying types
   if (old_decl->int_ty != aliased_type) {
-    Diag(diag::ERROR, kw_loc, "enum '%s' already defined with different int type", name->name.c_str());
+    Diag(diag::ERROR, kw_loc,
+         "enum '%s' already defined with different int type",
+         name->name.c_str());
     Diag(diag::NOTE, existing_decl->get_loc(), "defined here")
         << existing_decl->src_range;
     (void)ctx.get_declared_type(decl.get());

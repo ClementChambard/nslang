@@ -40,7 +40,8 @@ UPtr<Decl> Parser::parse_decl(bool in_func, Loc *decl_end) {
     if (in_func) {
       Diag(diag::ERROR, tok.loc, "can't declare a function in function body");
       skip_until(tok::SEMI, tok::LBRACE, true);
-      if (tok.kind == tok::SEMI) consume_token();
+      if (tok.kind == tok::SEMI)
+        consume_token();
       else {
         consume_brace();
         skip_until(tok::RBRACE);
@@ -99,10 +100,12 @@ UPtr<EnumDecl> Parser::parse_enum_decl() {
       Diag(diag::WARNING, kw_loc, "forward declaring empty enum");
       return nullptr;
     }
-    return sema.act_on_enum_decl(cur_scope, kw_loc, semi_loc, name, aliased_type);
+    return sema.act_on_enum_decl(cur_scope, kw_loc, semi_loc, name,
+                                 aliased_type);
   }
   expect_and_consume(tok::LBRACE);
-  auto decl = sema.act_on_start_enum_decl(cur_scope, kw_loc, name, aliased_type);
+  auto decl =
+      sema.act_on_start_enum_decl(cur_scope, kw_loc, name, aliased_type);
   i64 cur_val = 0;
   while (tok.kind != tok::RBRACE) {
     parse_enum_variant_decl(decl.get(), cur_val);
@@ -190,13 +193,42 @@ UPtr<VarDecl> Parser::parse_var_decl(bool in_func) {
   Type *ty;
   Loc id_loc, colon_loc, end_loc;
   Tok until[] = {tok::SEMI, tok::RBRACE};
-  if (!parse_end_var_decl_common(this, ii, ty, id_loc, colon_loc, end_loc, until)) {
+  if (!parse_end_var_decl_common(this, ii, ty, id_loc, colon_loc, end_loc,
+                                 until)) {
     try_consume_token(tok::SEMI);
     return nullptr;
   }
-  // TODO: initializer
+  ExprUPtr initializer;
+  if (in_func && tok.kind == tok::EQUAL) {
+    consume_token();
+    initializer = parse_expr();
+  } else if (in_func && tok.kind == tok::COLONCOLON && ty->is_structure_type()) {
+    // TODO: do it better...
+    consume_token();
+    if (tok.kind != tok::IDENT) {
+      Diag(diag::ERROR, tok.loc, "expected identifier after '::'");
+    } else {
+      auto m = tok.ident();
+      auto mloc = consume_token();
+      auto sd = ty->get_as_struct_decl();
+      auto method = sema.lookup_method_in_struct(sd, m);
+      if (!method || !method->has_init_ident) {
+        Diag(diag::ERROR, mloc, "no init method '%s' in struct '%s'", method->get_name().c_str(), sd->get_name().c_str());
+        return nullptr;
+      }
+      expect_and_consume(tok::LPAREN);
+      std::vector<std::unique_ptr<Expr>> args;
+      parse_expression_list(args);
+      end_loc = tok.loc;
+      expect_and_consume(tok::RPAREN);
+      expect_and_consume_semi("expected ';' at end of var decl");
+      return sema.act_on_var_decl_init_method(cur_scope, kw_loc, id_loc, end_loc, mloc, ii, ty,
+          method, std::move(args));
+    }
+  }
   expect_and_consume_semi("expected ';' at end of var decl");
-  return sema.act_on_var_decl(cur_scope, kw_loc, id_loc, end_loc, ii, ty, !in_func);
+  return sema.act_on_var_decl(cur_scope, kw_loc, id_loc, end_loc, ii, ty,
+                              !in_func, std::move(initializer));
 }
 
 // FieldDecl ::= id ':' Type ';'
@@ -205,7 +237,8 @@ void Parser::parse_field_decl(StructDecl *my_struct) {
   Type *ty;
   Loc id_loc, colon_loc, end_loc;
   Tok until[] = {tok::SEMI, tok::RBRACE};
-  if (!parse_end_var_decl_common(this, ii, ty, id_loc, colon_loc, end_loc, until)) {
+  if (!parse_end_var_decl_common(this, ii, ty, id_loc, colon_loc, end_loc,
+                                 until)) {
     try_consume_token(tok::SEMI);
     return;
   }
@@ -268,6 +301,13 @@ UPtr<FunctionDecl> Parser::parse_fn_decl() {
     }
   }
   expect_and_consume(tok::RPAREN);
+
+  bool has_init = false;
+  if (struct_scope && tok.kind == tok::IDENT && tok.ident() == IdentInfo::find("init")) {
+    consume_token();
+    has_init = true;
+  }
+
   Type *return_type;
   if (tok.kind == tok::ARROW) {
     consume_token();
@@ -279,13 +319,15 @@ UPtr<FunctionDecl> Parser::parse_fn_decl() {
   if (tok.kind == tok::SEMI) {
     exit_scope();
     auto semi_loc = consume_token();
-    auto decl = sema.act_on_fn_decl(cur_scope, fn_name, params, return_type,
-                                    start_loc, semi_loc, is_vararg, struct_scope);
+    auto decl =
+        sema.act_on_fn_decl(cur_scope, fn_name, params, return_type, start_loc,
+                            semi_loc, is_vararg, struct_scope, has_init);
     return decl;
   }
 
   auto decl = sema.act_on_start_fn_definition(
-      cur_scope->get_parent(), fn_name, params, return_type, start_loc, is_vararg, struct_scope);
+      cur_scope->get_parent(), fn_name, params, return_type, start_loc,
+      is_vararg, struct_scope, has_init);
   if (!decl) {
     consume_brace();
     skip_until(tok::RBRACE);
@@ -312,7 +354,8 @@ UPtr<AliasDecl> Parser::parse_type_alias_decl() {
   consume_token();
   expect_and_consume(tok::EQUAL);
   auto aliased_type = parse_type();
-  auto decl = sema.act_on_alias_decl(cur_scope, kw_loc, prev_tok_location, name, aliased_type);
+  auto decl = sema.act_on_alias_decl(cur_scope, kw_loc, prev_tok_location, name,
+                                     aliased_type);
   expect_and_consume_semi("expected ';' after 'type'");
   return decl;
 }
@@ -332,7 +375,8 @@ UPtr<StructDecl> Parser::parse_struct_decl() {
     return sema.act_on_struct_decl(cur_scope, start_loc, ident_loc, type_name);
   }
   expect_and_consume(tok::LBRACE);
-  auto decl = sema.act_on_start_struct_decl(cur_scope, start_loc, ident_loc, type_name);
+  auto decl =
+      sema.act_on_start_struct_decl(cur_scope, start_loc, ident_loc, type_name);
   if (tok.kind == tok::IDENT) {
     if (tok.ident()->name == "super") {
       decl->has_super = true; // < should be in sema ?
@@ -340,7 +384,7 @@ UPtr<StructDecl> Parser::parse_struct_decl() {
     }
   }
   while (tok.kind != tok::RBRACE) {
-     parse_field_decl(decl.get());
+    parse_field_decl(decl.get());
   }
   decl = sema.act_on_end_struct_decl(std::move(decl), consume_brace());
   expect_and_consume_semi("expected ';' after 'struct'");

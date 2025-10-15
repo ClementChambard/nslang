@@ -64,7 +64,7 @@ lib fn Str::strip(self: Str*);
 ///   Creates a string reference from a C-String.
 ///   @object self
 ///   @param[in] cstr the string to reference
-lib fn Str::from_cstr(self: Str*, cstr: CStr);
+lib fn Str::from_cstr(self: Str*, cstr: CStr) init;
 
 //////////////////////////////////////////////////////////////////////
 
@@ -80,19 +80,19 @@ struct String {
 /// constructor[String] init
 ///   Initializes a String object.
 ///   @object self
-lib fn String::init(self: String*);
+lib fn String::init(self: String*) init;
 
 /// constructor[String] from_str
 ///   Inititializes a String object with the contents of a string reference
 ///   @object self
 ///   @param[in] cstr the string reference to use
-lib fn String::from_str(self: String*, str: Str*);
+lib fn String::from_str(self: String*, str: Str*) init;
 
 /// constructor[String] from_cstr
 ///   Inititializes a String object with the contents of a C-String
 ///   @object self
 ///   @param[in] cstr the C-String to use
-lib fn String::from_cstr(self: String*, cstr: CStr);
+lib fn String::from_cstr(self: String*, cstr: CStr) init;
 
 /// constructor[String] from_raw_parts
 ///   Inititializes a String object with raw data
@@ -100,14 +100,14 @@ lib fn String::from_cstr(self: String*, cstr: CStr);
 ///   @param[in] data the string data
 ///   @param len the string length
 ///   @param capacity the string capacity
-lib fn String::from_raw_parts(self: String*, data: char*, len: i64, capacity: i64);
+lib fn String::from_raw_parts(self: String*, data: char*, len: i64, capacity: i64) init;
 
 /// constructor[String] repeat
 ///   Initializes a string with multiple instance of one character.
 ///   @object self
 ///   @param c the character to use
 ///   @param n the number of character
-lib fn String::repeat(self: String*, c: char, n: i64);
+lib fn String::repeat(self: String*, c: char, n: i64) init;
 
 /// destructor[String] destroy
 ///   Destroys a String object.
@@ -188,14 +188,14 @@ lib fn String::push_format(self: String*, fmt: CStr, ...);
 ///   @object self
 ///   @param fmt the format string
 ///   @param ...* the format parameters
-lib fn String::format_va(self: String*, fmt: CStr, ...*);
+lib fn String::format_va(self: String*, fmt: CStr, ...*) init;
 
 /// constructor[String] format
 ///   Creates a string from formatted data.
 ///   @object self
 ///   @param fmt the format string
 ///   @vararg the format parameters
-lib fn String::format(self: String*, fmt: CStr, ...);
+lib fn String::format(self: String*, fmt: CStr, ...) init;
 
 /// method[String] insert
 ///   Inserts a character in the string
@@ -234,6 +234,6 @@ lib fn String::clear(self: String*);
 ///   Copies a string into another
 ///   @object self
 ///   @param[in] clone_from the string to copy
-lib fn String::clone_from(self: String*, clone_from: String*);
+lib fn String::clone_from(self: String*, clone_from: String*) init;
 
 lib fn String::last(self: String*) -> char;

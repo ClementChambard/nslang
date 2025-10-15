@@ -23,6 +23,7 @@ struct Decl {
 
   u8 decl_kind : 7;
   u8 is_lib : 1;
+  u8 has_init_ident: 1; // for functions
   // used, referenced, ...
   LocRge src_range;
 
@@ -73,7 +74,7 @@ struct ValueDecl : public NamedDecl {
 
   ValueDecl(Kind k, LocRge rge, IdentInfo *name, Type *t)
       : NamedDecl(k, rge, name), type(t) {}
-
+             
   static bool is_class(Kind k) {
     return k >= VAR_DECL && k <= ENUM_VARIANT_DECL;
   }
@@ -82,6 +83,7 @@ struct ValueDecl : public NamedDecl {
 struct VarDecl : public ValueDecl {
   Loc id_loc;
   bool is_global = false;
+  std::unique_ptr<Expr> initializer = nullptr;
 
   VarDecl(LocRge rge, Loc id_loc, IdentInfo *name, Type *t)
       : ValueDecl(VAR_DECL, rge, name, t), id_loc(id_loc) {}
@@ -105,7 +107,7 @@ struct FunctionDecl : public ValueDecl {
   StructDecl *struct_scope = nullptr;
 
   FunctionDecl(LocRge rge, IdentInfo *name, Type *t)
-      : ValueDecl(FUNCTION_DECL, rge, name, t) {}
+      : ValueDecl(FUNCTION_DECL, rge, name, t) { has_init_ident = false; }
 
   LocRge get_param_range() const { return params.size() ? LocRge{params[0]->src_range.start, params.back()->src_range.end} : LocRge{0, 0}; }
 

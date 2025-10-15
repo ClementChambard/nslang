@@ -23,11 +23,13 @@ struct Sema {
   UPtr<FunctionDecl> act_on_fn_decl(Scope *scope, IdentInfo *name,
                                     std::vector<UPtr<ParamDecl>> &params,
                                     Type *return_type, Loc fn_loc, Loc semi_loc,
-                                    bool is_vararg, StructDecl *struct_scope);
+                                    bool is_vararg, StructDecl *struct_scope,
+                                    bool has_init);
   UPtr<FunctionDecl>
   act_on_start_fn_definition(Scope *scope, IdentInfo *name,
                              std::vector<UPtr<ParamDecl>> &params,
-                             Type *return_type, Loc fn_loc, bool is_vararg, StructDecl *struct_scope);
+                             Type *return_type, Loc fn_loc, bool is_vararg,
+                             StructDecl *struct_scope, bool has_init);
   UPtr<FunctionDecl> act_on_end_fn_definition(UPtr<FunctionDecl> decl,
                                               UPtr<CompoundStmt> body);
   std::pair<std::string, StructType *>
@@ -48,7 +50,15 @@ struct Sema {
                                     IdentInfo *name, Type *type);
   UPtr<ParamDecl> act_on_valist_param_decl(Loc sl, Loc el);
   UPtr<VarDecl> act_on_var_decl(Scope *scope, Loc kw_loc, Loc id_loc,
-                                Loc end_loc, IdentInfo *name, Type *type, bool global);
+                                Loc end_loc, IdentInfo *name, Type *type,
+                                bool global, ExprUPtr initializer);
+
+  UPtr<VarDecl> act_on_var_decl_init_method(Scope *scope, Loc kw_loc,
+                                            Loc id_loc, Loc end_loc,
+                                            Loc mname_loc, IdentInfo *name,
+                                            Type *type,
+                                            FunctionDecl const *method,
+                                            std::vector<ExprUPtr> &&args);
   void act_on_field_decl(StructDecl *scope, Loc id_loc, Loc end_loc,
                          IdentInfo *name, Type *type);
   UPtr<AliasDecl> act_on_alias_decl(Scope *scope, Loc kw_loc, Loc end_loc,
@@ -162,11 +172,9 @@ struct Sema {
                                                ExprUPtr idx, Loc rloc);
   ExprUPtr default_argument_promotion(ExprUPtr arg);
   ExprUPtr build_call_expr(Scope *scope, ExprUPtr fn, Loc lparen_loc,
-                           std::vector<ExprUPtr>&& arg_exprs,
-                           Loc rparen_loc);
+                           std::vector<ExprUPtr> &&arg_exprs, Loc rparen_loc);
   ExprUPtr act_on_call_expr(Scope *scope, ExprUPtr fn, Loc lparen_loc,
-                            std::vector<ExprUPtr>&& arg_exprs,
-                            Loc rparen_loc);
+                            std::vector<ExprUPtr> &&arg_exprs, Loc rparen_loc);
   ExprUPtr act_on_array_subscript_expr(Scope *scope, ExprUPtr base, Loc lbloc,
                                        ExprUPtr arg, Loc rbloc);
   ExprUPtr perform_implicit_conversion(ExprUPtr f, Type *to_type,
@@ -183,8 +191,9 @@ struct Sema {
   UPtr<BoolLiteral> act_on_bool_literal(Loc op_loc, Tok kind);
   UPtr<StringLiteral>
   act_on_string_literal(std::vector<Token> const &string_toks);
-  UPtr<DeclRefExpr> build_decl_ref_expr(ValueDecl *d, Type *ty, ValueKind vk, IdentInfo *ii,
-                                        Loc nameloc, StructDecl *struct_scope);
+  UPtr<DeclRefExpr> build_decl_ref_expr(ValueDecl *d, Type *ty, ValueKind vk,
+                                        IdentInfo *ii, Loc nameloc,
+                                        StructDecl *struct_scope);
   ExprUPtr act_on_id_expression(Scope *scope, StructDecl *struct_scope,
                                 IdentInfo *ident, Loc ident_loc);
   UPtr<ParenExpr> act_on_paren_expr(Loc lp_loc, Loc rp_loc, ExprUPtr e);

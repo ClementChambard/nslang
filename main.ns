@@ -4,8 +4,7 @@
 struct my_namespace;
 
 fn my_namespace::test() {
-    let s: String;
-    s.from_cstr("Hello");
+    let s: String::from_cstr("Hello");
     s.push_format(", %s", "World");
     s.push('!');
     print("%S\n", &s);
@@ -21,8 +20,7 @@ struct S {
 
 lib fn tst() {
   let s: S;
-  let sp: S*;
-  sp = &s;
+  let sp: S* = &s;
   sp->sub = 0;
   do {
     print("%i\n", sp->sub++);

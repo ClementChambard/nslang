@@ -569,6 +569,7 @@ llvm::Value *gen_scalar_expr(CGContext &ctx, Expr const *e, bool ignore) {
   case Expr::IMPLICIT_CAST_EXPR:
     return gen_cast_expr(ctx, *e->dyn_cast<CastExpr>());
   case Expr::METHOD_CALL_EXPR:
+  case Expr::INIT_CALL_EXPR:
   case Expr::CALL_EXPR:
     return gen_call_expr(ctx, *e->dyn_cast<CallExpr>());
   case Expr::UNARY_EXPR:
@@ -811,6 +812,7 @@ LValue gen_lvalue(CGContext &ctx, Expr const &e) {
     return gen_assign_lvalue(ctx, *e.dyn_cast<BinaryExpr>());
   case Expr::COMPOUND_ASSIGN_EXPR:
     return gen_compound_assign_lvalue(ctx, *e.dyn_cast<CompoundAssignExpr>());
+  case Expr::INIT_CALL_EXPR:
   case Expr::METHOD_CALL_EXPR:
   case Expr::CALL_EXPR:
     return static_cast<LValue>(gen_call_expr(ctx, *e.dyn_cast<CallExpr>()));

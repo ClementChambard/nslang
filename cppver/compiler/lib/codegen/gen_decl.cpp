@@ -152,6 +152,12 @@ void gen_var_decl(CGContext &ctx, const VarDecl &d) {
       gen_temp_alloca(ctx, convert_type_for_mem(ctx, d.type),
                       ctx.astctx.get_type_align(d.type), d.get_name());
   ctx.fn.local_decl_map[&d] = address;
+  if (d.initializer) {
+    auto res = gen_scalar_expr(ctx, d.initializer.get());
+    if (!d.initializer->dyn_cast<InitCallExpr>()) {
+      gen_store_of_scalar(ctx, res, address, d.type);
+    }
+  }
 }
 
 void gen_decl(CGContext &ctx, Decl const &d) {

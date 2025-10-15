@@ -3,6 +3,6 @@
 
 #include "ast/nodes/decl.hpp"
 
-void print_ast(TranslationUnitDecl *ast);
+void print_ast(TranslationUnitDecl const *ast);
 
 #endif // AST_PRINT_HPP_INCLUDED

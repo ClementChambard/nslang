@@ -103,6 +103,7 @@ static Cl::Kinds classify_internal(const Expr *e) {
     return static_cast<const BinaryExpr *>(e)->is_assignment_op() ? Cl::CL_LValue : Cl::CL_PRValue;
   case Expr::CALL_EXPR:
   case Expr::METHOD_CALL_EXPR:
+  case Expr::INIT_CALL_EXPR:
   case Expr::EXPLICIT_CAST_EXPR:
   case Expr::VAARG_EXPR:
     return classify_temporary(e->type);

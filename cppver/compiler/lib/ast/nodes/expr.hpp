@@ -137,11 +137,11 @@ using ExprUPtr = std::unique_ptr<Expr>;
 struct ValueDecl;
 
 struct DeclRefExpr : public Expr {
-  ValueDecl *decl;
-  IdentInfo *ident;
+  ValueDecl const *decl;
+  IdentInfo const *ident;
   Loc ident_loc;
 
-  DeclRefExpr(ValueDecl *d, IdentInfo *i, Loc l, Type *type, ValueKind vk)
+  DeclRefExpr(ValueDecl const *d, IdentInfo const *i, Loc l, Type *type, ValueKind vk)
       : Expr(DECLREF_EXPR, type, vk), decl(d), ident(i), ident_loc(l) {}
 
   Loc get_start_loc() const override { return ident_loc; }
@@ -332,7 +332,7 @@ struct CallExpr : public Expr {
   Loc get_start_loc() const override { return fn->get_start_loc(); }
   Loc get_end_loc() const override { return rp; }
   static bool is_class(Kind k) {
-    return k >= CALL_EXPR && k <= METHOD_CALL_EXPR;
+    return k >= CALL_EXPR && k <= INIT_CALL_EXPR;
   }
 };
 
@@ -344,6 +344,14 @@ struct MethodCallExpr : public CallExpr {
     kind = METHOD_CALL_EXPR;
   }
   static bool is_class(Kind k) { return k == METHOD_CALL_EXPR; }
+};
+
+struct InitCallExpr : public CallExpr {
+  InitCallExpr(ExprUPtr fn, std::vector<ExprUPtr> &&args, Loc rp, Type *ty) 
+    : CallExpr(std::move(fn), std::move(args), rp, ty, ValueKind::PRVALUE) {
+      kind = INIT_CALL_EXPR;
+    }
+  static bool is_class(Kind k) { return k == INIT_CALL_EXPR; }
 };
 
 struct SizeofExpr : public Expr {

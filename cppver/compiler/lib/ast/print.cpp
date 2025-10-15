@@ -72,18 +72,22 @@ void print_loc_range(LocRge rge) {
   fprintf(stderr, ">");
 }
 
-void print_named_decl_name(NamedDecl *nd) {
+void print_named_decl_name(NamedDecl const *nd) {
   if (nd->name)
-    fprintf(stderr, " %s%s%s", COL::DECL_NAME, nd->get_name().c_str(), COL::RESET);
+    fprintf(stderr, " %s%s%s", COL::DECL_NAME, nd->get_name().c_str(),
+            COL::RESET);
 }
 
-void print_fn_decl_name(FunctionDecl *fd) {
-  if (!fd->name) return;
-  auto struct_name = fd->struct_scope ? fd->struct_scope->name->name + "::" : "";
-  fprintf(stderr, " %s%s%s%s", COL::DECL_NAME, struct_name.c_str(), fd->get_name().c_str(), COL::RESET);
+void print_fn_decl_name(FunctionDecl const *fd) {
+  if (!fd->name)
+    return;
+  auto struct_name =
+      fd->struct_scope ? fd->struct_scope->name->name + "::" : "";
+  fprintf(stderr, " %s%s%s%s", COL::DECL_NAME, struct_name.c_str(),
+          fd->get_name().c_str(), COL::RESET);
 }
 
-void print_type_inner(Type *t) {
+void print_type_inner(Type const *t) {
   if (auto *bt = t->dyn_cast<BuiltinType>()) {
     fprintf(stderr, "%s", bt->get_name());
   } else if (auto *pt = t->dyn_cast<PointerType>()) {
@@ -111,7 +115,8 @@ void print_type_inner(Type *t) {
       print_type_inner(ft->param_types[i]);
     }
     if (ft->function.variadic) {
-      if (i) fprintf(stderr, ", ");
+      if (i)
+        fprintf(stderr, ", ");
       fprintf(stderr, "...");
       if (ft->function.variadic == Type::FunctionTypeBits::VALIST_IN_ARGS)
         fprintf(stderr, "*");
@@ -120,7 +125,7 @@ void print_type_inner(Type *t) {
   }
 }
 
-void print_type(Type *t) {
+void print_type(Type const *t) {
   fprintf(stderr, " %s", COL::TYPE);
   print_type_inner(t);
   fprintf(stderr, "%s", COL::RESET);
@@ -141,18 +146,24 @@ std::string format_string_literal(std::string const &s) {
   std::string out;
   out.reserve(s.size());
   for (auto c : s) {
-    if (c == '\n') out += "\\n";
-    else if (c == '\r') out += "\\r";
-    else if (c == '\t') out += "\\t";
-    else if (c == '\"') out += "\\\"";
-    else if (c == '\\') out += "\\\\";
-    else out += c;
+    if (c == '\n')
+      out += "\\n";
+    else if (c == '\r')
+      out += "\\r";
+    else if (c == '\t')
+      out += "\\t";
+    else if (c == '\"')
+      out += "\\\"";
+    else if (c == '\\')
+      out += "\\\\";
+    else
+      out += c;
     // TODO: all escape sequences
   }
   return out;
 }
 
-void print_bare_decl(Decl *decl) {
+void print_bare_decl(Decl const *decl) {
   fprintf(stderr, "%s", COL::DECL);
   if (decl->isa<TranslationUnitDecl>())
     fprintf(stderr, "TranslationUnitDecl");
@@ -185,7 +196,7 @@ void print_bare_decl(Decl *decl) {
   }
 }
 
-void print_decl(Decl *decl) {
+void print_decl(Decl const *decl) {
   fprintf(stderr, "%s", COL::DECL);
   if (decl->isa<TranslationUnitDecl>())
     fprintf(stderr, "TranslationUnitDecl");
@@ -213,6 +224,9 @@ void print_decl(Decl *decl) {
   if (auto *fd = decl->dyn_cast<FunctionDecl>()) {
     print_fn_decl_name(fd);
     print_type(fd->type);
+    if (fd->has_init_ident) {
+      fprintf(stderr, " init");
+    }
   } else if (auto *evd = decl->dyn_cast<EnumVariantDecl>()) {
     print_named_decl_name(evd);
     fprintf(stderr, " = %lld", evd->value);
@@ -224,7 +238,7 @@ void print_decl(Decl *decl) {
   }
 }
 
-void print_stmt(Stmt *stmt) {
+void print_stmt(Stmt const *stmt) {
   fprintf(stderr, "%s", COL::STMT);
   switch (stmt->kind) {
   case Stmt::DECL_STMT:
@@ -271,7 +285,7 @@ void print_stmt(Stmt *stmt) {
   print_loc_range(stmt->get_range());
 }
 
-void print_expr(Expr *expr) {
+void print_expr(Expr const *expr) {
   fprintf(stderr, "%s", COL::STMT);
   switch (expr->kind) {
   case Stmt::DECLREF_EXPR:
@@ -309,6 +323,9 @@ void print_expr(Expr *expr) {
     break;
   case Stmt::METHOD_CALL_EXPR:
     fprintf(stderr, "MethodCallExpr");
+    break;
+  case Stmt::INIT_CALL_EXPR:
+    fprintf(stderr, "InitCallExpr");
     break;
   case Stmt::SIZEOF_EXPR:
     fprintf(stderr, "SizeofExpr");
@@ -354,14 +371,16 @@ void print_expr(Expr *expr) {
   } else if (auto *e = expr->dyn_cast<CharLiteral>()) {
     fprintf(stderr, " %s%lld%s", COL::VALUE, e->value, COL::RESET);
   } else if (auto *e = expr->dyn_cast<BoolLiteral>()) {
-    fprintf(stderr, " %s%s%s", COL::VALUE, e->value ? "true" : "false", COL::RESET);
+    fprintf(stderr, " %s%s%s", COL::VALUE, e->value ? "true" : "false",
+            COL::RESET);
   } else if (auto *e = expr->dyn_cast<StringLiteral>()) {
-    fprintf(stderr, " %s\"%s\"%s", COL::VALUE, format_string_literal(e->value).c_str(), COL::RESET);
+    fprintf(stderr, " %s\"%s\"%s", COL::VALUE,
+            format_string_literal(e->value).c_str(), COL::RESET);
   } else if (auto *e = expr->dyn_cast<MemberExpr>()) {
     fprintf(stderr, " %s%s", e->is_arrow ? "->" : ".", e->name->name.c_str());
   } else if (auto *e = expr->dyn_cast<CastExpr>()) {
     fprintf(stderr, " <%s%s%s>", COL::CAST, CastExpr::kind_to_str(e->cast_kind),
-           COL::RESET);
+            COL::RESET);
   } else if (auto *e = expr->dyn_cast<UnaryExpr>()) {
     fprintf(stderr, " '%s'", UnaryExpr::opc_name(e->opc));
   } else if (auto *e = expr->dyn_cast<BinaryExpr>()) {
@@ -372,7 +391,7 @@ void print_expr(Expr *expr) {
   }
 }
 
-void print_expr_tree(Expr *expr, std::vector<int> &indent) {
+void print_expr_tree(Expr const *expr, std::vector<int> &indent) {
   if (expr == nullptr)
     return;
   print_indent(indent);
@@ -406,7 +425,8 @@ void print_expr_tree(Expr *expr, std::vector<int> &indent) {
     indent.back()--;
     print_expr_tree(e->base.get(), indent);
   } else if (auto *e = expr->dyn_cast<CallExpr>()) {
-    if (e->args.size() == 0) indent.back()--;
+    if (e->args.size() == 0)
+      indent.back()--;
     print_expr_tree(e->fn.get(), indent);
     u32 i = 0;
     for (auto &v : e->args) {
@@ -430,9 +450,9 @@ void print_expr_tree(Expr *expr, std::vector<int> &indent) {
   indent.pop_back();
 }
 
-void print_decl_tree(Decl *decl, std::vector<int> &indent);
+void print_decl_tree(Decl const *decl, std::vector<int> &indent);
 
-void print_stmt_tree(Stmt *stmt, std::vector<int> &indent) {
+void print_stmt_tree(Stmt const *stmt, std::vector<int> &indent) {
   if (stmt == nullptr)
     return;
   if (auto *expr = stmt->dyn_cast<Expr>())
@@ -488,7 +508,7 @@ void print_stmt_tree(Stmt *stmt, std::vector<int> &indent) {
   indent.pop_back();
 }
 
-void print_decl_tree(Decl *decl, std::vector<int> &indent) {
+void print_decl_tree(Decl const *decl, std::vector<int> &indent) {
   if (decl == nullptr)
     return;
   print_indent(indent);
@@ -529,6 +549,10 @@ void print_decl_tree(Decl *decl, std::vector<int> &indent) {
       indent.back()--;
       print_stmt_tree(d->body.get(), indent);
     }
+  } else if (auto *d = decl->dyn_cast<VarDecl>()) {
+    indent.back()--;
+    if (d->initializer)
+      print_expr_tree(d->initializer.get(), indent);
   } else if (auto *d = decl->dyn_cast<EnumVariantDecl>()) {
     indent.back()--;
     if (d->value_expr)
@@ -538,7 +562,7 @@ void print_decl_tree(Decl *decl, std::vector<int> &indent) {
   indent.pop_back();
 }
 
-void print_ast(TranslationUnitDecl *ast) {
+void print_ast(TranslationUnitDecl const *ast) {
   std::vector<int> indent;
   print_decl_tree(ast, indent);
 }
