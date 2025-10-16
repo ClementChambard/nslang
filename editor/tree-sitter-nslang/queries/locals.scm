@@ -15,6 +15,7 @@
   (if_stmt)
   (while_stmt)
   (do_stmt)
+  (switch_stmt)
   (compound_stmt)
   (source_file)
   (fn_decl)

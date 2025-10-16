@@ -192,10 +192,6 @@
           "named": true
         },
         {
-          "type": "expr_list",
-          "named": true
-        },
-        {
           "type": "ident",
           "named": true
         },
@@ -596,6 +592,16 @@
             "named": true
           }
         ]
+      },
+      "val": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "expr",
+            "named": true
+          }
+        ]
       }
     },
     "children": {
@@ -624,6 +630,10 @@
         },
         {
           "type": "struct_decl",
+          "named": true
+        },
+        {
+          "type": "switch_stmt",
           "named": true
         },
         {
@@ -661,6 +671,32 @@
         "types": [
           {
             "type": "ident",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "switch_stmt",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "stmt",
+            "named": true
+          }
+        ]
+      },
+      "switch_var": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expr",
             "named": true
           }
         ]
@@ -743,7 +779,7 @@
       },
       "type": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "type",
@@ -751,6 +787,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "expr",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -948,15 +994,15 @@
     "named": false
   },
   {
-    "type": "__builtin_syscall",
-    "named": false
-  },
-  {
     "type": "bool",
     "named": false
   },
   {
     "type": "break",
+    "named": false
+  },
+  {
+    "type": "case",
     "named": false
   },
   {
@@ -974,6 +1020,10 @@
   },
   {
     "type": "continue",
+    "named": false
+  },
+  {
+    "type": "default",
     "named": false
   },
   {
@@ -1025,6 +1075,10 @@
     "named": false
   },
   {
+    "type": "init",
+    "named": false
+  },
+  {
     "type": "let",
     "named": false
   },
@@ -1058,6 +1112,10 @@
   },
   {
     "type": "super",
+    "named": false
+  },
+  {
+    "type": "switch",
     "named": false
   },
   {

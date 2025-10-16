@@ -13,6 +13,9 @@
 [
   "if"
   "else"
+  "switch"
+  "case"
+  "default"
 ] @keyword.conditional
 
 [
@@ -108,6 +111,7 @@
 "cast" @function.builtin
 
 "super" @keyword.modifier
+"init" @keyword.modifier
 
 (fn_decl name: (ident) @function)
 (fn_decl struct_scope: (ident) @type)

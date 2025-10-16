@@ -33,12 +33,17 @@ module.exports = grammar({
       '(', 
       field("params", optional($.param_decl_list)), 
       ')', 
+      optional("init"),
       field("return_type", optional($._return_type)), 
       field("body", choice($.compound_stmt, ';'))),
     _return_type: $ => seq('->', $.type),
     param_decl: $ => choice(seq(field("name", $.ident), ':', field("type", $.type)), '...'),
     param_decl_list: $ => seq($.param_decl, repeat(seq(',', $.param_decl))),
-    var_decl: $ => seq('let', field("name", $.ident), ':', field("type", $.type), ';'),
+    var_decl: $ => seq('let', field("name", $.ident), 
+      optional(seq(':', field("type", $.type))),
+      optional(seq('=', $.expr)),
+      ';'),
+    
     struct_decl: $ => seq('struct', field("name", $.ident), field("fields", optional($.field_decl_list)), ';'),
     field_decl: $ => seq(optional("super"), field("name", $.ident), ':', field("type", $.type), ';'),
     field_decl_list: $ => seq('{', repeat($.field_decl), '}'),
@@ -59,10 +64,13 @@ module.exports = grammar({
       $.if_stmt,
       $.while_stmt,
       $.do_stmt,
+      $.switch_stmt,
       seq('break', ';'),
       seq('continue', ';'),
       seq($.expr, ';'),
-      // TODO: switch, case, default, for
+      // TODO: switch, for
+      seq('case', field("val", $.expr), ':'),
+      seq('default', ':'),
       seq('return', field("return_value", optional($.expr)), ';'),
       $._block_decl,
       ';'
@@ -71,6 +79,7 @@ module.exports = grammar({
     while_stmt: $ => seq('while', '(', field("cond", $.expr), ')', field("body", $.stmt)),
     if_stmt: $ => prec.right(0, seq('if', '(', field("cond", $.expr), ')', field("then_body", $.stmt), field("else_body", optional(seq('else', $.stmt))))),
     do_stmt: $ => seq('do', field("body", $.stmt), 'while', '(', field("cond", $.expr), ')', ';'),
+    switch_stmt: $ => seq('switch', '(', field("switch_var", $.expr), ')', field("body", $.stmt)),
 
     // EXPRS
     expr_list: $ => seq($.expr, repeat(seq(',', $.expr))),
