@@ -3,7 +3,7 @@
 let __curbrk: void *;
 
 fn sbrk(size: i64) -> void* {
-    let update_brk: bool = __curbrk == nullptr;
+    let update_brk = __curbrk == nullptr;
 
     if (update_brk) {
         __curbrk = cast<void*>(brk(nullptr));
@@ -14,7 +14,7 @@ fn sbrk(size: i64) -> void* {
     if (size == 0)
         return __curbrk;
 
-    let oldbrk: void* = __curbrk;
+    let oldbrk = __curbrk;
 
     if (size > 0) {
         if (cast<i64>(oldbrk) + size < cast<i64>(oldbrk)) {
@@ -36,9 +36,9 @@ fn sbrk(size: i64) -> void* {
 }
 
 fn memcpy(dst: void*, src: void*, size: i64) -> void* {
-    let dst_as_i8: i8* = dst;
-    let src_as_i8: i8* = src;
-    let i: i64 = 0;
+    let dst_as_i8 = cast<i8*>(dst);
+    let src_as_i8 = cast<i8*>(src);
+    let i = 0;
     while (i < size) {
         dst_as_i8[i] = src_as_i8[i];
         ++i;
@@ -47,8 +47,8 @@ fn memcpy(dst: void*, src: void*, size: i64) -> void* {
 }
 
 fn memset(dst: void*, byte: i8, size: i64) -> void* {
-    let dst_as_i8: i8* = dst;
-    let i: i64 = 0;
+    let dst_as_i8 = cast<i8*>(dst);
+    let i = 0;
     while (i < size) {
         dst_as_i8[i] = byte;
         ++i;
@@ -57,9 +57,9 @@ fn memset(dst: void*, byte: i8, size: i64) -> void* {
 }
 
 fn memcmp(mem1: void*, mem2: void*, size: i64) -> i64 {
-    let mem1_as_i8: i8* = mem1;
-    let mem2_as_i8: i8* = mem2;
-    let i: i64 = 0;
+    let mem1_as_i8 = cast<i8*>(mem1);
+    let mem2_as_i8 = cast<i8*>(mem2);
+    let i = 0;
     while (i < size) {
         if (mem1_as_i8[i] != mem2_as_i8[i]) return mem1_as_i8[i] - mem2_as_i8[i];
         ++i;
@@ -74,10 +74,10 @@ struct __malloc_block_meta {
     magic: i64;
 };
 
-let __malloc_global_base: void *;
+let __malloc_global_base: __malloc_block_meta *;
 
 fn __malloc_find_free_block(last: __malloc_block_meta**, size: i64) -> __malloc_block_meta* {
-    let current: __malloc_block_meta* = __malloc_global_base;
+    let current = __malloc_global_base;
     while (true) {
         if (current == nullptr) {
             break;
@@ -92,8 +92,8 @@ fn __malloc_find_free_block(last: __malloc_block_meta**, size: i64) -> __malloc_
 }
 
 fn __malloc_request_space(last: __malloc_block_meta*, size: i64) -> __malloc_block_meta* {
-    let block: __malloc_block_meta* = sbrk(0);
-    let request: void* = sbrk(size + sizeof(__malloc_block_meta));
+    let block = cast<__malloc_block_meta*>(sbrk(0));
+    let request = sbrk(size + sizeof(__malloc_block_meta));
     if (cast<i64>(request) == -1) {
         return nullptr;
     }
@@ -131,8 +131,7 @@ fn malloc(size: i64) -> void* {
         }
         __malloc_global_base = block;
     } else {
-        let last: __malloc_block_meta*;
-        last = __malloc_global_base;
+        let last = __malloc_global_base;
         block = __malloc_find_free_block(&last, size);
         if (block == nullptr) {
             block = __malloc_request_space(last, size);
@@ -151,7 +150,7 @@ fn malloc(size: i64) -> void* {
 fn free(block: void*) {
     if (block == nullptr) return;
 
-    let meta: __malloc_block_meta* = __malloc_data_to_block(block);
+    let meta = __malloc_data_to_block(block);
     // assert(meta->is_free == 0)
     // assert(meta->magic == 0x12345678 || meta->magic == 0x77777777)
     meta->is_free = 1;
@@ -163,12 +162,12 @@ fn realloc(ptr: void*, size: i64) -> void* {
         return malloc(size);
     }
 
-    let block_ptr: __malloc_block_meta* = __malloc_data_to_block(ptr);
+    let block_ptr = __malloc_data_to_block(ptr);
     if (block_ptr->size >= size) {
         return ptr;
     }
 
-    let new_ptr: void* = malloc(size);
+    let new_ptr = malloc(size);
     if (new_ptr == nullptr) {
         return nullptr;
     }
@@ -178,8 +177,8 @@ fn realloc(ptr: void*, size: i64) -> void* {
 }
 
 fn calloc(nelem: i64, elsize: i64) -> void* {
-    let size: i64 = nelem * elsize;
-    let ptr: void* = malloc(size);
+    let size = nelem * elsize;
+    let ptr = malloc(size);
     memset(ptr, 0, size);
     return ptr;
 }

@@ -2,8 +2,7 @@
 #include mem.nsh
 
 fn UnqualifiedId::new() -> UnqualifiedId* {
-  let self: UnqualifiedId*;
-  self = malloc(sizeof(UnqualifiedId));
+  let self = cast<UnqualifiedId*>(malloc(sizeof(UnqualifiedId)));
   self->kind = UIDK_IDENTIFIER;
   self->value = nullptr;
   self->start_location = 0;

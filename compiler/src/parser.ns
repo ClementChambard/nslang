@@ -3,8 +3,7 @@
 #include diags.nsh
 
 fn Parser::new(lexer: Lexer*) -> Parser* {
-  let self: Parser*;
-  self = malloc(sizeof(Parser));
+  let self = cast<Parser*>(malloc(sizeof(Parser)));
   self->lexer = lexer;
   self->tok = lexer->lex();
   self->prev_tok_location = 0;
@@ -18,11 +17,9 @@ fn Parser::new(lexer: Lexer*) -> Parser* {
 fn Parser::delete(self: Parser*) {
   if (self == nullptr) return;
   if (self->tok != nullptr) free(self->tok);
-  let s: Scope*;
-  s = self->cur_scope;
+  let s = self->cur_scope;
   while (s != nullptr) {
-    let ss: Scope*;
-    ss = s;
+    let ss = s;
     s = s->get_parent();
     ss->delete();
   }
@@ -30,8 +27,7 @@ fn Parser::delete(self: Parser*) {
 }
 
 fn Parser::unconsume_token(self: Parser*, consumed: Token*) {
-  let next_tok: Token*;
-  next_tok = self->tok;
+  let next_tok = self->tok;
   self->lexer->enter_token(consumed);
   self->tok = self->lexer->lex();
   self->lexer->enter_token(next_tok);
@@ -47,8 +43,7 @@ fn Parser::consume_token(self: Parser*) -> Loc {
 
 fn Parser::try_consume_token(self: Parser*, expected: Tok, loc_ptr: Loc*) -> bool {
   if (self->tok->ty != expected) return false;
-  let loc: Loc;
-  loc = self->consume_token();
+  let loc = self->consume_token();
   if (loc_ptr != nullptr) *loc_ptr = loc;
   return true;
 }
@@ -125,13 +120,12 @@ fn Parser::expect_and_consume(self: Parser*, expected: Tok, diag_id: CStr, msg: 
   }
   // fixit
   let diag_msg: String;
-  diag_msg.init();
   if (diag_id == nullptr) {
-    diag_msg.format("expected %s", tok_get_name(expected));
+    String::format(&diag_msg, "expected %s", tok_get_name(expected));
   } else if (strcmp(diag_id, "expected %s after %s")) {
-    diag_msg.format(diag_id, tok_get_name(expected), msg);
+    String::format(&diag_msg, diag_id, tok_get_name(expected), msg);
   } else {
-    diag_msg.format(diag_id, msg);
+    String::format(&diag_msg, diag_id, msg);
   }
   diag(self->tok->loc, diag_msg.data, DIAG_ERROR);
   diag_msg.destroy();
@@ -159,18 +153,16 @@ fn Parser::expect_and_consume_semi(self: Parser*, diag_id: CStr, token_used: CSt
 }
 
 fn Parser::skip_until(self: Parser*, until_toks: Tok*, until_toks_count: i64, stop_at_semi: bool /* = false */, stop_before_match: bool /* = false */) -> bool {
-  let is_first_token_skipped: bool;
-  is_first_token_skipped = true;
+  let is_first_token_skipped = true;
   let until_one_tok: Tok;
   while (true) {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < until_toks_count) {
       if (self->tok->ty == until_toks[i]) {
         if (!stop_before_match) self->consume_any_token();
         return true;
       }
-      i += 1;
+      i++;
     }
     if (until_toks_count == 1) if (until_toks[0] == TOK_EOF) if (!stop_at_semi) {
       while (self->tok->ty != TOK_EOF) self->consume_any_token();
@@ -197,8 +189,7 @@ fn Parser::enter_scope(self: Parser*, scope_flags: ScopeFlags) {
 fn Parser::exit_scope(self: Parser*) {
   // assert self.cur_scope is not None
   // act_on_pop_scope(self.tok.loc, self.cur_scope)
-  let old_scope: Scope*;
-  old_scope = self->cur_scope;
+  let old_scope = self->cur_scope;
   // assert old_scope.parent_scope is not None
   self->cur_scope = old_scope->get_parent();
   old_scope->delete();

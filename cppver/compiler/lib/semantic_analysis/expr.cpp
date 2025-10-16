@@ -281,20 +281,60 @@ Type *Sema::usual_arithmetic_conversions(ExprUPtr &lhs, ExprUPtr &rhs,
 
 static bool check_arithmetic_op_pointer_operand(Sema &s, Loc loc,
                                                 Expr *operand) {
-  (void)s, (void)loc, (void)operand;
-  // auto res_type = operand->type;
-  // if (!res_type->is_pointer_type()) return true;
-  // pointee_ty = res_type.subtype
-  // if (PointeeTy->isVoidType()) { diagnoseArithmeticOnVoidPointer(S, Loc,
-  // Operand); return False } if (PointeeTy->isFunctionType()) {
-  // diagnoseArithmeticOnFunctionPointer(S, Loc, Operand); return False; } if
-  // (checkArithmeticIncompletePointerType(S, Loc, Operand)) return false;
+  Type *res_type = operand->type;
+  if (!res_type->is_pointer_type()) return true;
+  Type *pointee_type = res_type->get_pointee_type();
+  if (pointee_type->is_void_type()) {
+    Diag(diag::ERROR, loc, "arithmetic on void pointer") << operand->get_range();
+    return false;
+  }
+  if (pointee_type->is_function_type()) {
+    Diag(diag::ERROR, loc, "arithmetic on function pointer") << operand->get_range();
+    return false;
+  }
+
+  if (pointee_type->is_incomplete_type()) {
+    Diag(diag::ERROR, loc, "arithmetic on incomplete type") << operand->get_range();
+    return false;
+  }
+
   return true;
 }
 
-static bool check_arithmetic_bin_op_pointer_operands(Sema &s, Loc loc,
+static bool check_arithmetic_bin_op_pointer_operands(Loc loc,
                                                      Expr *lhs, Expr *rhs) {
-  (void)s, (void)loc, (void)lhs, (void)rhs;
+  bool is_lhs_ptr = lhs->type->is_pointer_type();
+  bool is_rhs_ptr = rhs->type->is_pointer_type();
+  if (!is_lhs_ptr && !is_rhs_ptr) return true;
+
+  Type *lhs_pointee_ty, *rhs_pointee_ty;
+  if (is_lhs_ptr) lhs_pointee_ty = lhs->type->get_pointee_type();
+  if (is_rhs_ptr) rhs_pointee_ty = rhs->type->get_pointee_type();
+
+  bool is_lhs_voidptr = is_lhs_ptr && lhs_pointee_ty->is_void_type();
+  bool is_rhs_voidptr = is_rhs_ptr && rhs_pointee_ty->is_void_type();
+  if (is_lhs_voidptr || is_rhs_voidptr) {
+    Diag(diag::ERROR, loc, "arithmetic on void pointer");
+    return false;
+  }
+
+  bool is_lhs_funptr = is_lhs_ptr && lhs_pointee_ty->is_function_type();
+  bool is_rhs_funptr = is_rhs_ptr && rhs_pointee_ty->is_function_type();
+  if (is_lhs_funptr || is_rhs_funptr) {
+    Diag(diag::ERROR, loc, "arithmetic on function pointer");
+    return false;
+  }
+
+  if (is_lhs_funptr && lhs_pointee_ty->is_incomplete_type()) {
+    Diag(diag::ERROR, loc, "arithmetic on incomplete type") << lhs->get_range();
+    return false;
+  }
+
+  if (is_rhs_funptr && rhs_pointee_ty->is_incomplete_type()) {
+    Diag(diag::ERROR, loc, "arithmetic on incomplete type") << rhs->get_range();
+    return false;
+  }
+
   return true;
 }
 
@@ -464,6 +504,7 @@ Type *Sema::check_subtraction_operands(ExprUPtr &lhs, ExprUPtr &rhs, Loc loc,
   if (!lhs->type->is_pointer_type()) {
     return invalid_operands(loc, lhs, rhs);
   }
+  //
   if (rhs->type->is_integer_type()) {
     if (!check_arithmetic_op_pointer_operand(*this, loc, lhs.get()))
       return nullptr;
@@ -476,9 +517,9 @@ Type *Sema::check_subtraction_operands(ExprUPtr &lhs, ExprUPtr &rhs, Loc loc,
     auto rpointee = rhs_pty->get_pointee_type();
     auto lpointee = lhs->type->get_pointee_type();
     if (!ctx.is_same_type(lpointee, rpointee)) {
-      // diagnosePointerIncompatibility(*this, Loc, LHS.get(), RHS.get());
+      Diag(diag::WARNING, loc, "comparison between pointers of different types");
     }
-    if (!check_arithmetic_bin_op_pointer_operands(*this, loc, lhs.get(),
+    if (!check_arithmetic_bin_op_pointer_operands(loc, lhs.get(),
                                                   rhs.get()))
       return nullptr;
     if (comp_lhs_ty)
@@ -618,7 +659,13 @@ Type *Sema::check_assignment_operands(Expr *lhs_expr, ExprUPtr &rhs, Loc loc,
     if (!rhs)
       return nullptr;
   } else {
-    conv_ty = true; // TODO:
+    // TODO: actual...
+
+    auto cs = try_implicit_conversion(rhs.get(), lhs_type);
+    rhs = perform_implicit_conversion(std::move(rhs), lhs_type, &cs);
+    conv_ty = true; 
+    if (!rhs) return nullptr;
+
     // rhs_expr = {loc, rhs_type, prvalue};
     // rhs_ptr = &rhs_expr;
 

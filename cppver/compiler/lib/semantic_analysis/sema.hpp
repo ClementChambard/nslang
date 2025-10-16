@@ -56,7 +56,7 @@ struct Sema {
   UPtr<VarDecl> act_on_var_decl_init_method(Scope *scope, Loc kw_loc,
                                             Loc id_loc, Loc end_loc,
                                             Loc mname_loc, IdentInfo *name,
-                                            Type *type,
+                                            StructDecl *sd,
                                             FunctionDecl const *method,
                                             std::vector<ExprUPtr> &&args);
   void act_on_field_decl(StructDecl *scope, Loc id_loc, Loc end_loc,

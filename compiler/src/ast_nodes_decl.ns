@@ -6,38 +6,34 @@
 fn Decl::ast_free(self: Decl*) {
   if (self == nullptr) return;
   if (self->kind == DECLKIND_TU) {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < cast<TranslationUnitDecl*>(self)->decls_count) {
       cast<TranslationUnitDecl*>(self)->decls[i]->ast_free();
-      i += 1;
+      i++;
     }
     free(cast<TranslationUnitDecl*>(self)->decls);
   }
   if (self->kind == DECLKIND_ENUM) {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < cast<EnumDecl*>(self)->variants_count) {
       free(cast<EnumDecl*>(self)->variants[i]);
-      i += 1;
+      i++;
     }
     free(cast<EnumDecl*>(self)->variants);
   }
   if (self->kind == DECLKIND_STRUCT) {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < cast<StructDecl*>(self)->fields.len) {
       free(cast<StructDecl*>(self)->fields[i]);
-      i += 1;
+      i++;
     }
     cast<StructDecl*>(self)->fields.destroy();
   }
   if (self->kind == DECLKIND_FN) {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < cast<FnDecl*>(self)->param_decls_count) {
       free(cast<FnDecl*>(self)->param_decls[i]);
-      i += 1;
+      i++;
     }
     free(cast<FnDecl*>(self)->param_decls);
     cast<Stmt*>(cast<FnDecl*>(self)->body)->ast_free();
@@ -49,8 +45,7 @@ fn Decl::ast_free(self: Decl*) {
 }
 
 fn TranslationUnitDecl::new(decls: Decl**, decls_count: i64) -> TranslationUnitDecl* {
-  let self: TranslationUnitDecl*;
-  self = malloc(sizeof(TranslationUnitDecl));
+  let self = cast<TranslationUnitDecl*>(malloc(sizeof(TranslationUnitDecl)));
   self->kind = DECLKIND_TU;
   self->is_lib = false;
   self->src_range.start = 1;
@@ -65,8 +60,7 @@ fn TranslationUnitDecl::new(decls: Decl**, decls_count: i64) -> TranslationUnitD
 }
 
 lib fn TypeDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> TypeDecl* {
-  let self: TypeDecl*;
-  self = malloc(sizeof(TypeDecl));
+  let self = cast<TypeDecl*>(malloc(sizeof(TypeDecl)));
   self->kind = DECLKIND_TYPE;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -77,8 +71,7 @@ lib fn TypeDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> TypeDecl* {
 }
 
 fn EnumVariantDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*, val: i64) -> EnumVariantDecl* {
-  let self: EnumVariantDecl*;
-  self = malloc(sizeof(EnumVariantDecl));
+  let self = cast<EnumVariantDecl*>(malloc(sizeof(EnumVariantDecl)));
   self->kind = DECLKIND_ENUMVARIANT;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -90,8 +83,7 @@ fn EnumVariantDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*, val: i64) -> En
 }
 
 fn EnumDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*, variants: EnumVariantDecl**, variants_count: i64) -> EnumDecl* {
-  let self: EnumDecl*;
-  self = malloc(sizeof(EnumDecl));
+  let self = cast<EnumDecl*>(malloc(sizeof(EnumDecl)));
   self->kind = DECLKIND_ENUM;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -104,8 +96,7 @@ fn EnumDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*, variants: EnumVariantD
 }
 
 fn FieldDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> FieldDecl* {
-  let self: FieldDecl*;
-  self = malloc(sizeof(FieldDecl));
+  let self = cast<FieldDecl*>(malloc(sizeof(FieldDecl)));
   self->kind = DECLKIND_FIELD;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -116,8 +107,7 @@ fn FieldDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> FieldDecl* {
 }
 
 fn VarDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> VarDecl* {
-  let self: VarDecl*;
-  self = malloc(sizeof(VarDecl));
+  let self = cast<VarDecl*>(malloc(sizeof(VarDecl)));
   self->kind = DECLKIND_VAR;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -128,8 +118,7 @@ fn VarDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> VarDecl* {
 }
 
 fn ParamDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> ParamDecl* {
-  let self: ParamDecl*;
-  self = malloc(sizeof(ParamDecl));
+  let self = cast<ParamDecl*>(malloc(sizeof(ParamDecl)));
   self->kind = DECLKIND_PARAM;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -140,8 +129,7 @@ fn ParamDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> ParamDecl* {
 }
 
 fn StructDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> StructDecl* {
-  let self: StructDecl*;
-  self = malloc(sizeof(StructDecl));
+  let self = cast<StructDecl*>(malloc(sizeof(StructDecl)));
   self->kind = DECLKIND_STRUCT;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -154,8 +142,7 @@ fn StructDecl::new(sl: Loc, el: Loc, name: CStr, ty: Type*) -> StructDecl* {
 }
 
 fn FnDecl::new(sl: Loc, el: Loc, name: CStr, param_decls: ParamDecl**, param_decls_count: i64, return_type: Type*, is_vararg: bool) -> FnDecl* {
-  let self: FnDecl*;
-  self = malloc(sizeof(FnDecl));
+  let self = cast<FnDecl*>(malloc(sizeof(FnDecl)));
   self->kind = DECLKIND_FN;
   self->is_lib = false;
   self->src_range.start = sl;
@@ -166,12 +153,10 @@ fn FnDecl::new(sl: Loc, el: Loc, name: CStr, param_decls: ParamDecl**, param_dec
   self->is_vararg = is_vararg;
   self->body = nullptr;
 
-  let arr: Type**;
-  arr = nullptr;
+  let arr: Type** = nullptr;
   if (param_decls_count != 0) {
     arr = malloc(sizeof(Type*) * param_decls_count);
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < param_decls_count) {
       arr[i] = param_decls[i]->ty;
       i += 1;

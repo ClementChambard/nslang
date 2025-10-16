@@ -40,8 +40,7 @@ fn __type_internal__create_enum_type(name: CStr, of: Type*) -> EnumType* {
 
 fn __type_internal__get_enum_type_by_name(name: CStr) -> EnumType* {
   // semantically, enums can't have the same name.
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < __internal_created_types.enums.len) {
     if (strcmp(cast<CStr>(__internal_created_types.enums[i + 1]), name) == 0) {
       return cast<EnumType*>(&__internal_created_types.enums[i]);
@@ -53,8 +52,7 @@ fn __type_internal__get_enum_type_by_name(name: CStr) -> EnumType* {
 
 fn __type_internal__get_enum_type(name: CStr, subtype: Type*) -> EnumType* {
   if (name != nullptr) return __type_internal__get_enum_type_by_name(name);
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < __internal_created_types.enums.len) {
     if (__internal_created_types.enums[i + 2] == subtype) {
       return cast<EnumType*>(&__internal_created_types.enums[i]);
@@ -81,8 +79,7 @@ fn __type_internal__create_struct_type(name: CStr) -> StructType* {
 
 fn __type_internal__get_struct_type_by_name(name: CStr) -> StructType* {
   // semantically, structs can't have the same name.
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < __internal_created_types.structs.len) {
     if (strcmp(cast<CStr>(__internal_created_types.structs[i + 1]), name) == 0) {
       return cast<StructType*>(&__internal_created_types.structs[i]);
@@ -100,8 +97,7 @@ fn __type_internal__create_ptr_type(of: Type*) -> PointerType* {
 }
 
 fn __type_internal__get_ptr_type_of(of: Type*) -> PointerType* {
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < __internal_created_types.pointers.len) {
     if (__internal_created_types.pointers[i + 1] == of) {
       return cast<PointerType*>(&__internal_created_types.pointers[i]);
@@ -120,8 +116,7 @@ fn __type_internal__create_array_type(of: Type*, len: i64) -> ArrayType* {
 }
 
 fn __type_internal__get_array_type_of(of: Type*, len: i64) -> ArrayType* {
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < __internal_created_types.arrays.len) {
     if (__internal_created_types.arrays[i + 1] == of) {
       if (cast<i64>(__internal_created_types.arrays[i + 2]) == len) {
@@ -151,11 +146,9 @@ fn __type_internal__create_function_type(return_type: Type*, param_types: Type**
 }
 
 fn __type_internal__get_function_type_of(return_type: Type*, param_types: Type**, param_count: i64, is_variadic: bool) -> FunctionType* {
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < __internal_created_types.functions.len) {
-    let ft: FunctionType*;
-    ft = cast<FunctionType*>(&__internal_created_types.functions[i]);
+    let ft = cast<FunctionType*>(&__internal_created_types.functions[i]);
     if (ft->return_type != return_type) {
       i += 5;
       continue;
@@ -168,16 +161,14 @@ fn __type_internal__get_function_type_of(return_type: Type*, param_types: Type**
       i += 5;
       continue;
     }
-    let j: i64;
-    let bad: bool;
-    j = 0;
-    bad = false;
+    let j = 0;
+    let bad = false;
     while (j < param_count) {
       if (ft->param_types[j] != param_types[j]) {
         bad = true;
         break;
       }
-      j += 1;
+      j++;
     }
     if (bad) {
       i += 5;
@@ -194,22 +185,21 @@ fn __type_internal__get_function_type_of(return_type: Type*, param_types: Type**
 /////////////////////////////////////
 
 fn init_type_data() {
-  let i: i64;
   __internal_created_types.pointers.init();
   __internal_created_types.enums.init();
   __internal_created_types.structs.init();
   __internal_created_types.arrays.init();
   __internal_created_types.functions.init();
-  i = 0;
+  let i = 0;
   while (i < BTK_COUNT) {
     __internal_created_types.builtins[i].kind = TYPEKIND_BUILTIN;
     __internal_created_types.builtins[i].builtin_kind = cast<BuiltinTypeKind>(i);
-    i += 1;
+    i++;
   }
 }
 
 fn cleanup_type_data() {
-  let i: i64;
+  let i: i32;
   // enums: free name
   i = 0; while (i < __internal_created_types.enums.len) {
     free(__internal_created_types.enums[i + 1]);
@@ -245,36 +235,31 @@ fn Type::get_builtin(kind: BuiltinTypeKind) -> BuiltinType* {
 }
 
 fn Type::get_enum(name: CStr, subtype: Type*) -> EnumType* {
-  let out: EnumType*;
-  out = __type_internal__get_enum_type(name, subtype);
+  let out = __type_internal__get_enum_type(name, subtype);
   if (out != nullptr) return out;
   return __type_internal__create_enum_type(name, subtype);
 }
 
 fn Type::get_struct(name: CStr) -> StructType* {
-  let out: StructType*;
-  out = __type_internal__get_struct_type_by_name(name);
+  let out = __type_internal__get_struct_type_by_name(name);
   if (out != nullptr) return out;
   return __type_internal__create_struct_type(name);
 }
 
 fn Type::get_pointer(subtype: Type*) -> PointerType* {
-  let out: PointerType*;
-  out = __type_internal__get_ptr_type_of(subtype);
+  let out = __type_internal__get_ptr_type_of(subtype);
   if (out != nullptr) return out;
   return __type_internal__create_ptr_type(subtype);
 }
 
 fn Type::get_array(subtype: Type*, size: i64) -> ArrayType* {
-  let out: ArrayType*;
-  out = __type_internal__get_array_type_of(subtype, size);
+  let out: ArrayType* = __type_internal__get_array_type_of(subtype, size);
   if (out != nullptr) return out;
   return __type_internal__create_array_type(subtype, size);
 }
 
 fn Type::get_function(return_type: Type*, param_types: Type**, param_count: i64, is_variadic: bool) -> FunctionType* {
-  let out: FunctionType*;
-  out = __type_internal__get_function_type_of(return_type, param_types, param_count, is_variadic);
+  let out: FunctionType* = __type_internal__get_function_type_of(return_type, param_types, param_count, is_variadic);
   if (out != nullptr) {
     free(param_types);
     return out;
@@ -300,8 +285,7 @@ fn Type::get_size(self: Type*) -> i64 {
   } else if (self->kind == TYPEKIND_POINTER) {
     return 8;
   } else if (self->kind == TYPEKIND_BUILTIN) {
-    let bk: BuiltinTypeKind;
-    bk = cast<BuiltinType*>(self)->builtin_kind;
+    let bk = cast<BuiltinType*>(self)->builtin_kind;
     if (bk == BTK_I64) return 8;
     if (bk == BTK_I32) return 4;
     if (bk == BTK_I16) return 2;
@@ -312,17 +296,12 @@ fn Type::get_size(self: Type*) -> i64 {
     if (bk == BTK_U8) return 1;
     if (bk == BTK_BOOL) return 1;
   } else if (self->kind == TYPEKIND_STRUCT) {
-    let cur: i64;
-    let i: i64;
-    cur = 0;
-    i = 0;
+    let cur = 0;
+    let i = 0;
     while (i < cast<StructType*>(self)->fields.len) {
-      let ty: Type*;
-      let needs_align: i64;
-      let a: i64;
-      ty = cast<Type*>(cast<StructType*>(self)->fields[i+1]);
-      needs_align = ty->get_align();
-      a = cur % needs_align;
+      let ty = cast<Type*>(cast<StructType*>(self)->fields[i+1]);
+      let needs_align = ty->get_align();
+      let a = cur % needs_align;
       if (a != 0) {
         cur += needs_align - a;
       }
@@ -349,13 +328,10 @@ fn Type::get_align(self: Type*) -> i64 {
   } else if (self->kind == TYPEKIND_BUILTIN) {
     return self->get_size();
   } else if (self->kind == TYPEKIND_STRUCT) {
-    let cur: i64;
-    let i: i64;
-    cur = 1;
-    i = 0;
+    let cur = 1;
+    let i = 0;
     while (i < cast<StructType*>(self)->fields.len) {
-      let al: i64;
-      al = cast<Type*>(cast<StructType*>(self)->fields[i+1])->get_align();
+      let al = cast<Type*>(cast<StructType*>(self)->fields[i+1])->get_align();
       if (al > cur) {
         cur = al;
       }
@@ -372,8 +348,7 @@ fn Type::is_scalar_type(self: Type*) -> bool {
   if (self->kind == TYPEKIND_POINTER) {
     return true;
   } else if (self->kind == TYPEKIND_BUILTIN) {
-    let k: BuiltinTypeKind;
-    k = cast<BuiltinType*>(self)->builtin_kind;
+    let k = cast<BuiltinType*>(self)->builtin_kind;
     if (k < BTK_I8) return false;
     if (k > BTK_BOOL) return false;
     return true;
@@ -385,8 +360,7 @@ fn Type::is_scalar_type(self: Type*) -> bool {
 fn Type::is_arithmetic_type(self: Type*) -> bool {
   if (self == nullptr) return false;
   if (self->kind == TYPEKIND_BUILTIN) {
-    let k: BuiltinTypeKind;
-    k = cast<BuiltinType*>(self)->builtin_kind;
+    let k = cast<BuiltinType*>(self)->builtin_kind;
     if (k < BTK_I8) return false;
     if (k > BTK_BOOL) return false;
     return true;
@@ -398,8 +372,7 @@ fn Type::is_arithmetic_type(self: Type*) -> bool {
 fn Type::is_integer_type(self: Type*) -> bool {
   if (self == nullptr) return false;
   if (self->kind == TYPEKIND_BUILTIN) {
-    let k: BuiltinTypeKind;
-    k = cast<BuiltinType*>(self)->builtin_kind;
+    let k = cast<BuiltinType*>(self)->builtin_kind;
     if (k < BTK_I8) return false;
     if (k > BTK_BOOL) return false;
     return true;
@@ -435,18 +408,16 @@ fn Type::str_append(self: Type*, append_to: String*) {
     if (append_to->last() != '*') append_to->push(' ');
     append_to->push('*');
   } else if (self->kind == TYPEKIND_FUNCTION) {
-    let ft: FunctionType*;
-    let i: i64;
-    ft = cast<FunctionType*>(self);
+    let ft = cast<FunctionType*>(self);
     ft->return_type->str_append(append_to);
     append_to->push_cstr(" (");
-    i = 0;
+    let i = 0;
     while (i < ft->param_count) {
       if (i > 0) {
         append_to->push_cstr(", ");
       }
       ft->param_types[i]->str_append(append_to);
-      i += 1;
+      i++;
     }
     if (ft->is_variadic) {
       if (i > 0) {
@@ -456,8 +427,7 @@ fn Type::str_append(self: Type*, append_to: String*) {
     }
     append_to->push(')');
   } else if (self->kind == TYPEKIND_BUILTIN) {
-    let bk: BuiltinTypeKind;
-    bk = cast<BuiltinType*>(self)->builtin_kind;
+    let bk = cast<BuiltinType*>(self)->builtin_kind;
     if (bk == BTK_I64) append_to->push_cstr("i64");
     if (bk == BTK_I32) append_to->push_cstr("i32");
     if (bk == BTK_I16) append_to->push_cstr("i16");
@@ -491,8 +461,7 @@ fn EnumType::get_aliased_type(self: EnumType*) -> Type* {
 }
 
 fn StructType::field_type(self: StructType*, name: CStr) -> Type* {
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < self->fields.len) {
     if (strcmp(name, cast<CStr>(self->fields[i])) == 0) {
       return cast<Type*>(self->fields[i + 1]);
@@ -526,8 +495,7 @@ fn StructType::deepest_super_field(self: StructType*, name: CStr*) -> Type* {
 
 fn StructType::add_method(self: StructType*, name: CStr, decl: FnDecl*) {
   // check already exist
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < self->methods.len) {
     if (strcmp(name, cast<CStr>(self->methods[i])) == 0) {
       return;

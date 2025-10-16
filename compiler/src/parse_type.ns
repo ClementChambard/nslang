@@ -10,10 +10,8 @@
 lib fn Parser::parse_integer_constexpr(self: Parser *, end_loc: Loc*) -> i64;
  
 fn Parser::parse_type(self: Parser *) -> Type* {
-  let cur_type: Type*;
-  cur_type = nullptr;
-  let no_type: bool;
-  no_type = true;
+  let cur_type: Type* = nullptr;
+  let no_type = true;
   while (true) {
     if (no_type) {
       if (tok_is_builtin_type(self->tok->ty)) {
@@ -28,22 +26,17 @@ fn Parser::parse_type(self: Parser *) -> Type* {
         continue;
       }
       if (self->tok->ty == TOK_IDENT) {
-        let type_name: CStr;
-        let type_loc: Loc;
-        let decl: NamedDecl*;
-        type_name = cast<IdentInfo*>(self->tok->value)->val;
-        type_loc = self->consume_token();
-        decl = self->cur_scope->lookup_named_decl(type_name);
+        let type_name = cast<IdentInfo*>(self->tok->value)->val;
+        let type_loc = self->consume_token();
+        let decl = self->cur_scope->lookup_named_decl(type_name);
         if (decl == nullptr) {
-          let s: String;
-          s.format("'%s' is not a type name", type_name);
+          let s = String::format("'%s' is not a type name", type_name);
           diag(type_loc, s.data, DIAG_ERROR);
           s.destroy();
           return nullptr;
         }
         if (!cast<Decl*>(decl)->is_type()) {
-          let s: String;
-          s.format("'%s' is not a type name", type_name);
+          let s = String::format("'%s' is not a type name", type_name);
           diag(type_loc, s.data, DIAG_ERROR);
           s.destroy();
           return nullptr;
@@ -63,8 +56,7 @@ fn Parser::parse_type(self: Parser *) -> Type* {
     }
     if (self->tok->ty == TOK_LSQUARE) {
       self->consume_bracket();
-      let count: i64;
-      count = self->parse_integer_constexpr(nullptr);
+      let count = self->parse_integer_constexpr(nullptr);
       self->expect_and_consume(TOK_RSQUARE, nullptr, nullptr);
       cur_type = Type::get_array(cur_type, count);
       continue;
@@ -79,10 +71,8 @@ fn Parser::is_start_of_type(self: Parser *) -> bool {
   if (tok_is_builtin_type(self->tok->ty)) return true;
   if (self->tok->ty == TOK_KW_VOID) return true;
   if (self->tok->ty == TOK_IDENT) {
-    let type_name: CStr;
-    let decl: NamedDecl*;
-    type_name = cast<IdentInfo*>(self->tok->value)->val;
-    decl = self->cur_scope->lookup_named_decl(type_name);
+    let type_name = cast<IdentInfo*>(self->tok->value)->val;
+    let decl = self->cur_scope->lookup_named_decl(type_name);
     if (decl == nullptr) return false;
     return cast<Decl*>(decl)->is_type();
   }

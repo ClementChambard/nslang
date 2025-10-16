@@ -9,7 +9,7 @@ fn Token::dump(self: Token*) {
     let loc: CompleteLoc;
     OpenedFile::get_loc(&loc, self->loc);
     print("%s:%i:%i: %s", loc.filename, loc.line, loc.col, tok_get_name(self->ty));
-    let has_val: bool;
+    let has_val = false;
     let val: i8*;
     if (self->ty == TOK_IDENT) {
         val = cast<IdentInfo*>(self->value)->val;

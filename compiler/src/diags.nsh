@@ -18,7 +18,7 @@ struct Diag {
 
 lib fn fatal_error(msg: i8*);
 
-lib fn Diag::init(d: Diag*, loc: Loc, msg: i8*, level: i64);
+lib fn Diag::new(d: Diag*, loc: Loc, msg: i8*, level: i64) init;
 
 lib fn Diag::destroy(d: Diag*);
 

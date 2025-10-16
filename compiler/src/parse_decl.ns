@@ -8,12 +8,10 @@
 #include mem.nsh
 
 fn Parser::parse_translation_unit(self: Parser*) -> TranslationUnitDecl* {
-  let decls: DArray;
-  decls.init();
+  let decls = DArray::init();
   sema::act_on_start_of_translation_unit();
   while (self->tok->ty != TOK_EOF) {
-    let d: Decl*;
-    d = self->parse_top_level_decl();
+    let d = self->parse_top_level_decl();
     if (d != nullptr) decls.push(d);
   }
   sema::act_on_end_of_translation_unit();
@@ -25,8 +23,7 @@ fn Parser::parse_top_level_decl(self: Parser*) -> Decl* {
 }
 
 fn Parser::parse_decl(self: Parser*, decl_ctx: DeclaratorContext, decl_end: Loc*) -> Decl* {
-  let decl: Decl*;
-  decl = nullptr;
+  let decl: Decl* = nullptr;
   if (self->tok->ty == TOK_KW_FN) {
     if (decl_ctx != DC_FILE) {
       diag(self->tok->loc, "Can't declare a function in a function body (FATAL)", DIAG_ERROR);
@@ -39,8 +36,7 @@ fn Parser::parse_decl(self: Parser*, decl_ctx: DeclaratorContext, decl_end: Loc*
       self->consume_token();
       return self->parse_decl(decl_ctx, decl_end);
     }
-    let start_loc: Loc;
-    start_loc = self->consume_token();
+    let start_loc = self->consume_token();
     decl = self->parse_decl(decl_ctx, decl_end);
     if (decl != nullptr) {
       decl->is_lib = true;
@@ -57,8 +53,7 @@ fn Parser::parse_decl(self: Parser*, decl_ctx: DeclaratorContext, decl_end: Loc*
   } else if (self->tok->ty == TOK_KW_ENUM) {
     decl = self->parse_enum_decl();
   } else {
-    let s: String;
-    s.format("Unexpected token %s", tok_get_name(self->tok->ty));
+    let s = String::format("Unexpected token %s", tok_get_name(self->tok->ty));
     diag(self->tok->loc, s.data, DIAG_ERROR);
     s.destroy();
     self->consume_any_token();
@@ -87,21 +82,16 @@ fn Parser::parse_enum_variant(self: Parser*, arr: DArray*, ty: Type*, last_val: 
     }
     return false;
   }
-  let name: CStr;
-  let start_loc: Loc;
-  let end_loc: Loc;
-  let allow_more: bool;
-  name = cast<IdentInfo*>(self->tok->value)->val;
-  start_loc = self->consume_token();
-  end_loc = start_loc;
+  let name = cast<IdentInfo*>(self->tok->value)->val;
+  let start_loc = self->consume_token();
+  let end_loc = start_loc;
   if (self->tok->ty == TOK_EQUAL) {
     self->consume_token();
     last_val = self->parse_integer_constexpr(&end_loc);
   }
-  allow_more = self->tok->ty == TOK_COMMA;
+  let allow_more = self->tok->ty == TOK_COMMA;
   if (allow_more) self->consume_token();
-  let decl: EnumVariantDecl*;
-  decl = EnumVariantDecl::new(start_loc, end_loc, name, ty, last_val);
+  let decl = EnumVariantDecl::new(start_loc, end_loc, name, ty, last_val);
   self->cur_scope->add_decl(decl);
   arr->push(decl);
   *new_val = last_val + 1;
@@ -110,49 +100,39 @@ fn Parser::parse_enum_variant(self: Parser*, arr: DArray*, ty: Type*, last_val: 
 
 fn Parser::parse_enum_decl(self: Parser*) -> EnumDecl* {
   // assert self.tok.ty == Tok.KW_ENUM, "not enum decl"
-  let start_loc: Loc;
-  let end_loc: Loc;
-  let name: CStr;
-  let aliased_type: Type*;
-  let variants: DArray;
-  start_loc = self->consume_token();
-  name = nullptr;
+  let start_loc = self->consume_token();
+  let name: CStr = nullptr;
   if (self->tok->ty == TOK_IDENT) {
     name = cast<IdentInfo*>(self->tok->value)->val;
     // TODO: check previous definition
     self->consume_token();
   }
-  aliased_type = nullptr;
+  let aliased_type: Type* = nullptr;
   if (self->tok->ty == TOK_COLON) {
     self->consume_token();
     aliased_type = self->parse_type();
   }
   // TODO: partial definition
   self->expect_and_consume(TOK_LBRACE, nullptr, nullptr);
-  variants.init();
+  let variants = DArray::init();
   ENUM_DECL_CTR = ENUM_DECL_CTR + 1;
-  let last_val: i64;
-  let allow_more: bool;
-  let enum_type: Type*;
-  enum_type = Type::get_enum(name, aliased_type);
-  last_val = 0;
-  allow_more = true;
+  let last_val = 0i64;
+  let allow_more = true;
+  let enum_type: Type* = Type::get_enum(name, aliased_type);
   while (allow_more) {
     if (self->tok->ty == TOK_RBRACE) break;
     allow_more = self->parse_enum_variant(&variants, enum_type, last_val, &last_val);
   }
   self->expect_and_consume(TOK_RBRACE, nullptr, nullptr);
-  end_loc = self->tok->loc;
+  let end_loc = self->tok->loc;
 
-  let decl: EnumDecl*;
-  decl = EnumDecl::new(start_loc, end_loc, name, enum_type, cast<EnumVariantDecl**>(variants.data), variants.len);
+  let decl = EnumDecl::new(start_loc, end_loc, name, enum_type, cast<EnumVariantDecl**>(variants.data), variants.len);
 
   self->expect_and_consume_semi("Expected ';' after 'enum'", nullptr);
   if (name != nullptr) {
     self->cur_scope->add_decl(decl);
   } else {
-    let name_s: String;
-    name_s.format("__annonymous_enum_decl_%i", ENUM_DECL_CTR);
+    let name_s = String::format("__annonymous_enum_decl_%i", ENUM_DECL_CTR);
     decl->name = name_s.data;
   }
   return decl;
@@ -170,8 +150,7 @@ fn Parser::parse_end_var_decl_common(self: Parser*, out: __EndVarDeclCommon*) ->
   skip_until_[0] = TOK_COMMA;
   skip_until_[1] = TOK_SEMI;
   if (self->tok->ty != TOK_IDENT) {
-    let msg: String;
-    msg.format("Expected identifier as declaration name (got %s)", tok_get_name(self->tok->ty));
+    let msg = String::format("Expected identifier as declaration name (got %s)", tok_get_name(self->tok->ty));
     diag(self->tok->loc, msg.data, DIAG_ERROR);
     msg.destroy();
     self->skip_until(skip_until_, 2, false, true);
@@ -184,8 +163,7 @@ fn Parser::parse_end_var_decl_common(self: Parser*, out: __EndVarDeclCommon*) ->
     self->skip_until(skip_until_, 2, false, false);
     return false;
   }
-  let colon_loc: Loc;
-  colon_loc = self->consume_token();
+  let colon_loc = self->consume_token();
   out->ty = self->parse_type();
   if (out->ty == nullptr) {
     diag(colon_loc, "Expected Type after ':'", DIAG_ERROR);
@@ -197,23 +175,20 @@ fn Parser::parse_end_var_decl_common(self: Parser*, out: __EndVarDeclCommon*) ->
 
 fn Parser::parse_param_decl(self: Parser*) -> ParamDecl* {
   let common: __EndVarDeclCommon;
-  let decl: ParamDecl*;
   if (!self->parse_end_var_decl_common(&common)) return nullptr;
-  decl = ParamDecl::new(common.sl, common.el, common.name, common.ty);
+  let decl = ParamDecl::new(common.sl, common.el, common.name, common.ty);
   self->cur_scope->add_decl(decl);
   return decl;
 }
 
 fn Parser::parse_var_decl(self: Parser*) -> VarDecl* {
   // assert self.tok.ty == Tok.KW_LET, "Not a var decl" 
-  let start_loc: Loc;
+  let start_loc = self->consume_token();
   let common: __EndVarDeclCommon;
-  let decl: VarDecl*;
-  start_loc = self->consume_token();
   if (!self->parse_end_var_decl_common(&common)) return nullptr;
   // TODO: initializer
   self->expect_and_consume_semi("Expected ';' at end of var decl", nullptr);
-  decl = VarDecl::new(start_loc, common.el, common.name, common.ty);
+  let decl = VarDecl::new(start_loc, common.el, common.name, common.ty);
   self->cur_scope->add_decl(decl);
   return decl;
 }
@@ -223,11 +198,10 @@ lib fn Parser::parse_compound_stmt_body(self: Parser *) -> CompoundStmt*;
 
 fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
   // assert self.tok.ty == Tok.KW_FN, "Not a function decl"
-  let start_loc: Loc;
+  let start_loc = self->consume_token();
   let skip_until_buf: Tok[2];
   skip_until_buf[0] = TOK_COMMA;
   skip_until_buf[1] = TOK_SEMI;
-  start_loc = self->consume_token();
   if (self->tok->ty != TOK_IDENT) {
     diag(self->tok->loc, "Expected identifier as declaration name", DIAG_ERROR);
     // TODO: skip the fn decl
@@ -237,14 +211,10 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
 
   self->enter_scope(SF_FN | SF_DECL | SF_COMPOUND_STMT);
 
-  let fn_name: CStr; // needs free
-  let fn_scope: StructType*;
-  let method_name: CStr;
-  let name_loc: Loc;
-  fn_name = cast<IdentInfo*>(self->tok->value)->val;
-  fn_scope = nullptr;
-  method_name = nullptr;
-  name_loc = self->consume_token();
+  let fn_name = cast<IdentInfo*>(self->tok->value)->val; // needs free ?
+  let fn_scope: StructType* = nullptr;
+  let method_name: CStr = nullptr;
+  let name_loc = self->consume_token();
   if (self->tok->ty == TOK_COLONCOLON) {
     self->consume_token();
     if (self->tok->ty != TOK_IDENT) {
@@ -260,12 +230,9 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
     fn_name = strdup(fn_name);
   }
 
-  let params: DArray;
-  let is_vararg: bool;
-  let return_type: Type*;
+  let params = DArray::init();
+  let is_vararg = false;
   self->expect_and_consume(TOK_LPAREN, nullptr, nullptr);
-  params.init();
-  is_vararg = false;
   skip_until_buf[0] = TOK_RPAREN;
   skip_until_buf[1] = TOK_COMMA;
   if (self->tok->ty != TOK_RPAREN) {
@@ -274,8 +241,7 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
         is_vararg = true;
         self->consume_token();
       } else {
-        let param: ParamDecl*;
-        param = self->parse_param_decl();
+        let param = self->parse_param_decl();
         if (param != nullptr) {
           params.push(param);
         } else {
@@ -292,18 +258,16 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
     }
   }
   self->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
-  return_type = nullptr;
+  let return_type: Type* = nullptr;
   if (self->tok->ty == TOK_ARROW) {
     self->consume_token();
     return_type = self->parse_type();
   }
 
-  let decl: FnDecl*;
-  let semi_loc: Loc;
   if (self->tok->ty == TOK_SEMI) {
     self->exit_scope();
-    semi_loc = self->consume_token();
-    decl = sema::act_on_fn_decl(self->cur_scope, fn_name, cast<ParamDecl**>(params.data), params.len, return_type, start_loc, semi_loc, is_vararg);
+    let semi_loc = self->consume_token();
+    let decl = sema::act_on_fn_decl(self->cur_scope, fn_name, cast<ParamDecl**>(params.data), params.len, return_type, start_loc, semi_loc, is_vararg);
     free(fn_name);
     if (fn_scope != nullptr) {
       fn_scope->add_method(method_name, decl);
@@ -311,7 +275,7 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
     return decl;
   }
 
-  decl = sema::act_on_start_fn_definition(self->cur_scope->get_parent(), fn_name, cast<ParamDecl**>(params.data), params.len, return_type, start_loc, is_vararg);
+  let decl = sema::act_on_start_fn_definition(self->cur_scope->get_parent(), fn_name, cast<ParamDecl**>(params.data), params.len, return_type, start_loc, is_vararg);
   free(fn_name);
   if (decl == nullptr) {
     self->consume_brace();
@@ -324,8 +288,7 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
     fn_scope->add_method(method_name, decl);
   }
 
-  let fn_body: CompoundStmt*;
-  fn_body = self->parse_compound_stmt_body();
+  let fn_body = self->parse_compound_stmt_body();
 
   self->exit_scope();
 
@@ -334,12 +297,7 @@ fn Parser::parse_fn_decl(self: Parser*) -> FnDecl* {
 
 fn Parser::parse_type_alias_decl(self: Parser*) -> TypeDecl* {
   // assert self.tok.ty == Tok.KW_TYPE, "Not a type alias decl"
-  let start_loc: Loc;
-  let end_loc: Loc;
-  let decl: TypeDecl*;
-  let aliased_type: Type*;
-  let type_name: CStr;
-  start_loc = self->consume_token();
+  let start_loc = self->consume_token();
   if (self->tok->ty != TOK_IDENT) {
     let skip_until_: Tok;
     skip_until_ = TOK_SEMI;
@@ -347,36 +305,30 @@ fn Parser::parse_type_alias_decl(self: Parser*) -> TypeDecl* {
     self->skip_until(&skip_until_, 1, false, false);
     return nullptr;
   }
-  type_name = cast<IdentInfo*>(self->tok->value)->val;
+  let type_name = cast<IdentInfo*>(self->tok->value)->val;
   // TODO: lookup name availability
   self->consume_token();
   self->expect_and_consume(TOK_EQUAL, nullptr, nullptr);
-  aliased_type = self->parse_type();
+  let aliased_type = self->parse_type();
   // assert aliased_type is not None
-  end_loc = self->tok->loc;
+  let end_loc = self->tok->loc;
   self->expect_and_consume_semi("Expected ';' after 'type'", nullptr);
-  decl = TypeDecl::new(start_loc, end_loc, type_name, aliased_type);
+  let decl = TypeDecl::new(start_loc, end_loc, type_name, aliased_type);
   self->cur_scope->add_decl(decl);
   return decl;
 }
 
 fn Parser::parse_struct_decl(self: Parser*) -> StructDecl* {
   // assert self.tok.ty == Tok.KW_STRUCT, "Not a struct decl"
-  let start_loc: Loc;
-  let type_name: CStr;
-  let semi_tok: Tok;
-  let cur_decl: Decl*;
-  let cur_struct_decl: StructDecl*;
-  let cur_type: StructType*;
-  start_loc = self->consume_token();
-  semi_tok = TOK_SEMI;
+  let start_loc = self->consume_token();
+  let semi_tok = TOK_SEMI;
   if (self->tok->ty != TOK_IDENT) {
     diag(self->tok->loc, "Expected identifier as declaration name", DIAG_ERROR);
     self->skip_until(&semi_tok, 1, false, false);
     return nullptr;
   }
-  type_name = cast<IdentInfo*>(self->tok->value)->val;
-  cur_decl = self->cur_scope->lookup_named_decl(type_name);
+  let type_name = cast<IdentInfo*>(self->tok->value)->val;
+  let cur_decl = self->cur_scope->lookup_named_decl(type_name);
   if (cur_decl != nullptr) if (cur_decl->kind != DECLKIND_STRUCT) {
     let s: String;
     s.format("name '%s' is already in use", type_name);
@@ -386,23 +338,21 @@ fn Parser::parse_struct_decl(self: Parser*) -> StructDecl* {
     self->skip_until(&semi_tok, 1, false, false);
     return nullptr;
   }
-  cur_type = nullptr;
+  let cur_type: StructType* = nullptr;
+  let cur_struct_decl: StructDecl*;
   if (cur_decl != nullptr) {
     cur_type = cast<StructType*>(cast<StructDecl*>(cur_decl)->ty); // should always be true
     if (!cur_type->is_incomplete) {
-      let loc: Loc;
-      loc = self->tok->loc;
+      let loc = self->tok->loc;
       self->consume_token();
       if (self->tok->ty == TOK_SEMI) {
         self->cur_scope->remove_decl(cur_decl); // replace with new decl, TODO: get correct scope
-        let end_loc: Loc;
-        end_loc = self->consume_token();
+        let end_loc = self->consume_token();
         cur_struct_decl = StructDecl::new(start_loc, end_loc, type_name, cur_type);
         self->cur_scope->add_decl(cur_struct_decl);
         return cur_struct_decl;
       }
-      let s: String;
-      s.format("struct '%s' was already defined", type_name);
+      let s = String::format("struct '%s' was already defined", type_name);
       diag(loc, s.data, DIAG_ERROR);
       s.destroy();
       self->skip_until(&semi_tok, 1, false, false);
@@ -430,8 +380,7 @@ fn Parser::parse_struct_decl_inner(self: Parser*, cur_type: StructType*, cur_dec
   self->consume_brace();
   cur_decl->fields.init();
   cur_type->fields.init();
-  let has_super: bool;
-  has_super = false;
+  let has_super = false;
   if (self->tok->ty == TOK_IDENT) {
     if (strcmp(cast<IdentInfo*>(self->tok->value)->val, "super") == 0) {
       has_super = true;
@@ -439,8 +388,7 @@ fn Parser::parse_struct_decl_inner(self: Parser*, cur_type: StructType*, cur_dec
     }
   }
   while (self->tok->ty != TOK_RBRACE) {
-    let field: FieldDecl*;
-    field = self->parse_field_decl();
+    let field = self->parse_field_decl();
     if (field != nullptr) {
       cur_decl->fields.push(field);
       cur_type->fields.push(field->name);
@@ -465,11 +413,8 @@ fn Parser::parse_struct_decl_inner(self: Parser*, cur_type: StructType*, cur_dec
 
 fn Parser::parse_field_decl(self: Parser*) -> FieldDecl* {
   let common: __EndVarDeclCommon;
-  let decl: FieldDecl*;
   if (!self->parse_end_var_decl_common(&common)) return nullptr;
-  let end_loc: Loc;
-  end_loc = self->tok->loc;
+  let end_loc = self->tok->loc;
   self->expect_and_consume_semi("Expected ';' after field decl", nullptr);
-  decl = FieldDecl::new(common.sl, end_loc, common.name, common.ty);
-  return decl;
+  return FieldDecl::new(common.sl, end_loc, common.name, common.ty);
 }

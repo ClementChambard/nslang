@@ -19,9 +19,7 @@ fn sema::get_expr_range(e: Expr*, start: Loc*, end: Loc*) {
 
 fn sema::invalid_operands(loc: Loc, lhs: Expr*, rhs: Expr*, res: OperandResult*) {
   // OriginalOperand OrigLHS(LHS.get()), OrigRHS(RHS.get());
-  let s: String;
-  s.init();
-  s.push_cstr("invalid operands to binary expression (");
+  let s = String::from_cstr("invalid operands to binary expression (");
   lhs->ty->str_append(&s);
   s.push_cstr(" and ");
   rhs->ty->str_append(&s);
@@ -36,8 +34,7 @@ fn sema::invalid_operands(loc: Loc, lhs: Expr*, rhs: Expr*, res: OperandResult*)
 }
 
 fn sema::default_function_array_conversion(e: Expr*, diagnose: bool) -> Expr* {
-  let ty: Type*;
-  ty = e->ty;
+  let ty = e->ty;
   // assert ty is not None, "default_function_array_conversion - missing type"
   if (ty->kind == TYPEKIND_FUNCTION) {
     // TODO: cast to function ptr
@@ -57,21 +54,18 @@ fn sema::default_lvalue_conversion(e: Expr*) -> Expr* {
   if (e->ty->kind == TYPEKIND_ARRAY) return e;
   // if (T->isRecordType()) return E;
   // CheckForNullPointerDereference(*this, E);
-  let ck: CastKind;
-  ck = CK_LVALUE_TO_RVALUE; // T->isNullPtrType() ? CK_NullToPointer : CK_LValueToRValue;
+  let ck = CK_LVALUE_TO_RVALUE; // T->isNullPtrType() ? CK_NullToPointer : CK_LValueToRValue;
   return ImplicitCastExpr::new(e->ty, VK_PRVALUE, ck, e);
 }
 
 fn sema::default_function_array_lvalue_conversion(e: Expr*, diagnose: bool) -> Expr* {
-  let res: Expr*;
-  res = sema::default_function_array_conversion(e, diagnose);
+  let res = sema::default_function_array_conversion(e, diagnose);
   if (res == nullptr) return nullptr;
   return sema::default_lvalue_conversion(res);
 }
 
 fn sema::usual_unary_conversions(expr: Expr*) -> Expr* {
-  let e: Expr*;
-  e = sema::default_function_array_lvalue_conversion(expr, true);
+  let e = sema::default_function_array_lvalue_conversion(expr, true);
   if (e == nullptr) return nullptr;
   // ty = e.ty
   // assert ty is not None, "Missing type"
@@ -104,10 +98,8 @@ fn sema::usual_arithmetic_conversions(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_
   if (rhs_r == nullptr) return;
   rhs = rhs_r; res->rhs = rhs;
 
-  let lhs_type: Type*;
-  let rhs_type: Type*;
-  lhs_type = lhs->ty->get_unqualified();
-  rhs_type = rhs->ty->get_unqualified();
+  let lhs_type = lhs->ty->get_unqualified();
+  let rhs_type = rhs->ty->get_unqualified();
 
   if (lhs_type == rhs_type) {  // if (Context.hasSameType(LHSType, RHSType)) return Context.getCommonSugaredType(LHSType, RHSType);
     res->ty = lhs_type;
@@ -118,8 +110,7 @@ fn sema::usual_arithmetic_conversions(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_
   if (!lhs_type->is_arithmetic_type()) return;
   if (!rhs_type->is_arithmetic_type()) return;
 
-  let lhs_unpromoted_type: Type*;
-  lhs_unpromoted_type = lhs_type;
+  let lhs_unpromoted_type = lhs_type;
   if (lhs_type == Type::get_builtin(BTK_BOOL)) { // if (Context.isPromotableIntegerType(LHSType)) LHSType = Context.getPromotedIntegerType(LHSType);
       lhs_type = Type::get_builtin(BTK_I64);
   }
@@ -146,8 +137,7 @@ fn sema::usual_arithmetic_conversions(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_
 }
 
 fn sema::check_arithmetic_op_pointer_operand(loc: Loc, operand: Expr*) -> bool {
-  let res_type: Type*;
-  res_type = operand->ty;
+  let res_type = operand->ty;
   if (operand->ty->kind != TYPEKIND_POINTER) return true;
 
   // pointee_ty = res_type.subtype
@@ -260,9 +250,8 @@ fn sema::check_addition_operands(lhs: Expr*, rhs: Expr*, tok_loc: Loc, opc: Bina
     // if (CompLHSTy) *CompLHSTy = comp_type;
     return;
   }
-  let pexp: Expr*; let iexp: Expr*;
-  pexp = lhs;
-  iexp = rhs;
+  let pexp = lhs;
+  let iexp = rhs;
   if (pexp->ty->kind != TYPEKIND_POINTER) {
     pexp = rhs;
     iexp = lhs;
@@ -320,14 +309,14 @@ fn sema::check_remainder_operands(lhs: Expr*, rhs: Expr*, loc: Loc, is_comp_assi
 }
 
 fn sema::check_shift_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, is_comp_assign: bool, res: OperandResult*) {
-  let old_lhs: Expr*; let lhs_r: Expr*; let rhs_r: Expr*;
   res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
-  old_lhs = lhs;
+  let old_lhs = lhs;
+  let lhs_r: Expr*;
+  let rhs_r: Expr*;
   lhs_r = sema::usual_unary_conversions(lhs);
   if (lhs_r != nullptr) return;
   lhs = lhs_r; res->lhs = lhs;
-  let lhs_type: Type*;
-  lhs_type = lhs->ty;
+  let lhs_type = lhs->ty;
   if (is_comp_assign) lhs = old_lhs; res->lhs = lhs;
   rhs_r = sema::usual_unary_conversions(rhs);
   if (rhs_r != nullptr) return;
@@ -342,12 +331,10 @@ fn sema::check_shift_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOpera
 }
 
 fn sema::check_bitwise_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, res: OperandResult*) {
-  let is_comp_assign: bool;
-  is_comp_assign = ((opc == BOK_ANDASSIGN) | (opc == BOK_ORASSIGN) | (opc == BOK_XORASSIGN));
+  let is_comp_assign = (opc == BOK_ANDASSIGN) || (opc == BOK_ORASSIGN) || (opc == BOK_XORASSIGN);
   // if opc == BOK_AND: diagnose_logical_not_on_lhs_of_check(lhs, rhs, loc, opc)
   // if lhs.ty.has_floating_representation() or rhs.ty.has_floating_representation(): return invalid_operands(loc, lhs, rhs)
   res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
-  let lhs_result: Expr*; let rhs_result: Expr*;
   let result: OperandResult;
   sema::usual_arithmetic_conversions(lhs, rhs, loc, is_comp_assign, &result);
   if (result.lhs == nullptr) return;
@@ -390,11 +377,10 @@ fn sema::check_logical_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOpe
   //     }
   // }
 
-  let lhs_res: Expr*; let rhs_res: Expr*;
-  lhs_res = sema::perform_contextually_convert_to_bool(lhs);
+  let lhs_res = sema::perform_contextually_convert_to_bool(lhs);
   if (lhs_res == nullptr) return sema::invalid_operands(loc, lhs, rhs, res);
   lhs = lhs_res;
-  rhs_res = sema::perform_contextually_convert_to_bool(rhs);
+  let rhs_res = sema::perform_contextually_convert_to_bool(rhs);
   if (rhs_res == nullptr) return sema::invalid_operands(loc, lhs, rhs, res);
   res->lhs = lhs; res->rhs = rhs_res; res->ty = Type::get_builtin(BTK_BOOL);
 }
@@ -415,14 +401,12 @@ fn sema::check_assignment_operands(lhs: Expr*, rhs: Expr*, op_loc: Loc, compound
   res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
   if (sema::check_for_modifiable_lvalue(lhs, op_loc)) return;
 
-  let lhs_type: Type*;
-  lhs_type = lhs->ty;
+  let lhs_type = lhs->ty;
   // rhs_type = compound_type if compound_type is not None else rhs.ty
   // conv_ty = None
   if (compound_type == nullptr) {
       // TODO:
-      let rhs_r: Expr*;
-      rhs_r = sema::default_function_array_lvalue_conversion(rhs, true);
+      let rhs_r = sema::default_function_array_lvalue_conversion(rhs, true);
       // rhs_check = rhs
       // check_identity_field_assignment(lhs_expr, rhs_check, op_loc, *this);
       // conv_ty = check_single_assignment_constraints(lhs_type, rhs);
@@ -442,10 +426,9 @@ fn sema::check_assignment_operands(lhs: Expr*, rhs: Expr*, op_loc: Loc, compound
 
 fn sema::check_compare_operands(lhs: Expr*, rhs: Expr*, loc: Loc, opc: BinaryOperatorKind, res: OperandResult*) {
   res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
-  let lhs_r: Expr*; let rhs_r: Expr*;
-  lhs_r = sema::default_function_array_lvalue_conversion(lhs, true);
+  let lhs_r = sema::default_function_array_lvalue_conversion(lhs, true);
   if (lhs_r == nullptr) return;
-  rhs_r = sema::default_function_array_lvalue_conversion(rhs, true);
+  let rhs_r = sema::default_function_array_lvalue_conversion(rhs, true);
   if (rhs_r == nullptr) return;
   res->lhs = lhs_r; res->rhs = rhs_r; res->ty = Type::get_builtin(BTK_BOOL);
   // TODO: lot bigger...
@@ -466,10 +449,8 @@ fn sema::imp_cast_expr_to_type(e: Expr*, ty: Type*, kind: CastKind, vk: ValueKin
   // diagnose_zero_to_nullptr_conversion(kind, e);
   // if (Context.hasAnyFunctionEffects() && !isCast(CCK) && kind != CK_NullToPointer && kind != CK_NullToMemberPointer)
   //   diagnoseFunctionEffectConversion(Ty, E->getType(), E->getBeginLoc());
-  let expr_ty: Type*;
-  let type_ty: Type*;
-  expr_ty = e->ty;  // get_canonical_type
-  type_ty = ty;  // get_canonical_type
+  let expr_ty = e->ty;  // get_canonical_type
+  let type_ty = ty;  // get_canonical_type
 
   if (expr_ty == type_ty) return e;
 
@@ -494,12 +475,10 @@ fn sema::imp_cast_expr_to_type(e: Expr*, ty: Type*, kind: CastKind, vk: ValueKin
 }
 
 fn sema::build_bin_op(scope: Scope*, tok_loc: Loc, opc: BinaryOperatorKind, lhs: Expr*, rhs: Expr*) -> BinaryExpr* {
-    let vk: ValueKind;
-    vk = VK_PRVALUE;
+    let vk = VK_PRVALUE;
     // check both type support
-    let is_comp: bool;
+    let is_comp = false;
     let res: OperandResult;
-    is_comp = false;
     res.ty = nullptr;
     if (opc == BOK_ASSIGN) {
       sema::check_assignment_operands(lhs, rhs, tok_loc, nullptr, opc, &res);
@@ -581,18 +560,15 @@ fn sema::check_address_of_operand(e: Expr*, op_loc: Loc) -> Type* {
 }
 
 fn sema::check_indirection_operand(e: Expr*, op_loc: Loc) -> Type* {
-  let op: Expr*; let op_ty: Type*; let result: Type*;
-  op = sema::usual_unary_conversions(e);
+  let op = sema::usual_unary_conversions(e);
   if (op == nullptr) return nullptr;
-  op_ty = op->ty;
-  result = nullptr;
+  let op_ty = op->ty;
+  let result: Type* = nullptr;
   // if (isa<CXXReinterpretCastExpr>(Op)) { QualType OpOrigType = Op->IgnoreParenCasts()->getType(); S.CheckCompatibleReinterpretCast(OpOrigType, OpTy, /*IsDereference*/true, Op->getSourceRange()); }
   if (op_ty->kind == TYPEKIND_POINTER) {
     result = cast<PointerType*>(op_ty)->subtype;
   } else {
-    let s: String;
-    s.init();
-    s.push_cstr("indirection requires pointer operand (");
+    let s = String::from_cstr("indirection requires pointer operand (");
     op_ty->str_append(&s);
     s.push_cstr(" invalid)");
     diag(op_loc, s.data, DIAG_ERROR); // [op.get_range()])
@@ -608,10 +584,9 @@ fn sema::check_indirection_operand(e: Expr*, op_loc: Loc) -> Type* {
 
 fn sema::build_unary_op(scope: Scope*, op_loc: Loc, opc: UnaryOperatorKind, arg: Expr*) -> UnaryExpr* {
   // TODO: checks and possible conversion (change type for '*' and '&')
-  let input: Expr*; let vk: ValueKind; let result_type: Type*;
-  input = arg;
-  vk = VK_PRVALUE;
-  result_type = nullptr;
+  let input = arg;
+  let vk = VK_PRVALUE;
+  let result_type: Type* = nullptr;
   // can_overflow = False
 
   // if (opc == (UOK_PREINC | UOK_PREDEC | UOK_POSTINC | UOK_POSTDEC)) {
@@ -635,9 +610,7 @@ fn sema::build_unary_op(scope: Scope*, op_loc: Loc, opc: UnaryOperatorKind, arg:
     if (result_type->is_arithmetic_type()) {
     } else if ((opc == UOK_PLUS) & (result_type->kind == TYPEKIND_POINTER)) {
     } else {
-      let s: String;
-      s.init();
-      s.push_cstr("invalid argument type ");
+      let s = String::from_cstr("invalid argument type ");
       result_type->str_append(&s);
       s.push_cstr(" to unary expression");
       diag(op_loc, s.data, DIAG_ERROR); // [input.get_range()],)
@@ -649,9 +622,7 @@ fn sema::build_unary_op(scope: Scope*, op_loc: Loc, opc: UnaryOperatorKind, arg:
     if (input == nullptr) return nullptr;
     result_type = input->ty;
     if (!result_type->is_integer_type()) {
-      let s: String;
-      s.init();
-      s.push_cstr("invalid argument type ");
+      let s = String::from_cstr("invalid argument type ");
       result_type->str_append(&s);
       s.push_cstr(" to unary expression");
       diag(op_loc, s.data, DIAG_ERROR); // [input.get_range()],)
@@ -665,9 +636,7 @@ fn sema::build_unary_op(scope: Scope*, op_loc: Loc, opc: UnaryOperatorKind, arg:
     if (result_type->is_scalar_type()) { // and not isScopedEnumerationType(resultType):
       input = sema::imp_cast_expr_to_type(input, Type::get_builtin(BTK_BOOL), sema::scalar_type_to_boolean_cast_kind(result_type), VK_PRVALUE);
     } else {
-      let s: String;
-      s.init();
-      s.push_cstr("invalid argument type ");
+      let s = String::from_cstr("invalid argument type ");
       result_type->str_append(&s);
       s.push_cstr(" to unary expression");
       diag(op_loc, s.data, DIAG_ERROR); // [input.get_range()],)
@@ -683,23 +652,20 @@ fn sema::build_unary_op(scope: Scope*, op_loc: Loc, opc: UnaryOperatorKind, arg:
   // if opc == UOK_ADDROF or opc == UOK_DEREF:
   //     check_array_access(Input)
 
-  let uo: UnaryExpr*;
-  uo = UnaryExpr::new(input, opc, result_type, vk, op_loc);  // ok, can_overflow, cur_fp_feature_overrides()
+  let uo = UnaryExpr::new(input, opc, result_type, vk, op_loc);  // ok, can_overflow, cur_fp_feature_overrides()
   // if opc == UOK_DEREF and not isinstance(uo.ty, ArrayType): ExprEvalContexts.back().PossibleDerefs.insert(UO);
   return uo;
 }
 
 fn sema::act_on_bin_op(scope: Scope*, tok_loc: Loc, kind: Tok, lhs: Expr*, rhs: Expr*) -> BinaryExpr* {
-  let opc: BinaryOperatorKind;
-  opc = binary_operator_kind_from_tok(kind);
+  let opc = binary_operator_kind_from_tok(kind);
   // assert lhs is not None and rhs is not None, "missing operand to binary op"
   // diagnose_bin_op_precedence(opc, tok_loc, lhs_expr, rhs_expr)
   return sema::build_bin_op(scope, tok_loc, opc, lhs, rhs);
 }
 
 fn sema::act_on_unary_op(scope: Scope*, op_loc: Loc, op: Tok, arg: Expr*) -> UnaryExpr* {
-  let opc: UnaryOperatorKind;
-  opc = unary_operator_kind_from_tok(op);
+  let opc = unary_operator_kind_from_tok(op);
   return sema::build_unary_op(scope, op_loc, opc, arg);
 }
 
@@ -711,17 +677,12 @@ fn sema::act_on_postfix_unary_op(scope: Scope*, op_loc: Loc, op: Tok, arg: Expr*
 }
 
 fn sema::lookup_field_in_struct(struct_type: StructType*, name: CStr, out_type: Type**) -> i64 {
-  let offset: i64;
-  offset = 0;
-  let i: i64;
-  i = 0;
+  let offset = 0;
+  let i = 0;
   while (i < struct_type->fields.len) {
-    let al: i64;
-    let ty: Type*;
-    ty = cast<Type*>(struct_type->fields[i+1]);
-    al = ty->get_align();
-    let a: i64;
-    a = (offset % al);
+    let ty = cast<Type*>(struct_type->fields[i+1]);
+    let al = ty->get_align();
+    let a = (offset % al);
     if (a != 0) offset += al - a;
     if (strcmp(cast<CStr>(struct_type->fields[i]), name) == 0) {
       if (out_type != nullptr) *out_type = ty;
@@ -730,8 +691,7 @@ fn sema::lookup_field_in_struct(struct_type: StructType*, name: CStr, out_type: 
     offset += ty->get_size();
     i += 2;
   }
-  let super_type: Type*;
-  super_type = struct_type->super_type();
+  let super_type = struct_type->super_type();
   if (super_type != nullptr) if (super_type->kind == TYPEKIND_STRUCT) {
     return sema::lookup_field_in_struct(cast<StructType*>(super_type), name, out_type);
   }
@@ -739,10 +699,8 @@ fn sema::lookup_field_in_struct(struct_type: StructType*, name: CStr, out_type: 
 }
 
 fn sema::lookup_method_in_struct(struct_type: StructType*, name: CStr, loc: Loc) -> FnDecl* {
-  let i: i64;
-  let method: FnDecl*;
-  method = nullptr;
-  i = 0;
+  let i = 0;
+  let method: FnDecl* = nullptr;
   while (i < struct_type->methods.len) {
     if (strcmp(cast<CStr>(struct_type->methods[i]), name) == 0) {
       method = cast<FnDecl*>(struct_type->methods[i+1]);
@@ -759,8 +717,7 @@ fn sema::lookup_method_in_struct(struct_type: StructType*, name: CStr, loc: Loc)
       }
     }
   }
-  let s: String;
-  s.format("method '%s' of ", name);
+  let s = String::format("method '%s' of ", name);
   cast<Type*>(struct_type)->str_append(&s);
   s.push_cstr(" can't be called because it does not have a self argument");
   diag(loc, s.data, DIAG_ERROR);
@@ -769,10 +726,9 @@ fn sema::lookup_method_in_struct(struct_type: StructType*, name: CStr, loc: Loc)
 }
 
 fn sema::build_member_reference_expr(base: Expr*, base_type: Type*, oploc: Loc, is_arrow: bool, name: CStr, name_loc: Loc) -> Expr* {
-  let struct_type: StructType*;
+  let struct_type: StructType* = nullptr;
   let rge: LocRge;
   let arr: Expr**;
-  struct_type = nullptr;
   if (is_arrow) {
     if ((base_type->kind == TYPEKIND_POINTER) & (cast<PointerType*>(base_type)->subtype->kind == TYPEKIND_STRUCT)) {
       base = sema::default_lvalue_conversion(base);
@@ -818,26 +774,21 @@ fn sema::build_member_reference_expr(base: Expr*, base_type: Type*, oploc: Loc, 
 fn sema::act_on_member_access_expr(scope: Scope*, base: Expr*, oploc: Loc, opkind: Tok, ss: void*, name: UnqualifiedId*) -> Expr* {
   // DeclarationNameInfo name_info
   // assert name.value is not None
-  let name_info: CStr;
-  let is_arrow: bool;
-  let first_qualifier_in_scope: void*;
-  name_info = name->value->val;
-  is_arrow = opkind == TOK_ARROW;
+  let name_info = name->value->val;
+  let is_arrow = opkind == TOK_ARROW;
   
   // result = maybe_convert_paren_list_expr_to_paren_expr(scope, base)
   // if result is None: return None
   // base = result
   
-  let res: Expr*;
-  res = sema::build_member_reference_expr(base, base->ty, oploc, is_arrow, name_info, name->start_location);
+  let res = sema::build_member_reference_expr(base, base->ty, oploc, is_arrow, name_info, name->start_location);
   // if res is not None and isinstance(res, MemberExpr):
   //     check_member_access_of_no_deref(res)
   return res;
 }
 
 fn sema::check_boolean_condition(loc: Loc, cond_expr: Expr*, is_constexpr: bool, fst_checks: bool) -> Expr* {
-  let e: Expr*;
-  e = sema::perform_contextually_convert_to_bool(cond_expr);
+  let e = sema::perform_contextually_convert_to_bool(cond_expr);
   if (!is_constexpr) return e;
   if (e == nullptr) return e;
   exit(1);
@@ -849,8 +800,7 @@ fn sema::check_boolean_condition(loc: Loc, cond_expr: Expr*, is_constexpr: bool,
 
 fn sema::check_conditional_operands(cond: Expr*, lhs: Expr*, rhs: Expr*, vk: ValueKind, question_loc: Loc, res: CondOperandResult*) {
   res->vk = VK_PRVALUE; res->cond = cond; res->lhs = lhs; res->rhs = rhs; res->ty = nullptr;
-  let cond_res: Expr*;
-  cond_res = sema::check_boolean_condition(0, cond, false, true);
+  let cond_res = sema::check_boolean_condition(0, cond, false, true);
   if (cond_res == nullptr) return;
   res->cond = cond_res;
   // TODO: Check value kind and type of lhs and rhs. For now, assume its the exact same
@@ -879,8 +829,7 @@ fn sema::act_on_conditional_op(question_loc: Loc, colon_loc: Loc, cond_expr: Exp
 #include sema_literal.nsh
 
 fn sema::act_on_numeric_constant(tok: Token*) -> IntegerLiteral* {
-  let parser: NumLiteralParser;
-  parser.init(tok);
+  let parser = NumLiteralParser::init(tok);
   if (parser.had_error) diag(tok->loc, "Error parsing numeric constant", DIAG_ERROR);
   if (parser.ty->is_integer_type()) return IntegerLiteral::new(parser.res, parser.ty, tok->loc);
   // assert False, "float not implemented"
@@ -888,8 +837,7 @@ fn sema::act_on_numeric_constant(tok: Token*) -> IntegerLiteral* {
 }
 
 fn sema::act_on_character_constant(tok: Token*) -> IntegerLiteral* {
-  let parser: CharLiteralParser;
-  parser.init(tok);
+  let parser = CharLiteralParser::init(tok);
   if (parser.had_error) diag(tok->loc, "Error parsing char constant", DIAG_ERROR);
   if (parser.ty->is_integer_type()) return IntegerLiteral::new(parser.res, parser.ty, tok->loc);
   // assert False, "incorrect type for char constant"
@@ -904,27 +852,21 @@ fn sema::act_on_bool_literal(op_loc: Loc, kind: Tok) -> BoolLiteral* {
 fn sema::act_on_string_literal(string_toks: Token**, string_toks_count: i64) -> StringLiteral* {
   // assert len(string_toks) > 0, "Must have at least one string!"
   // expanded_toks = []
-  let parser: StringLiteralParser;
-  parser.init(string_toks, string_toks_count, false);
+  let parser = StringLiteralParser::init(string_toks, string_toks_count, false);
 
   if (parser.had_error) return nullptr;
 
-  let locs: Loc*;
-  locs = malloc(sizeof(Loc) * string_toks_count);
-  let i: i64;
-  i = 0;
+  let locs: Loc* = malloc(sizeof(Loc) * string_toks_count);
+  let i = 0;
   while (i < string_toks_count) {
     locs[i] = string_toks[i]->loc;
     i += 1;
   }
 
-  let ty: Type*;
-  ty = Type::get_builtin(BTK_I8);
-  let kind: CStr;
-  kind = "ordinary";
+  let ty = Type::get_builtin(BTK_I8);
+  let kind: CStr = "ordinary";
   // TODO: multiple char_ty and kind
-  let str_ty: Type*;
-  str_ty = Type::get_array(ty, parser.get_num_string_chars());
+  let str_ty = Type::get_array(ty, parser.get_num_string_chars());
   return StringLiteral::new(parser.get_string(), locs, string_toks_count, kind, str_ty);
 }
 
@@ -938,8 +880,7 @@ fn sema::act_on_nullptr_literal(loc: Loc) -> Expr* {
 }
 
 fn sema::act_on_explicit_cast(ty: Type*, e: Expr*, sl: Loc, el: Loc) -> Expr* {
-  let ics: ImplicitConversionSequence*;
-  ics = sema::try_implicit_conversion(e, ty, true);
+  let ics = sema::try_implicit_conversion(e, ty, true);
   return sema::perform_implicit_conversion(e, ty, ics);
 }
 
@@ -958,14 +899,12 @@ fn sema::act_on_sizeof_expr(ty: Type*, expr: Expr*, sl: Loc, el: Loc) -> SizeofE
 }
 
 fn sema::act_on_scoped_identifier(scope: Scope*, ii: IdentInfo*, loc: Loc) -> StructType* {
-  let maybe_struct_decl: NamedDecl*;
-  maybe_struct_decl = scope->lookup_named_decl(ii->val);
+  let maybe_struct_decl = scope->lookup_named_decl(ii->val);
   if (maybe_struct_decl != nullptr) if (maybe_struct_decl->kind == DECLKIND_STRUCT) {
     // assert isinstance(maybe_struct_decl.ty, StructType)
     return cast<StructType*>(cast<StructDecl*>(maybe_struct_decl)->ty);
   }
-  let s: String;
-  s.format("'%s' does not name a struct type", ii->val);
+  let s = String::format("'%s' does not name a struct type", ii->val);
   diag(loc, s.data, DIAG_ERROR);
   s.destroy();
   return nullptr;
@@ -1031,8 +970,7 @@ fn sema::act_on_finish_full_expr(fe: Expr*, cc: Loc, discarded_value: bool, is_c
 }
 
 fn sema::act_on_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: Expr**, arg_exprs_count: i64, rparen_loc: Loc) -> Expr* {
-  let call: CallExpr*;
-  call = cast<CallExpr*>(sema::build_call_expr(scope, fun, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, false, true));
+  let call = cast<CallExpr*>(sema::build_call_expr(scope, fun, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, false, true));
   if (call == nullptr) return nullptr;
 
   // if (const auto *ULE = dyn_cast<UnresolvedLookupExpr>(Fn); ULE && ULE->hasExplicitTemplateArgs() && ULE->decls_begin() == ULE->decls_end()) {
@@ -1055,8 +993,7 @@ fn sema::act_on_array_subscript_expr(scope: Scope*, base: Expr*, lbloc: Loc, arg
   // }
   // assert len(arg_exprs) == 1, "Unsupported multiple arg subscript"
 
-  let res: Expr*;
-  res = sema::create_builtin_array_subscript_expr(base, lbloc, arg_exprs[0], rbloc);
+  let res = sema::create_builtin_array_subscript_expr(base, lbloc, arg_exprs[0], rbloc);
   // if res is not None and isinstance(res, ArraySubscriptExpr):
   //     check_subscript_access_of_no_deref(res)
 
@@ -1066,8 +1003,7 @@ fn sema::act_on_array_subscript_expr(scope: Scope*, base: Expr*, lbloc: Loc, arg
 fn sema::build_decl_ref_expr_nns(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr, ii: IdentInfo*, nameloc: Loc, nns: void*) -> DeclRefExpr* {
   // bool RefersToCapturedVariable = isa<VarDecl, BindingDecl>(D) && NeedToCaptureVariable(D, NameInfo.getLoc());
 
-  let e: DeclRefExpr*;
-  e = DeclRefExpr::new(nns, d, name, ii, nameloc, ty, vk);
+  let e = DeclRefExpr::new(nns, d, name, ii, nameloc, ty, vk);
   // , getNonOdrUseReasonInCurrentContext(D)) ctx, nns, refers..., template ...
   // MarkDeclRefReferenced(E);
   
@@ -1095,10 +1031,8 @@ fn sema::build_decl_ref_expr(d: ValueDecl*, ty: Type*, vk: ValueKind, name: CStr
 fn sema::act_on_id_expression(s: Scope*, ss: void*, ii: IdentInfo *, iloc: Loc, has_trailing_lparen: bool, keyword_replacement: Token*) -> Expr* {
   // if (SS.isInvalid()) return ExprError();
   // assert ii is not None
-  let name_string: String;
-  name_string.from_cstr(ii->val);
-  let nameloc: Loc;
-  nameloc = iloc;
+  let name_string = String::from_cstr(ii->val);
+  let nameloc = iloc;
 
   let ssname: CStr;
   // XXX: ssname = ss->name;
@@ -1109,8 +1043,7 @@ fn sema::act_on_id_expression(s: Scope*, ss: void*, ii: IdentInfo *, iloc: Loc, 
   lookup_decl = s->lookup_named_decl(name_string.data);
 
   if (lookup_decl == nullptr) {
-    let s: String;
-    s.format("Undeclared identifier '%s'", name_string.data);
+    let s = String::format("Undeclared identifier '%s'", name_string.data);
     diag(nameloc, s.data, DIAG_ERROR);
     s.destroy();
     name_string.destroy();
@@ -1121,15 +1054,13 @@ fn sema::act_on_id_expression(s: Scope*, ss: void*, ii: IdentInfo *, iloc: Loc, 
   // if (isPotentialImplicitMemberAccess(SS, R, IsAddressOfOperand))
   //   return BuildPossibleImplicitMemberExpr(SS, 0, R, nullptr, S);
 
-  let out: Expr*;
-  out = sema::build_declaration_name_expr(ss, name_string.data, ii, nameloc, lookup_decl, false);
+  let out = sema::build_declaration_name_expr(ss, name_string.data, ii, nameloc, lookup_decl, false);
   name_string.destroy();
   return out;
 }
 
 fn sema::build_resolved_call_expr(fun: Expr*, ndecl: NamedDecl*, lparen_loc: Loc, args: Expr**, args_count: i64, rparen_loc: Loc, is_exec_config: bool, uses_adl: i64) -> Expr* {
-  let fnty: FunctionType*;
-  fnty = cast<FunctionType*>(cast<FnDecl*>(ndecl)->ty);
+  let fnty = cast<FunctionType*>(cast<FnDecl*>(ndecl)->ty);
 
   let the_call: CallExpr*;
   if (fun->kind == EXPRKIND_METHOD) {
@@ -1143,16 +1074,12 @@ fn sema::build_resolved_call_expr(fun: Expr*, ndecl: NamedDecl*, lparen_loc: Loc
 }
 
 fn sema::gather_arguments_for_call(call_loc: Loc, fdecl: FnDecl*, proto: FunctionType*, args: Expr**, args_count: i64, all_args: DArray*) -> bool {
-  let num_params: i64;
-  num_params = proto->param_count;
-  let i: i64;
-  i = 0;
+  let num_params = proto->param_count;
+  let i = 0;
   while (i < args_count) {
-    let arg: Expr*;
-    arg = args[i];
+    let arg = args[i];
     if (i < num_params) {
-      let proto_arg_type: Type*;
-      proto_arg_type = proto->param_types[i];
+      let proto_arg_type = proto->param_types[i];
       // param = fdecl.param_decls[i]
       if (i >= args_count) return true;
       // InitializedEntity Entity = InitializedEntity::InitializeParameter(Context, Param, proto_arg_type)
@@ -1163,8 +1090,7 @@ fn sema::gather_arguments_for_call(call_loc: Loc, fdecl: FnDecl*, proto: Functio
       // CheckStaticArrayArgument(CallLoc, Param, Arg);
 
       // TODO: actual
-      let ics: ImplicitConversionSequence*;
-      ics = sema::try_implicit_conversion(arg, proto_arg_type, false);
+      let ics = sema::try_implicit_conversion(arg, proto_arg_type, false);
       arg = sema::perform_implicit_conversion(arg, proto_arg_type, ics);
     } else {
       arg = sema::default_function_array_lvalue_conversion(arg, true);
@@ -1183,8 +1109,7 @@ fn sema::build_declaration_name_expr(ss: void*, name: CStr, ii: IdentInfo*, name
   //     return create_recovery_expr(nameloc, nameloc, [])
 
   if (!cast<Decl*>(d)->is_value()) {
-    let s: String;
-    s.format("%s does not refer to a value", name);
+    let s = String::format("%s does not refer to a value", name);
     diag(nameloc, s.data, DIAG_ERROR);
     s.destroy();
     return nullptr;
@@ -1200,11 +1125,9 @@ fn sema::build_declaration_name_expr(ss: void*, name: CStr, ii: IdentInfo*, name
 
   // if (auto *IndirectField = dyn_cast<IndirectFieldDecl>(VD); IndirectField && !IndirectField->isCXXClassMember()) return BuildAnonymousStructUnionMemberReference(SS, NameInfo.getLoc(), IndirectField);
 
-  let ty: Type*;
-  let vk: ValueKind;
-  ty = cast<ValueDecl*>(d)->ty;
+  let ty = cast<ValueDecl*>(d)->ty;
+  let vk = VK_PRVALUE;
   if (ty == nullptr) return nullptr;
-  vk = VK_PRVALUE;
   
   if ((d->kind == DECLKIND_VAR) | (d->kind == DECLKIND_PARAM)) vk = VK_LVALUE;
   if (d->kind == DECLKIND_ENUMVARIANT) {
@@ -1214,8 +1137,7 @@ fn sema::build_declaration_name_expr(ss: void*, name: CStr, ii: IdentInfo*, name
   }
   // TODO: get correct vkind and type depending on decl kind
   
-  let e: Expr*;
-  e = sema::build_decl_ref_expr(cast<ValueDecl*>(d), ty, vk, name, ii, nameloc, ss);
+  let e = sema::build_decl_ref_expr(cast<ValueDecl*>(d), ty, vk, name, ii, nameloc, ss);
   // if (VD->isInvalidDecl() && E) return CreateRecoveryExpr(E->getBeginLoc(), E->getEndLoc(), {E});
   return e;
 }
@@ -1229,12 +1151,10 @@ fn sema::build_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: 
   //# Fn isa BoundMemberType => build_call_to_member_function(scpoe, fn, lparen_loc, arg_exprs, rparen_loc, is_exec_config, allow_recovery)
   //# Fn isa OverloadTy => TODO:
 
-  let naked_fn: Expr*;
-  naked_fn = fn; // .ignore_parens()
+  let naked_fn = fun; // .ignore_parens()
   
   // calling_ndecl_indirectly = False
-  let ndecl: Decl*;
-  ndecl = nullptr;
+  let ndecl: NamedDecl* = nullptr;
   // if isinstance(naked_fn, UnaryExpr):
   //     if naked_fn.opc == UOK_ADDROF:
   //         // calling_ndecl_indirectly = True
@@ -1263,16 +1183,13 @@ fn sema::build_call_expr(scope: Scope*, fun: Expr*, lparen_loc: Loc, arg_exprs: 
   //         return None
   //     check_direct_call_validity(fn, ndecl, arg_exprs);
   
-  return sema::build_resolved_call_expr(fn, ndecl, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, is_exec_config);
+  return sema::build_resolved_call_expr(fun, ndecl, lparen_loc, arg_exprs, arg_exprs_count, rparen_loc, is_exec_config, 0);
 }
 
 fn sema::create_builtin_array_subscript_expr(base: Expr*, lloc: Loc, idx: Expr*, rloc: Loc) -> Expr* {
-  let lhs_expr: Expr*;
-  let rhs_expr: Expr*;
-  let vk: ValueKind;
-  lhs_expr = base;
-  rhs_expr = idx;
-  vk = VK_LVALUE;
+  let lhs_expr = base;
+  let rhs_expr = idx;
+  let vk = VK_LVALUE;
   // lhs_expr = lhs_expr.ignore_implicit()
   // rhs_expr = rhs_expr.ignore_implicit()
   if (lhs_expr->ty->kind == TYPEKIND_ARRAY) if (lhs_expr->value_kind != VK_LVALUE) vk = VK_XVALUE;
@@ -1282,13 +1199,10 @@ fn sema::create_builtin_array_subscript_expr(base: Expr*, lloc: Loc, idx: Expr*,
   rhs_expr = sema::default_function_array_lvalue_conversion(rhs_expr, true);
   if (rhs_expr == nullptr) return nullptr;
 
-  let lhs_ty: Type*;
-  let rhs_ty: Type*;
-  let result_type: Type*;
-  lhs_ty = lhs_expr->ty;
-  rhs_ty = rhs_expr->ty;
+  let lhs_ty = lhs_expr->ty;
+  let rhs_ty = rhs_expr->ty;
+  let result_type: Type* = nullptr;
   // base_expr, index_expr = None, None
-  result_type = nullptr;
   if (lhs_ty->kind == TYPEKIND_POINTER) {
     // base_expr, index_expr = lhs_expr, rhs_expr
     result_type = cast<PointerType*>(lhs_ty)->subtype;
@@ -1314,13 +1228,11 @@ fn sema::create_builtin_array_subscript_expr(base: Expr*, lloc: Loc, idx: Expr*,
   } else if (lhs_ty->kind == TYPEKIND_STRUCT) {
     // Check if super field is pointer
 // fn StructType::deepest_super_field(self: StructType*, name: CStr*) -> Type* {
-    let f: Type*;
     let name: CStr;
-    f = cast<StructType*>(lhs_ty)->deepest_super_field(&name);
+    let f = cast<StructType*>(lhs_ty)->deepest_super_field(&name);
     if (f != nullptr) {
         if (f->kind == TYPEKIND_POINTER) { // TODO: or array type ?
-          let uid: UnqualifiedId*;
-          uid = UnqualifiedId::new();
+          let uid = UnqualifiedId::new();
           uid->set_identifier(IdentInfo::find(name, strlen(name)), lloc);
           lhs_expr = sema::act_on_member_access_expr(nullptr, base, lloc, TOK_PERIOD, nullptr, uid);
           lhs_expr = sema::default_lvalue_conversion(lhs_expr);

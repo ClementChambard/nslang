@@ -33,8 +33,7 @@ fn sema::act_on_decl_stmt(d: Decl*, start_loc: Loc, end_loc: Loc) -> DeclStmt* {
 }
 
 fn sema::act_on_if_stmt(if_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc, then_stmt: Stmt*, else_loc: Loc, else_stmt: Stmt*) -> IfStmt* {
-  let cond_expr: Expr*;
-  cond_expr = sema::check_boolean_condition(if_loc, cond, false, true);
+  let cond_expr = sema::check_boolean_condition(if_loc, cond, false, true);
   if (cond_expr == nullptr) return nullptr;
   cond_expr = sema::act_on_finish_full_expr(cond_expr, if_loc, false, false);
   if (cond_expr == nullptr) return nullptr;
@@ -43,14 +42,12 @@ fn sema::act_on_if_stmt(if_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc, then
 }
 
 fn sema::act_on_start_of_switch_stmt(switch_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc) -> SwitchStmt* {
-  let cond_expr: Expr*;
-  cond_expr = sema::act_on_finish_full_expr(cond, switch_loc, false, false);
+  let cond_expr = sema::act_on_finish_full_expr(cond, switch_loc, false, false);
   if (cond_expr == nullptr) return nullptr;
   if (!cond_expr->ty->is_integral_or_enumeration_type()) return nullptr;
   // if cond_expr.isKnownToHaveBooleanValue(): diag(SwitchLoc, diag::warn_bool_switch_condition) << CondExpr->getSourceRange();
   // set_function_has_branch_into_scope()
-  let ss: SwitchStmt*;
-  ss = SwitchStmt::new(switch_loc, cond_expr, lp_loc, rp_loc, nullptr);
+  let ss = SwitchStmt::new(switch_loc, cond_expr, lp_loc, rp_loc, nullptr);
   // get_cur_function().switch_stack.append(switch_info(ss, False))
   return ss;
 }
@@ -62,8 +59,7 @@ fn sema::act_on_finish_switch_stmt(sl: Loc, stmt: SwitchStmt*, body: Stmt*) -> S
 
 fn sema::act_on_while_stmt(while_loc: Loc, lparen_loc: Loc, cond: Expr*, rparen_loc: Loc, body: Stmt*) -> WhileStmt* {
   // assert cond is not None
-  let cond_expr: Expr*;
-  cond_expr = sema::check_boolean_condition(while_loc, cond, false, true);
+  let cond_expr = sema::check_boolean_condition(while_loc, cond, false, true);
   if (cond_expr == nullptr) return nullptr;
   cond_expr = sema::act_on_finish_full_expr(cond_expr, while_loc, false, false);
   if (cond_expr == nullptr) return nullptr;
@@ -73,8 +69,7 @@ fn sema::act_on_while_stmt(while_loc: Loc, lparen_loc: Loc, cond: Expr*, rparen_
 
 fn sema::act_on_do_stmt(do_loc: Loc, body: Stmt*, while_loc: Loc, lp_loc: Loc, cond: Expr*, rp_loc: Loc) -> DoStmt* {
   // assert cond is not None
-  let cond_expr: Expr*;
-  cond_expr = sema::check_boolean_condition(do_loc, cond, false, true);
+  let cond_expr = sema::check_boolean_condition(do_loc, cond, false, true);
   if (cond_expr == nullptr) return nullptr;
   cond_expr = sema::act_on_finish_full_expr(cond_expr, do_loc, false, false);
   if (cond_expr == nullptr) return nullptr;
@@ -83,8 +78,7 @@ fn sema::act_on_do_stmt(do_loc: Loc, body: Stmt*, while_loc: Loc, lp_loc: Loc, c
 
 fn sema::act_on_default_stmt(default_loc: Loc, colon_loc: Loc, sub_stmt: Stmt*, scope: Scope*) -> DefaultStmt* {
   // if (getCurFunction()->SwitchStack.empty()) {Diag(DefaultLoc, diag::err_default_not_in_switch); return SubStmt;}
-  let ds: DefaultStmt*;
-  ds = DefaultStmt::new(default_loc, colon_loc, sub_stmt);
+  let ds = DefaultStmt::new(default_loc, colon_loc, sub_stmt);
   // getCurFunction()->SwitchStack.back().getPointer()->addSwitchCase(DS);
   return ds;
 }
@@ -133,8 +127,7 @@ fn sema::act_on_case_stmt(case_loc: Loc, e: Expr*, colon_loc: Loc) -> CaseStmt* 
   // assert e is not None, "missing LHS value"
   // if (getCurFunction()->SwitchStack.empty()) {Diag(CaseLoc, diag::err_case_not_in_switch); return StmtError();}
   // if (LHSVal.isInvalid()) {getCurFunction()->SwitchStack.back().setInt(true); return StmtError();}
-  let cs: CaseStmt*;
-  cs = CaseStmt::new(case_loc, colon_loc, nullptr, sema::eval_const_expr(e));
+  let cs = CaseStmt::new(case_loc, colon_loc, nullptr, sema::eval_const_expr(e));
   // getCurFunction()->SwitchStack.back().getPointer()->addSwitchCase(CS);
   return cs;
 }
@@ -145,8 +138,7 @@ fn sema::act_on_case_stmt_body(s: Stmt*, sub_stmt: Stmt*) {
 }
 
 fn sema::act_on_continue_stmt(cl: Loc, cur_scope: Scope*) -> ContinueStmt* {
-  let s: Scope*;
-  s = cur_scope->continue_parent;
+  let s = cur_scope->continue_parent;
   if (s == nullptr) {
     diag(cl, "'continue' statement not in loop statement", DIAG_ERROR);
     return nullptr;
@@ -159,8 +151,7 @@ fn sema::act_on_continue_stmt(cl: Loc, cur_scope: Scope*) -> ContinueStmt* {
 }
 
 fn sema::act_on_break_stmt(bl: Loc, cur_scope: Scope*) -> BreakStmt* {
-  let s: Scope*;
-  s = cur_scope->break_parent;
+  let s = cur_scope->break_parent;
   if (s == nullptr) {
     diag(bl, "'break' statement not in loop or switch statement", DIAG_ERROR);
     return nullptr;
@@ -180,8 +171,7 @@ lib fn sema::check_case_expression(e: Expr*) -> bool { return true; }
 fn sema::act_on_return_stmt(return_loc: Loc, ret_val_expr: Expr*, scope: Scope*, allow_recovery: bool) -> ReturnStmt* {
   if (CUR_FN_DECL == nullptr) return nullptr;
 
-  let fn_ret_type: Type*;
-  fn_ret_type = cast<FunctionType*>(CUR_FN_DECL->ty)->return_type;
+  let fn_ret_type = cast<FunctionType*>(CUR_FN_DECL->ty)->return_type;
 
   // if (fd->isNoReturn()) Diag(ReturnLoc, diag::warn_noreturn_function_has_return_expr) << fd;
   // if (fd->isMain() && RetValExp && isa<CXXBoolLiteralExpr>(RetValExp)) Diag(ReturnLoc, diag::warn_main_returns_bool_literal) << RetValExp->getSourceRange();
@@ -192,8 +182,7 @@ fn sema::act_on_return_stmt(return_loc: Loc, ret_val_expr: Expr*, scope: Scope*,
         ret_val_expr = sema::ignored_value_conversions(ret_val_expr);
         if (ret_val_expr == nullptr) return nullptr;
         ret_val_expr = sema::imp_cast_expr_to_type(ret_val_expr, nullptr, CK_TO_VOID, VK_PRVALUE);
-        let s: String;
-        s.format("void function %s should not return a value", CUR_FN_DECL->name);
+        let s = String::format("void function %s should not return a value", CUR_FN_DECL->name);
         diag(return_loc, s.data, DIAG_ERROR); // add range ret_val_expr.get_range() if ret_val_expr is not none
         s.destroy();
       }

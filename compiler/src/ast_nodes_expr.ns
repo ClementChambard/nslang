@@ -19,17 +19,17 @@ lib fn unary_operator_kind_from_tok(t: Tok) -> UnaryOperatorKind {
 }
 
 lib fn unary_operator_kind_str(k: UnaryOperatorKind) -> CStr {
-  if (k == UOK_POSTINC) return cast<CStr>("post ++");
-  if (k == UOK_POSTDEC) return cast<CStr>("post --");
-  if (k == UOK_PREINC) return cast<CStr>("++");
-  if (k == UOK_PREDEC) return cast<CStr>("--");
-  if (k == UOK_ADDROF) return cast<CStr>("&");
-  if (k == UOK_DEREF) return cast<CStr>("*");
-  if (k == UOK_PLUS) return cast<CStr>("+");
-  if (k == UOK_MINUS) return cast<CStr>("-");
-  if (k == UOK_NOT) return cast<CStr>("~");
-  if (k == UOK_LNOT) return cast<CStr>("!");
-  return cast<CStr>(""); // ... error
+  if (k == UOK_POSTINC) return "post ++";
+  if (k == UOK_POSTDEC) return "post --";
+  if (k == UOK_PREINC) return "++";
+  if (k == UOK_PREDEC) return "--";
+  if (k == UOK_ADDROF) return "&";
+  if (k == UOK_DEREF) return "*";
+  if (k == UOK_PLUS) return "+";
+  if (k == UOK_MINUS) return "-";
+  if (k == UOK_NOT) return "~";
+  if (k == UOK_LNOT) return "!";
+  return ""; // ... error
 }
 
 lib fn UnaryExpr::is_postfix(self: UnaryExpr*) -> bool {
@@ -73,36 +73,36 @@ lib fn binary_operator_kind_from_tok(t: Tok) -> BinaryOperatorKind {
 }
 
 lib fn binary_operator_kind_str(k: BinaryOperatorKind) -> CStr {
-  if (k == BOK_MUL) return cast<CStr>("*");
-  if (k == BOK_DIV) return cast<CStr>("/");
-  if (k == BOK_REM) return cast<CStr>("%");
-  if (k == BOK_ADD) return cast<CStr>("+");
-  if (k == BOK_SUB) return cast<CStr>("-");
-  if (k == BOK_SHL) return cast<CStr>("<<");
-  if (k == BOK_SHR) return cast<CStr>(">>");
-  if (k == BOK_LT) return cast<CStr>("<");
-  if (k == BOK_GT) return cast<CStr>(">");
-  if (k == BOK_LE) return cast<CStr>("<=");
-  if (k == BOK_GE) return cast<CStr>(">=");
-  if (k == BOK_EQ) return cast<CStr>("==");
-  if (k == BOK_NE) return cast<CStr>("!=");
-  if (k == BOK_AND) return cast<CStr>("&");
-  if (k == BOK_XOR) return cast<CStr>("^");
-  if (k == BOK_OR) return cast<CStr>("|");
-  if (k == BOK_LAND) return cast<CStr>("&&");
-  if (k == BOK_LOR) return cast<CStr>("||");
-  if (k == BOK_ASSIGN) return cast<CStr>("=");
-  if (k == BOK_MULASSIGN) return cast<CStr>("*=");
-  if (k == BOK_DIVASSIGN) return cast<CStr>("/=");
-  if (k == BOK_REMASSIGN) return cast<CStr>("%=");
-  if (k == BOK_ADDASSIGN) return cast<CStr>("+=");
-  if (k == BOK_SUBASSIGN) return cast<CStr>("-=");
-  if (k == BOK_SHLASSIGN) return cast<CStr>("<<=");
-  if (k == BOK_SHRASSIGN) return cast<CStr>(">>=");
-  if (k == BOK_ANDASSIGN) return cast<CStr>("&=");
-  if (k == BOK_XORASSIGN) return cast<CStr>("^=");
-  if (k == BOK_ORASSIGN) return cast<CStr>("|=");
-  return cast<CStr>(""); // ... error
+  if (k == BOK_MUL) return "*";
+  if (k == BOK_DIV) return "/";
+  if (k == BOK_REM) return "%";
+  if (k == BOK_ADD) return "+";
+  if (k == BOK_SUB) return "-";
+  if (k == BOK_SHL) return "<<";
+  if (k == BOK_SHR) return ">>";
+  if (k == BOK_LT) return "<";
+  if (k == BOK_GT) return ">";
+  if (k == BOK_LE) return "<=";
+  if (k == BOK_GE) return ">=";
+  if (k == BOK_EQ) return "==";
+  if (k == BOK_NE) return "!=";
+  if (k == BOK_AND) return "&";
+  if (k == BOK_XOR) return "^";
+  if (k == BOK_OR) return "|";
+  if (k == BOK_LAND) return "&&";
+  if (k == BOK_LOR) return "||";
+  if (k == BOK_ASSIGN) return "=";
+  if (k == BOK_MULASSIGN) return "*=";
+  if (k == BOK_DIVASSIGN) return "/=";
+  if (k == BOK_REMASSIGN) return "%=";
+  if (k == BOK_ADDASSIGN) return "+=";
+  if (k == BOK_SUBASSIGN) return "-=";
+  if (k == BOK_SHLASSIGN) return "<<=";
+  if (k == BOK_SHRASSIGN) return ">>=";
+  if (k == BOK_ANDASSIGN) return "&=";
+  if (k == BOK_XORASSIGN) return "^=";
+  if (k == BOK_ORASSIGN) return "|=";
+  return ""; // ... error
 }
 
 lib fn binary_operator_is_compound_assignment(k: BinaryOperatorKind) -> bool {
@@ -112,15 +112,15 @@ lib fn binary_operator_is_compound_assignment(k: BinaryOperatorKind) -> bool {
 }
 
 lib fn cast_kind_to_string(k: CastKind) -> CStr {
-  if (k == CK_NOOP) return cast<CStr>("Noop");
-  if (k == CK_TO_VOID) return cast<CStr>("ToVoid");
-  if (k == CK_POINTER_TO_BOOLEAN) return cast<CStr>("PointerToBoolean");
-  if (k == CK_INTEGRAL_TO_BOOLEAN) return cast<CStr>("IntegralToBoolean");
-  if (k == CK_INTEGRAL_CAST) return cast<CStr>("IntegralCast");
-  if (k == CK_LVALUE_TO_RVALUE) return cast<CStr>("LValueToRValue");
-  if (k == CK_ARRAY_TO_POINTER_DECAY) return cast<CStr>("ArrayToPointerDecay");
-  if (k == CK_FUNCTION_TO_POINTER_DECAY) return cast<CStr>("FunctionToPointerDecay");
-  return cast<CStr>(""); // ... error
+  if (k == CK_NOOP) return "Noop";
+  if (k == CK_TO_VOID) return "ToVoid";
+  if (k == CK_POINTER_TO_BOOLEAN) return "PointerToBoolean";
+  if (k == CK_INTEGRAL_TO_BOOLEAN) return "IntegralToBoolean";
+  if (k == CK_INTEGRAL_CAST) return "IntegralCast";
+  if (k == CK_LVALUE_TO_RVALUE) return "LValueToRValue";
+  if (k == CK_ARRAY_TO_POINTER_DECAY) return "ArrayToPointerDecay";
+  if (k == CK_FUNCTION_TO_POINTER_DECAY) return "FunctionToPointerDecay";
+  return ""; // ... error
 }
 
 lib fn ignore_parens_single_step(e: Expr*) -> Expr* {
@@ -349,14 +349,14 @@ lib fn ParenExpr::dtor(self: ParenExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->
 lib fn UnaryExpr::dtor(self: UnaryExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->arg)); }
 lib fn BinaryExpr::dtor(self: BinaryExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
 lib fn CompoundAssignExpr::dtor(self: CompoundAssignExpr*) { cast<BinaryExpr*>(self)->dtor(); }
-lib fn CallExpr::dtor(self: CallExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->func)); let i: i64; i = 0; while (i < self->args_count) { stmt_ast_free_expr(cast<Stmt*>(self->args[i])); i += 1; } free(self->args); }
+lib fn CallExpr::dtor(self: CallExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->func)); let i = 0; while (i < self->args_count) { stmt_ast_free_expr(cast<Stmt*>(self->args[i])); i++; } free(self->args); }
 lib fn MethodCallExpr::dtor(self: MethodCallExpr*) { cast<MethodCallExpr*>(self)->dtor(); }
 lib fn SizeofExpr::dtor(self: SizeofExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->expr)); }
 lib fn MemberExpr::dtor(self: MemberExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); free(self->name); }
 lib fn MethodExpr::dtor(self: MethodExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->self_object)); }
 lib fn ArraySubscriptExpr::dtor(self: ArraySubscriptExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
 lib fn ConditionalExpr::dtor(self: ConditionalExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->cond)); stmt_ast_free_expr(cast<Stmt*>(self->lhs)); stmt_ast_free_expr(cast<Stmt*>(self->rhs)); }
-lib fn RecoveryExpr::dtor(self: RecoveryExpr*) { let i: i64; i = 0; while (i < self->sub_cnt) { stmt_ast_free_expr(cast<Stmt*>(self->sub[i])); i += 1; } free(self->sub); }
+lib fn RecoveryExpr::dtor(self: RecoveryExpr*) { let i = 0; while (i < self->sub_cnt) { stmt_ast_free_expr(cast<Stmt*>(self->sub[i])); i++; } free(self->sub); }
 lib fn CastExpr::dtor(self: CastExpr*) { stmt_ast_free_expr(cast<Stmt*>(self->expr)); }
 lib fn ImplicitCastExpr::dtor(self: ImplicitCastExpr*) { cast<CastExpr*>(self)->dtor(); }
 lib fn VAArgExpr::dtor(self: VAArgExpr*) {}
@@ -385,7 +385,7 @@ lib fn stmt_ast_free_expr(self: Stmt*) {
 }
 
 lib fn DeclRefExpr::new(nns: void*, d: ValueDecl*, name: CStr, ii: IdentInfo*, nameloc: Loc, ty: Type*, vk: ValueKind) -> DeclRefExpr* { let out: DeclRefExpr*; out = malloc(sizeof(DeclRefExpr)); out->ctor(nns, d, name, ii, nameloc, ty, vk); return out; }
-lib fn IntegerLiteral::new(v: i64, ty: Type*, l: Loc) -> IntegerLiteral* { let out: IntegerLiteral*; out = malloc(sizeof(IntegerLiteral)); out->ctor(v, ty, l); return out; }
+lib fn IntegerLiteral::new(v: i64, ty: Type*, l: Loc) -> IntegerLiteral* { let out = cast<IntegerLiteral*>(malloc(sizeof(IntegerLiteral))); out->ctor(v, ty, l); return out; }
 lib fn BoolLiteral::new(v: bool, ty: Type*, l: Loc) -> BoolLiteral* { let out: BoolLiteral*; out = malloc(sizeof(BoolLiteral)); out->ctor(v, ty, l); return out; }
 lib fn StringLiteral::new(v: CStr, locs: Loc*, locs_count: i64, kind: void*, ty: Type*) -> StringLiteral* { let out: StringLiteral*; out = malloc(sizeof(StringLiteral)); out->ctor(v, locs, locs_count, kind, ty); return out; }
 lib fn ParenExpr::new(l: Loc, r: Loc, val: Expr*) -> ParenExpr* { let out: ParenExpr*; out = malloc(sizeof(ParenExpr)); out->ctor(l, r, val); return out; }

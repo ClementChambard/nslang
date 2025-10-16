@@ -18,10 +18,9 @@ fn DArray::__increase_capacity(self: DArray*) {
   if (self->capacity == 0) {
     self->capacity = 4;
   } else {
-    self->capacity = self->capacity * 2;
+    self->capacity *= 2;
   }
-  let new_size: i64;
-  new_size = self->capacity * sizeof(void*);
+  let new_size = self->capacity * sizeof(void*);
   self->data = realloc(self->data, new_size);
 }
 
@@ -30,41 +29,37 @@ fn DArray::push(self: DArray*, value: void*) {
     self->__increase_capacity();
   }
   self->data[self->len] = value;
-  self->len = self->len + 1;
+  self->len++;
 }
 
 fn DArray::pop(self: DArray*) -> void* {
   if (self->len == 0) return nullptr;
-  self->len = self->len - 1;
-  return self->data[self->len];
+  return self->data[--self->len];
 }
 
 fn DArray::pop_front(self: DArray*) -> void* {
   if (self->len == 0) return nullptr;
-  let to_return: void*;
-  to_return = self->data[0];
+  let to_return = self->data[0];
   self->erase(0);
   return to_return;
 }
 
 fn DArray::erase(self: DArray*, pos: i64) {
-  let i: i64;
-  i = pos;
+  let i = pos;
   while (i < self->len - 1) {
       self->data[i] = self->data[i+1];
       i += 1;
   }
-  self->len = self->len - 1;
+  self->len--;
 }
 
 fn DArray::erase_it(self: DArray*, pos: void**) {
-  let end: void**;
-  end = &(self->end())[-1];
+  let end = &(self->end())[-1];
   while (pos < end) {
       pos[0] = pos[1];
       pos = &pos[1];
   }
-  self->len = self->len - 1;
+  self->len--;
 }
 
 fn DArray::begin(self: DArray*) -> void** {

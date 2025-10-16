@@ -66,8 +66,7 @@ fn Scope::is_function_decl_scope(self: Scope*) -> bool {
 }
 
 fn Scope::is_switch_scope(self: Scope*) -> bool {
-  let s: Scope*;
-  s = self;
+  let s = self;
   while (s != nullptr) {
     if ((s->flags & SF_SWITCH) != 0) return true;
     if ((s->flags & (SF_FN | SF_CLASS | SF_BLOCK | SF_FUNCTION_PROTO)) != 0) return false;
@@ -114,8 +113,7 @@ fn Scope::contains(self: Scope*, other: Scope*) -> bool {
 }
 
 fn Scope::contained_in_prototype_scope(self: Scope*) -> bool {
-  let s: Scope*;
-  s = self;
+  let s = self;
   while (s != nullptr) {
     if (s->is_function_proto_scope()) return true;
     s = s->get_parent();
@@ -137,8 +135,7 @@ fn Scope::add_flags(self: Scope*, flags: i64) {
 }
 
 fn Scope::dump(self: Scope*, out_str: String*) {
-  let flags: i64;
-  flags = self->flags;
+  let flags = self->flags;
   if (self->flags != 0) {
     out_str->push_cstr("Flags: ");
     // TODO: print flags...
@@ -156,8 +153,7 @@ fn Scope::set_is_condition_var_scope(self: Scope*, val: bool) {
 
 fn Scope::get_next_function_prototype_index(self: Scope*) -> i64 {
   // assert (self.flags & ScopeFlags.FUNCTION_PROTO) != 0
-  let i: i64;
-  i = self->prototype_index;
+  let i = self->prototype_index;
   self->prototype_index = self->prototype_index + 1;
   return i;
 }
@@ -175,12 +171,10 @@ fn Scope::contains_decl(self: Scope*, d: Decl*) -> bool {
 }
 
 fn Scope::lookup_named_decl(self: Scope*, decl_name: CStr) -> NamedDecl* {
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < self->decls_in_scope.len) {
     if (cast<Decl*>(self->decls_in_scope[i])->kind >= DECLKIND_NAMED) {
-      let nd: NamedDecl*;
-      nd = cast<NamedDecl*>(self->decls_in_scope[i]);
+      let nd = cast<NamedDecl*>(self->decls_in_scope[i]);
       if (strcmp(nd->name, decl_name) == 0) return nd;
     }
     i += 1;
@@ -192,8 +186,7 @@ fn Scope::lookup_named_decl(self: Scope*, decl_name: CStr) -> NamedDecl* {
 }
 
 fn Scope::new(parent: Scope*, flags: ScopeFlags) -> Scope* {
-  let self: Scope*;
-  self = malloc(sizeof(Scope));
+  let self = cast<Scope*>(malloc(sizeof(Scope)));
   self->any_parent = nullptr;
   self->flags = 0;
   self->depth = 0;

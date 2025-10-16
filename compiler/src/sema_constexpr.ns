@@ -23,8 +23,7 @@ fn sema::eval_const_expr(e: Expr*) -> i64 {
     if (cast<CastExpr*>(e)->cast_kind == CK_INTEGRAL_CAST) return sema::eval_const_expr(cast<CastExpr*>(e)->expr);
   }
   if (e->kind == EXPRKIND_BINARY) {
-    let be: BinaryExpr*;
-    be = cast<BinaryExpr*>(e);
+    let be = cast<BinaryExpr*>(e);
     if (be->opc == BOK_MUL) return sema::eval_const_expr(be->lhs) * sema::eval_const_expr(be->rhs);
     if (be->opc == BOK_DIV) return sema::eval_const_expr(be->lhs) / sema::eval_const_expr(be->rhs);
     if (be->opc == BOK_REM) return sema::eval_const_expr(be->lhs) % sema::eval_const_expr(be->rhs);
@@ -45,16 +44,14 @@ fn sema::eval_const_expr(e: Expr*) -> i64 {
     if (be->opc == BOK_LOR) { if (sema::eval_const_expr(be->lhs) == 1) return 1; return sema::eval_const_expr(be->rhs); }
   }
   if (e->kind == EXPRKIND_UNARY) {
-    let ue: UnaryExpr*;
-    ue = cast<UnaryExpr*>(e);
+    let ue = cast<UnaryExpr*>(e);
     if (ue->opc == UOK_PLUS) return sema::eval_const_expr(ue->arg);
     if (ue->opc == UOK_MINUS) return -sema::eval_const_expr(ue->arg);
     if (ue->opc == UOK_NOT) return ~sema::eval_const_expr(ue->arg);
     if (ue->opc == UOK_LNOT) return cast<i64>(!sema::eval_const_expr(ue->arg));
   }
   if (e->kind == EXPRKIND_CONDITIONAL) {
-    let cond_val: i64;
-    cond_val = sema::eval_const_expr(cast<ConditionalExpr*>(e)->cond);
+    let cond_val = sema::eval_const_expr(cast<ConditionalExpr*>(e)->cond);
     if (cond_val != 0) {
       return sema::eval_const_expr(cast<ConditionalExpr*>(e)->lhs);
     } else {

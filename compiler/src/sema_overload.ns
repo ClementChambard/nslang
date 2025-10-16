@@ -26,8 +26,7 @@ fn sema::try_contextually_convert_to_bool(val: Expr*) -> ImplicitConversionSeque
 }
 
 fn sema::perform_contextually_convert_to_bool(val: Expr*) -> Expr* {
-  let ics: ImplicitConversionSequence*;
-  ics = sema::try_contextually_convert_to_bool(val);
+  let ics = sema::try_contextually_convert_to_bool(val);
   // if ics.conversion_kind == 5:  return nullptr;
   return sema::perform_implicit_conversion(val, Type::get_builtin(BTK_BOOL), ics);
 }

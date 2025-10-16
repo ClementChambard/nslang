@@ -4,7 +4,7 @@ struct DArray {
     capacity: i64;
 };
 
-lib fn DArray::init(self: DArray*);
+lib fn DArray::init(self: DArray*) init;
 
 lib fn DArray::destroy(self: DArray*);
 

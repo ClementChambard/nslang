@@ -75,8 +75,7 @@ fn print_range(fst: Loc, lst: Loc) {
 }
 
 fn print_type(t: Type*) {
-  let s: String;
-  s.init();
+  let s = String::init();
   t->str_append(&s);
   print("%s'%S'%s", TYPE_COL, &s, RESET_COL);
   s.destroy();
@@ -125,8 +124,7 @@ fn print_decl(d: Decl*) {
 }
 
 fn print_indent(indent: DArray*) {
-  let i: i64;
-  i = 0;
+  let i = 0;
   print(INDENT_COL);
   while (i < indent->len) {
     if (cast<i64>(indent->data[i]) == 0) {
@@ -151,8 +149,7 @@ fn print_decl_tree(d: Decl*, indent: DArray*) {
   }
   indent->push(cast<void*>(3));
 
-  let i: i64;
-  i = 0;
+  let i = 0;
   if (d->kind == DECLKIND_TU) {
     while (i < cast<TranslationUnitDecl*>(d)->decls_count) {
       if (i == cast<TranslationUnitDecl*>(d)->decls_count - 1) indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
@@ -183,7 +180,7 @@ fn print_decl_tree(d: Decl*, indent: DArray*) {
       i += 1;
     }
     if (cast<FnDecl*>(d)->body != nullptr) {
-      indent->data[indent->len - 1] = indent->data[indent->len - 1] - 1;
+      indent->data[indent->len - 1]--;
       // TODO: print body
     }
   }
@@ -195,8 +192,6 @@ fn print_decl_tree(d: Decl*, indent: DArray*) {
 }
 
 fn print_ast(tu: TranslationUnitDecl*) {
-  let i: i64;
-  i = 0;
   init_colors();
   let indent: DArray;
   indent.init();

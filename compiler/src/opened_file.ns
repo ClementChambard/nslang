@@ -13,12 +13,10 @@ fn OpenedFile::line_offset(self: OpenedFile*, line: i64) -> i64 {
 }
 
 fn OpenedFile::make_line_cache(self: OpenedFile*) {
-    let cache: DArray;
-    cache.init();
+    let cache = DArray::init();
 
-    let i: i64;
     self->line_cache_len = 0;
-    i = 0;
+    let i = 0;
     while (i < self->source.len) {
         if (self->source[i] == '\r') {
             i += 1;
@@ -41,11 +39,9 @@ fn OpenedFile::make_line_cache(self: OpenedFile*) {
 }
 
 fn OpenedFile::open(filename: i8*) -> OpenedFile* {
-    let self: OpenedFile*;
-    self = malloc(sizeof(OpenedFile));
+    let self = cast<OpenedFile*>(malloc(sizeof(OpenedFile)));
     self->filename = filename;
-    let fd: i64;
-    fd = open(filename, O_RDONLY, 0);
+    let fd = open(filename, O_RDONLY, 0);
     if (fd <= 0) {
         print("OpenedFile::open: INVALID FILE NAME '%s'\n", filename);
         return nullptr;
@@ -54,8 +50,7 @@ fn OpenedFile::open(filename: i8*) -> OpenedFile* {
     lseek(fd, 0, SEEK_SET);
     self->source.data = malloc(self->source.len);
     read(fd, self->source.data, self->source.len - 1);
-    let tst_a: i8*;
-    tst_a = filename;
+    let tst_a = filename;
     close(fd);
     self->source[self->source.len - 1] = 0;
     self->make_line_cache();
@@ -63,8 +58,7 @@ fn OpenedFile::open(filename: i8*) -> OpenedFile* {
     if (OPENED_FILES.len == 0) {
         self->pos_offset = 1;
     } else {
-        let last_opened_file: OpenedFile*;
-        last_opened_file = cast<OpenedFile*>(OPENED_FILES[OPENED_FILES.len - 1]);
+        let last_opened_file = cast<OpenedFile*>(OPENED_FILES[OPENED_FILES.len - 1]);
         self->pos_offset = last_opened_file->pos_offset + last_opened_file->source.len;
     }
     OPENED_FILES.push(self);
@@ -77,11 +71,9 @@ fn OpenedFile::delete(self: OpenedFile*) {
 }
 
 fn OpenedFile::close_all() {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < OPENED_FILES.len) {
-        let cur_f: OpenedFile*;
-        cur_f = cast<OpenedFile*>(OPENED_FILES[i]);
+        let cur_f = cast<OpenedFile*>(OPENED_FILES[i]);
         cur_f->delete();
         free(cur_f);
         i += 1;
@@ -90,11 +82,9 @@ fn OpenedFile::close_all() {
 }
 
 fn OpenedFile::find(filename: i8*) -> OpenedFile* {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < OPENED_FILES.len) {
-        let this_opened_file: OpenedFile*;
-        this_opened_file = cast<OpenedFile*>(OPENED_FILES[i]);
+        let this_opened_file = cast<OpenedFile*>(OPENED_FILES[i]);
         if (strcmp(this_opened_file->filename, filename) == 0) return this_opened_file;
         i += 1;
     }
@@ -104,8 +94,7 @@ fn OpenedFile::find(filename: i8*) -> OpenedFile* {
 fn OpenedFile::find_by_loc(loc: Loc) -> OpenedFile* {
     if (loc == 0) return nullptr;
     if (OPENED_FILES.len == 0) return nullptr;
-    let file_i: i64;
-    file_i = 0;
+    let file_i = 0;
     while (file_i + 1 < OPENED_FILES.len) {
         if (loc < cast<OpenedFile*>(OPENED_FILES[file_i + 1])->pos_offset) break;
         file_i += 1;
@@ -114,11 +103,9 @@ fn OpenedFile::find_by_loc(loc: Loc) -> OpenedFile* {
 }
 
 fn OpenedFile::get_loc(out: CompleteLoc*, loc: Loc) {
-    let f: OpenedFile*;
-    f = OpenedFile::find_by_loc(loc);
+    let f = OpenedFile::find_by_loc(loc);
     if (f == nullptr) return;
-    let offset: i64;
-    offset = loc - f->pos_offset;
+    let offset = loc - f->pos_offset;
     out->line = 0;
     out->col = offset;
     out->filename = f->filename;

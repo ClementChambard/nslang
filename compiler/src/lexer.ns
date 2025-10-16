@@ -33,22 +33,16 @@ fn Lexer::add_include_path(self: Lexer*, path: i8*) {
 }
 
 fn __find_file_to_include_relative(self: Lexer*, filename: i8*, filename_len: i64, loc: Loc) -> i8* {
-    let result: i8*;
-    let i: i64;
-
     // add current directory
-    let cur_dir: Str;
-    let slash_pos: i64;
-    cur_dir.from_cstr(self->cur_lexer->f->filename);
-    slash_pos = -1;
-    i = 0;
+    let cur_dir = Str::from_cstr(self->cur_lexer->f->filename);
+    let slash_pos = -1;
+    let i = 0;
     while (i < cur_dir.len) {
         if (cur_dir.data[i] == '/') slash_pos = i;
         i += 1;
     }
     if (slash_pos != -1) {
-       let cur_dir_tmp: i8*;
-       cur_dir_tmp = malloc(slash_pos + 1);
+       let cur_dir_tmp = cast<i8*>(malloc(slash_pos + 1));
        memcpy(cur_dir_tmp, cur_dir.data, slash_pos);
        cur_dir_tmp[slash_pos] = 0;
        self->include_paths.push(cur_dir_tmp);
@@ -59,12 +53,10 @@ fn __find_file_to_include_relative(self: Lexer*, filename: i8*, filename_len: i6
 
     // check possible file paths
     i = 0;
-    result = nullptr;
+    let result: i8* = nullptr;
     while (i < self->include_paths.len) {
-        let dir_len: i64;
-        dir_len = strlen(self->include_paths[i]);
-        let tmp_result: i8*;
-        tmp_result = malloc(filename_len + 2 + dir_len);
+        let dir_len = strlen(self->include_paths[i]);
+        let tmp_result: i8* = malloc(filename_len + 2 + dir_len);
         memcpy(tmp_result, self->include_paths[i], dir_len);
         tmp_result[dir_len] = '/';
         memcpy(&tmp_result[dir_len+1], filename, filename_len);
@@ -72,8 +64,7 @@ fn __find_file_to_include_relative(self: Lexer*, filename: i8*, filename_len: i6
 
         // check file exists
         // TODO: better method ?
-        let open_res: i64;
-        open_res = open(tmp_result, O_RDWR, 0);
+        let open_res = open(tmp_result, O_RDWR, 0);
         if (open_res > 0) {
             close(open_res);
             result = tmp_result;
@@ -91,11 +82,10 @@ fn __find_file_to_include_relative(self: Lexer*, filename: i8*, filename_len: i6
 
     // if not found, error and include nothing
     if (result == nullptr) {
-        let msg: String;
         let filename_str: Str;
         filename_str.data = filename;
         filename_str.len = filename_len;
-        msg.format("File '%S' can't be included (not found)", &filename_str);
+        let msg = String::format("File '%S' can't be included (not found)", &filename_str);
         // let lc: CompleteLoc;
         // OpenedFile::get_loc(&lc, loc);
         // print("%s:%i:%i: %S\n", lc.filename, lc.line, lc.col, &msg);
@@ -108,7 +98,6 @@ fn __find_file_to_include_relative(self: Lexer*, filename: i8*, filename_len: i6
 
 fn __find_file_to_include(self: Lexer*, filename: i8*, filename_len: i64, loc: Loc) -> i8* {
     let result: i8*;
-    let i: i64;
 
     // if filename is absolute path, return it
     if (filename[0] == '/') {
@@ -120,7 +109,7 @@ fn __find_file_to_include(self: Lexer*, filename: i8*, filename_len: i64, loc: L
     }
 
     // check if it was already included
-    i = 0;
+    let i = 0;
     while (i < self->already_included_files.len) {
         if (strcmp(result, self->already_included_files[i]) == 0) {
             free(result);
@@ -172,8 +161,7 @@ fn Lexer::handle_directive(self: Lexer*, token: Token*) {
 
     self->cur_lexer->read_to_end_of_line(&dir_kind);
     dir_kind.strip();
-    let include_file: i8*;
-    include_file = __find_file_to_include(self, dir_kind.data, dir_kind.len, token->loc);
+    let include_file = __find_file_to_include(self, dir_kind.data, dir_kind.len, token->loc);
     self->enter_source_file(include_file);
     self->cur_lexer->lex_internal(token);
 }

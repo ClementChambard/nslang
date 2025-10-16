@@ -17,8 +17,7 @@ fn Stmt::get_range(self: Stmt*, out: LocRge*) {
     out->start = cast<CompoundStmt*>(self)->lbrace_loc;
     out->end = cast<CompoundStmt*>(self)->rbrace_loc;
   } else if (self->kind == STMTKIND_CASE) {
-    let cs: CaseStmt*;
-    cs = cast<CaseStmt*>(self);
+    let cs = cast<CaseStmt*>(self);
     out->start = cs->keyword_loc;
     if (cs->sub_stmt == nullptr) {
       out->end = cs->colon_loc;
@@ -28,8 +27,7 @@ fn Stmt::get_range(self: Stmt*, out: LocRge*) {
     cs->sub_stmt->get_range(&rge);
     out->end = rge.end;
   } else if (self->kind == STMTKIND_DEFAULT) {
-    let cs: CaseStmt*;
-    cs = cast<CaseStmt*>(self);
+    let cs = cast<CaseStmt*>(self);
     out->start = cs->keyword_loc;
     if (cs->sub_stmt == nullptr) {
       out->end = cs->colon_loc;
@@ -40,8 +38,7 @@ fn Stmt::get_range(self: Stmt*, out: LocRge*) {
     out->end = rge.end;
   } else if (self->kind == STMTKIND_IF) {
     let rge: LocRge;
-    let is: IfStmt*;
-    is = cast<IfStmt*>(self);
+    let is = cast<IfStmt*>(self);
     out->start = is->if_loc;
     if (is->else_stmt != nullptr) {
       is->else_stmt->get_range(&rge);
@@ -51,15 +48,13 @@ fn Stmt::get_range(self: Stmt*, out: LocRge*) {
     out->end = rge.end;
   } else if (self->kind == STMTKIND_SWITCH) {
     let rge: LocRge;
-    let ss: SwitchStmt*;
-    ss = cast<SwitchStmt*>(self);
+    let ss = cast<SwitchStmt*>(self);
     out->start = ss->switch_loc;
     ss->body->get_range(&rge);
     out->end = rge.end;
   } else if (self->kind == STMTKIND_WHILE) {
     let rge: LocRge;
-    let ws: WhileStmt*;
-    ws = cast<WhileStmt*>(self);
+    let ws = cast<WhileStmt*>(self);
     out->start = ws->while_loc;
     ws->body->get_range(&rge);
     out->end = rge.end;
@@ -82,13 +77,11 @@ fn Stmt::ast_free(self: Stmt*) {
   if (self->kind == STMTKIND_DECL) {
     cast<DeclStmt*>(self)->decl->ast_free();
   } else if (self->kind == STMTKIND_COMPOUND) {
-    let cs: CompoundStmt*;
-    cs = cast<CompoundStmt*>(self);
-    let i: i64;
-    i = 0;
+    let cs = cast<CompoundStmt*>(self);
+    let i = 0;
     while (i < cs->children_count) {
       cs->children[i]->ast_free();
-      i += 1;
+      i++;
     }
     free(cs->children);
   } else if (self->kind == STMTKIND_CASE) {
@@ -119,8 +112,7 @@ fn Stmt::ast_free(self: Stmt*) {
 
 
 fn DeclStmt::new(start: Loc, end: Loc, decl: Decl*) -> DeclStmt* {
-  let self: DeclStmt*;
-  self = malloc(sizeof(DeclStmt));
+  let self = cast<DeclStmt*>(malloc(sizeof(DeclStmt)));
   self->kind = STMTKIND_DECL;
   self->start_loc = start;
   self->end_loc = end;
@@ -129,16 +121,14 @@ fn DeclStmt::new(start: Loc, end: Loc, decl: Decl*) -> DeclStmt* {
 }
 
 fn NullStmt::new(semi_loc: Loc) -> NullStmt* {
-  let self: NullStmt*;
-  self = malloc(sizeof(NullStmt));
+  let self = cast<NullStmt*>(malloc(sizeof(NullStmt)));
   self->kind = STMTKIND_NULL;
   self->semi_loc = semi_loc;
   return self;
 }
 
 fn CompoundStmt::new(children: Stmt**, children_count: i64, lbrace_loc: Loc, rbrace_loc: Loc) -> CompoundStmt* {
-  let self: CompoundStmt*;
-  self = malloc(sizeof(CompoundStmt));
+  let self = cast<CompoundStmt*>(malloc(sizeof(CompoundStmt)));
   self->kind = STMTKIND_COMPOUND;
   self->lbrace_loc = lbrace_loc;
   self->rbrace_loc = rbrace_loc;
@@ -148,8 +138,7 @@ fn CompoundStmt::new(children: Stmt**, children_count: i64, lbrace_loc: Loc, rbr
 }
 
 fn CaseStmt::new(kwl: Loc, cl: Loc, sub_stmt: Stmt*, case_val: i64) -> CaseStmt* {
-  let self: CaseStmt*;
-  self = malloc(sizeof(CaseStmt));
+  let self = cast<CaseStmt*>(malloc(sizeof(CaseStmt)));
   self->kind = STMTKIND_CASE;
   self->keyword_loc = kwl;
   self->colon_loc = cl;
@@ -160,8 +149,7 @@ fn CaseStmt::new(kwl: Loc, cl: Loc, sub_stmt: Stmt*, case_val: i64) -> CaseStmt*
 }
 
 fn DefaultStmt::new(kwl: Loc, cl: Loc, sub_stmt: Stmt*) -> DefaultStmt* {
-  let self: DefaultStmt*;
-  self = malloc(sizeof(DefaultStmt));
+  let self = cast<DefaultStmt*>(malloc(sizeof(DefaultStmt)));
   self->kind = STMTKIND_DEFAULT;
   self->keyword_loc = kwl;
   self->colon_loc = cl;
@@ -171,8 +159,7 @@ fn DefaultStmt::new(kwl: Loc, cl: Loc, sub_stmt: Stmt*) -> DefaultStmt* {
 }
 
 fn IfStmt::new(il: Loc, cond: Expr*, lp: Loc, rp: Loc, then: Stmt*, el: Loc, els: Stmt*) -> IfStmt* {
-  let self: IfStmt*;
-  self = malloc(sizeof(IfStmt));
+  let self = cast<IfStmt*>(malloc(sizeof(IfStmt)));
   self->kind = STMTKIND_IF;
   self->if_loc = il;
   self->cond = cond;
@@ -185,8 +172,7 @@ fn IfStmt::new(il: Loc, cond: Expr*, lp: Loc, rp: Loc, then: Stmt*, el: Loc, els
 }
 
 fn SwitchStmt::new(sl: Loc, cond: Expr*, lp: Loc, rp: Loc, body: Stmt*) -> SwitchStmt* {
-  let self: SwitchStmt*;
-  self = malloc(sizeof(SwitchStmt));
+  let self = cast<SwitchStmt*>(malloc(sizeof(SwitchStmt)));
   self->kind = STMTKIND_SWITCH;
   self->switch_loc = sl;
   self->first_case = nullptr;
@@ -198,8 +184,7 @@ fn SwitchStmt::new(sl: Loc, cond: Expr*, lp: Loc, rp: Loc, body: Stmt*) -> Switc
 }
 
 fn WhileStmt::new(wl: Loc, cond: Expr*, lp: Loc, rp: Loc, body: Stmt*) -> WhileStmt* {
-  let self: WhileStmt*;
-  self = malloc(sizeof(WhileStmt));
+  let self = cast<WhileStmt*>(malloc(sizeof(WhileStmt)));
   self->kind = STMTKIND_WHILE;
   self->while_loc = wl;
   self->lparen_loc = lp;
@@ -210,8 +195,7 @@ fn WhileStmt::new(wl: Loc, cond: Expr*, lp: Loc, rp: Loc, body: Stmt*) -> WhileS
 }
 
 fn DoStmt::new(body: Stmt*, cond: Expr*, dl: Loc, wl: Loc, rp: Loc) -> DoStmt* {
-  let self: DoStmt*;
-  self = malloc(sizeof(DoStmt));
+  let self = cast<DoStmt*>(malloc(sizeof(DoStmt)));
   self->kind = STMTKIND_DO;
   self->do_loc = dl;
   self->while_loc = wl;
@@ -222,24 +206,21 @@ fn DoStmt::new(body: Stmt*, cond: Expr*, dl: Loc, wl: Loc, rp: Loc) -> DoStmt* {
 }
 
 fn ContinueStmt::new(cl: Loc) -> ContinueStmt* {
-  let self: ContinueStmt*;
-  self = malloc(sizeof(ContinueStmt));
+  let self = cast<ContinueStmt*>(malloc(sizeof(ContinueStmt)));
   self->kind = STMTKIND_CONTINUE;
   self->continue_loc = cl;
   return self;
 }
 
 fn BreakStmt::new(bl: Loc) -> BreakStmt* {
-  let self: BreakStmt*;
-  self = malloc(sizeof(BreakStmt));
+  let self = cast<BreakStmt*>(malloc(sizeof(BreakStmt)));
   self->kind = STMTKIND_BREAK;
   self->break_loc = bl;
   return self;
 }
 
 fn ReturnStmt::new(rl: Loc, e: Expr*) -> ReturnStmt* {
-  let self: ReturnStmt*;
-  self = malloc(sizeof(ReturnStmt));
+  let self = cast<ReturnStmt*>(malloc(sizeof(ReturnStmt)));
   self->kind = STMTKIND_RETURN;
   self->return_loc = rl;
   self->ret_expr = e;

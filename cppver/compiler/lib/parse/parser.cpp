@@ -57,10 +57,12 @@ Prec prec_from_tok(Tok kind) {
 }
 
 void Parser::unconsume_token(Token consumed) {
-  auto next_tok = tok;
-  lexer.enter_token(consumed, true);
-  tok = lexer.lex();
-  lexer.enter_token(next_tok, true);
+  lexer.enter_token(tok, true);
+  tok = consumed;
+  // auto next_tok = tok;
+  // lexer.enter_token(consumed, true);
+  // tok = lexer.lex();
+  // lexer.enter_token(next_tok, true);
 }
 
 Loc Parser::consume_token() {

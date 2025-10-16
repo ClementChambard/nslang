@@ -20,15 +20,13 @@ fn get_digit(c: char) -> i64 {
 }
 
 fn NumLiteralParser::parse_int(self: NumLiteralParser*, s: i8*, base: i64) -> i8* {
-    let n: i64;
-    n = 0;
+    let n = 0i64;
     while (*s != 0) {
-      let digit: i64;
-      digit = get_digit(*s);
+      let digit = get_digit(*s);
       if ((digit == -1) | (digit >= base)) break;
       n *= base;
       n += digit;
-      s += 1;
+      s++;
     }
     self->res = n;
     return s;
@@ -65,12 +63,10 @@ fn NumLiteralParser::parse_suffix(self: NumLiteralParser*, s: i8*) {
 
 fn NumLiteralParser::parse(self: NumLiteralParser*, tok: Token*) {
     // assert tok.ty == Tok.NUM
-    let val_end: CStr;
-    let value_str: CStr;
-    value_str = malloc(tok->len + 1);
+    let value_str: CStr = malloc(tok->len + 1);
     value_str[tok->len] = 0;
     memcpy(value_str, tok->value, tok->len);
-    val_end = self->parse_num(value_str);
+    let val_end: CStr = self->parse_num(value_str);
     if (*val_end != 0) self->parse_suffix(val_end);
     free(value_str);
 }
@@ -84,14 +80,10 @@ fn NumLiteralParser::init(self: NumLiteralParser*, tok: Token*) {
 
 
 fn process_char_escape(buf: i8*, loc: Loc, out_char: i64*, had_error: bool*) -> i8* {
-  let delimited: bool;
-  let end_delimiter_found: bool;
-  let result_char: char;
-  let cur_loc: i64;
-  delimited = false;
-  end_delimiter_found = false;
-  result_char = buf[0];
-  cur_loc = 1;
+  let delimited = false;
+  let end_delimiter_found = false;
+  let result_char = buf[0];
+  let cur_loc = 1;
 
   if ((result_char == '(') | (result_char == '{') | (result_char == '[') | (result_char == '%') | 
       (result_char == '\\') | (result_char == '\'') | (result_char == '\"') | (result_char == '\?')) {
@@ -217,14 +209,11 @@ fn CharLiteralParser::parse(self: CharLiteralParser*, tok: Token*) {
   // assert tok.ty == Tok.CHR
   // assert val.startswith("'") and val.endswith("'")
   // assert len(val) > 0
-  let value_str: CStr;
-  let value_str_len: i64;
-  value_str_len = tok->len - 2;
-  value_str = malloc(value_str_len + 1);
+  let value_str_len = tok->len - 2;
+  let value_str: CStr = malloc(value_str_len + 1);
   memcpy(value_str, &tok->value[1], value_str_len);
   value_str[value_str_len] = 0;
-  let buf: i8*;
-  buf = value_str;
+  let buf = value_str;
   if (*buf != '\\') {
     if (buf[1] != 0) {
       diag(tok->loc, "Char constant too long", DIAG_ERROR);
@@ -271,26 +260,22 @@ fn slp_diagnose_lexing_error(slp: StringLiteralParser*, loc: Loc) {
 }
 
 fn StringLiteralParser::parse(self: StringLiteralParser*, string_toks: Token**, string_toks_len: i64) {
-  let output_string: String;
-  output_string.init();
+  let output_string = String::init();
 
   if ((string_toks_len == 0) | (string_toks[0]->len < 2))
     return slp_diagnose_lexing_error(self, 0);
 
   // TODO: get data about strings
 
-  let i: i64;
-  i = 0;
+  let i = 0;
   while (i < string_toks_len) {
-    let val: i8*;
-    let end: i8*;
-    val = &string_toks[i]->value[1];
-    end = val + (string_toks[i]->len - 2);
+    let val = &cast<i8*>(string_toks[i]->value)[1];
+    let end = val + (string_toks[i]->len - 2);
     while (val < end) {
       if (*val != '\\') {
         output_string.push(*val);
       } else {
-        val += 1;
+        val++;
         if (*val == 'u') exit(1);
         if (*val == 'U') exit(1);
         if (*val == 'N') exit(1);
@@ -298,7 +283,7 @@ fn StringLiteralParser::parse(self: StringLiteralParser*, string_toks: Token**, 
         val = process_char_escape(val, string_toks[i]->loc, &c, &self->had_error);
         output_string.push(c);
       }
-      val += 1;
+      val++;
     }
   }
 

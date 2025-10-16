@@ -13,21 +13,9 @@ lib fn Parser::parse_expr(self: Parser *) -> Expr*;
 
 lib fn Parser::parse_if_stmt(self: Parser *, trailing_else_loc: Loc*) -> IfStmt* {
   // assert self.tok.ty == Tok.KW_IF, "Not an if stmt!"
-  let if_loc: Loc;
-  let lparen_loc: Loc;
-  let rparen_loc: Loc;
-  let start: Loc;
-  let cond: Expr*;
   let skip_until_buf: Tok[2];
-  let is_braced: bool;
-  let then_stmt_loc: Loc;
-  let else_loc: Loc;
-  let else_stmt_loc: Loc;
-  let else_stmt: Stmt*;
-  let inner_statement_trailing_else_loc: Loc;
-  let then_stmt: Stmt*;
   skip_until_buf[0] = TOK_SEMI;
-  if_loc = self->consume_token();
+  let if_loc = self->consume_token();
 
   if (self->tok->ty != TOK_LPAREN) {
     diag(self->tok->loc, "expected '(' after 'if'", DIAG_ERROR);
@@ -37,9 +25,9 @@ lib fn Parser::parse_if_stmt(self: Parser *, trailing_else_loc: Loc*) -> IfStmt*
 
   self->enter_scope(SF_DECL | SF_CONTROL);
 
-  lparen_loc = self->consume_paren();
-  start = self->tok->loc;
-  cond = self->parse_expr();
+  let lparen_loc = self->consume_paren();
+  let start = self->tok->loc;
+  let cond = self->parse_expr();
   
   if (cond == nullptr) if (self->tok->ty != TOK_RPAREN) {
     self->skip_until(skip_until_buf, 1, false, false);
@@ -50,13 +38,12 @@ lib fn Parser::parse_if_stmt(self: Parser *, trailing_else_loc: Loc*) -> IfStmt*
   }
 
   if (cond == nullptr) {
-    let end: Loc;
-    end = start;
+    let end = start;
     if (self->tok->loc != start) end = self->prev_tok_location;
     cond = sema::create_recovery_expr(start, end, nullptr, 0, Type::get_builtin(BTK_BOOL));
   }
  
-  rparen_loc = self->tok->loc;
+  let rparen_loc = self->tok->loc;
   self->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
 
   while (self->tok->ty == TOK_RPAREN) {
@@ -64,17 +51,17 @@ lib fn Parser::parse_if_stmt(self: Parser *, trailing_else_loc: Loc*) -> IfStmt*
     self->consume_paren();
   }
   
-  is_braced = self->tok->ty == TOK_LBRACE;
+  let is_braced = self->tok->ty == TOK_LBRACE;
   if (is_braced) self->enter_scope(SF_DECL);
   
-  then_stmt_loc = self->tok->loc;
-  inner_statement_trailing_else_loc = 0;
-  then_stmt = self->parse_stmt(&inner_statement_trailing_else_loc);
+  let then_stmt_loc = self->tok->loc;
+  let inner_statement_trailing_else_loc: Loc = 0;
+  let then_stmt = self->parse_stmt(&inner_statement_trailing_else_loc);
   if (is_braced) self->exit_scope();
   
-  else_loc = 0;
-  else_stmt_loc = 0;
-  else_stmt = nullptr;
+  let else_loc: Loc = 0;
+  let else_stmt_loc: Loc = 0;
+  let else_stmt: Stmt* = nullptr;
   
   if (self->tok->ty == TOK_KW_ELSE) {
     if (trailing_else_loc != nullptr) *trailing_else_loc = self->tok->loc;
@@ -100,16 +87,12 @@ lib fn Parser::parse_if_stmt(self: Parser *, trailing_else_loc: Loc*) -> IfStmt*
 
 lib fn Parser::parse_case_stmt(self: Parser *, missing_case: bool, expr: Expr*) -> Stmt* {
   // assert missing_case or self.tok.ty == Tok.KW_CASE, "Not a case stmt!"
-  let top_level_case: CaseStmt*;
-  let deepest_parsed_case_stmt: CaseStmt*;
-  let colon_loc: Loc;
-  top_level_case = nullptr;
-  deepest_parsed_case_stmt = nullptr;
-  colon_loc = 0;
+  let top_level_case: CaseStmt* = nullptr;
+  let deepest_parsed_case_stmt: CaseStmt* = nullptr;
+  let colon_loc: Loc = 0;
   while (true) {
     if (!missing_case) if (self->tok->ty != TOK_KW_CASE) break;
-    let case_loc: Loc;
-    case_loc = 0;
+    let case_loc: Loc = 0;
     if (!missing_case) case_loc = self->consume_token();
     else {
       // assert expr is not None
@@ -119,8 +102,7 @@ lib fn Parser::parse_case_stmt(self: Parser *, missing_case: bool, expr: Expr*) 
     }
     colon_loc = 0;
 
-    let lhs: Expr*;
-    lhs = nullptr;
+    let lhs: Expr* = nullptr;
     if (!missing_case) {
       lhs = self->parse_expr(); // parse_case_expression(case_loc);
       if (lhs == nullptr) {
@@ -138,19 +120,16 @@ lib fn Parser::parse_case_stmt(self: Parser *, missing_case: bool, expr: Expr*) 
       // ok
     } else {
       // check common typo: '::'
-      let expected_loc: Loc;
-      expected_loc = self->prev_tok_location; //get_loc_for_end_of_token
+      let expected_loc = self->prev_tok_location; //get_loc_for_end_of_token
       diag(expected_loc, "expected ':' after 'case'", DIAG_ERROR); // FixItHint::CreateInsertion(ExpectedLoc, ":");
       colon_loc = expected_loc;
     }
 
-    let case_stmt: CaseStmt*;
-    case_stmt = sema::act_on_case_stmt(case_loc, lhs, colon_loc);
+    let case_stmt = sema::act_on_case_stmt(case_loc, lhs, colon_loc);
     if (case_stmt == nullptr) {
       if (top_level_case == nullptr) return self->parse_stmt(nullptr);
     } else {
-      let next_deepest: CaseStmt*;
-      next_deepest = case_stmt;
+      let next_deepest = case_stmt;
       if (top_level_case == nullptr) top_level_case = case_stmt;
       else {
         // assert deepest_parsed_case_stmt is not None
@@ -160,8 +139,7 @@ lib fn Parser::parse_case_stmt(self: Parser *, missing_case: bool, expr: Expr*) 
     }
   }
 
-  let sub_stmt: Stmt*;
-  sub_stmt = nullptr;
+  let sub_stmt: Stmt* = nullptr;
 
   if (self->tok->ty == TOK_RBRACE) {
     sub_stmt = sema::act_on_null_stmt(colon_loc);
@@ -180,22 +158,18 @@ lib fn Parser::parse_case_stmt(self: Parser *, missing_case: bool, expr: Expr*) 
 
 lib fn Parser::parse_default_stmt(self: Parser *) -> DefaultStmt* {
   // assert self.tok.ty == Tok.KW_DEFAULT, "Not a default stmt!"
-  let default_loc: Loc;
-  let colon_loc: Loc;
-  let sub_stmt: Stmt*;
-  default_loc = self->consume_token();
-  colon_loc = 0;
+  let default_loc = self->consume_token();
+  let colon_loc: Loc = 0;
   if (self->try_consume_token(TOK_COLON, &colon_loc)) {
     // ok: do nothing
   } else if (self->try_consume_token(TOK_SEMI, &colon_loc)) {
     diag(colon_loc, "expected ':' after 'default'", DIAG_ERROR); // FixItHint::CreateReplacement(ColonLoc, ":");
   } else {
-    let expected_loc: Loc;
-    expected_loc = self->prev_tok_location; // get_loc_for_end_of_token
+    let expected_loc = self->prev_tok_location; // get_loc_for_end_of_token
     diag(expected_loc, "expected ':' after 'default'", DIAG_ERROR); // FixItHint::CreateInsertion(ExpectedLoc, ":");
     colon_loc = expected_loc;
   }
-  sub_stmt = nullptr;
+  let sub_stmt: Stmt* = nullptr;
   if (self->tok->ty == TOK_RBRACE) {
     sub_stmt = sema::act_on_null_stmt(colon_loc);
   } else {
@@ -280,16 +254,9 @@ lib fn Parser::parse_switch_stmt(self: Parser *, trailing_else_loc: Loc*) -> Swi
 
 lib fn Parser::parse_while_stmt(self: Parser *, trailing_else_loc: Loc*) -> WhileStmt* {
   // assert self.tok.ty == Tok.KW_WHILE, "Not a while stmt!"
-  let while_loc: Loc;
-  let lparen_loc: Loc;
-  let rparen_loc: Loc;
-  let start: Loc;
-  let cond: Expr*;
-  let body: Stmt*;
   let skip_until_buf: Tok[2];
-  let has_brace: bool;
   skip_until_buf[0] = TOK_SEMI;
-  while_loc = self->consume_token();
+  let while_loc = self->consume_token();
   if (self->tok->ty != TOK_LPAREN) {
     diag(self->tok->loc, "expected '(' after 'while'", DIAG_ERROR);
     self->skip_until(skip_until_buf, 1, false, false);
@@ -298,9 +265,9 @@ lib fn Parser::parse_while_stmt(self: Parser *, trailing_else_loc: Loc*) -> Whil
 
   self->enter_scope(SF_BREAK | SF_CONTINUE | SF_DECL | SF_CONTROL);
 
-  lparen_loc = self->consume_paren();
-  start = self->tok->loc;
-  cond = self->parse_expr();
+  let lparen_loc = self->consume_paren();
+  let start = self->tok->loc;
+  let cond = self->parse_expr();
 
   if (cond == nullptr) if (self->tok->ty != TOK_RPAREN) {
     self->skip_until(skip_until_buf, 1, false, false);
@@ -311,19 +278,18 @@ lib fn Parser::parse_while_stmt(self: Parser *, trailing_else_loc: Loc*) -> Whil
   }
 
   if (cond == nullptr) {
-    let end: Loc;
-    end = start;
+    let end = start;
     if (self->tok->loc != start) end = self->prev_tok_location;
     cond = sema::create_recovery_expr(start, end, nullptr, 0, Type::get_builtin(BTK_BOOL));
   }
 
-  rparen_loc = self->tok->loc;
+  let rparen_loc = self->tok->loc;
   self->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
 
-  has_brace = self->tok->ty == TOK_LBRACE;
+  let has_brace = self->tok->ty == TOK_LBRACE;
   if (has_brace) self->enter_scope(SF_DECL);
 
-  body = self->parse_stmt(trailing_else_loc);
+  let body = self->parse_stmt(trailing_else_loc);
 
   if (has_brace) self->exit_scope();
   self->exit_scope();
@@ -336,24 +302,16 @@ lib fn Parser::parse_while_stmt(self: Parser *, trailing_else_loc: Loc*) -> Whil
 
 lib fn Parser::parse_do_stmt(self: Parser *) -> DoStmt* {
   // assert self.tok.ty == Tok.KW_DO, "Not a do stmt!"
-  let do_loc: Loc;
-  let while_loc: Loc;
-  let lparen_loc: Loc;
-  let rparen_loc: Loc;
-  let start: Loc;
-  let has_lbrace: bool;
-  let body: Stmt*;
-  let cond: Expr*;
   let skip_until_buf: Tok[2];
   skip_until_buf[0] = TOK_SEMI;
-  do_loc = self->consume_token();
+  let do_loc = self->consume_token();
 
   self->enter_scope(SF_BREAK | SF_CONTINUE | SF_DECL);
 
-  has_lbrace = self->tok->ty == TOK_LBRACE;
+  let has_lbrace = self->tok->ty == TOK_LBRACE;
   if (has_lbrace) self->enter_scope(SF_DECL);
 
-  body = self->parse_stmt(nullptr);
+  let body = self->parse_stmt(nullptr);
 
   if (has_lbrace) self->exit_scope();
 
@@ -366,7 +324,7 @@ lib fn Parser::parse_do_stmt(self: Parser *) -> DoStmt* {
     return nullptr;
   }
 
-  while_loc = self->consume_token();
+  let while_loc = self->consume_token();
 
   if (self->tok->ty != TOK_LPAREN) {
     diag(self->tok->loc, "expected '(' after do/while", DIAG_ERROR);
@@ -374,22 +332,21 @@ lib fn Parser::parse_do_stmt(self: Parser *) -> DoStmt* {
     return nullptr;
   }
 
-  lparen_loc = self->consume_paren();
+  let lparen_loc = self->consume_paren();
 
-  start = self->tok->loc;
+  let start = self->tok->loc;
 
-  cond = self->parse_expr();
+  let cond = self->parse_expr();
 
   if (cond == nullptr) {
     if (self->tok->ty != TOK_RPAREN) 
       if (self->tok->ty != TOK_RSQUARE)
         if (self->tok->ty != TOK_RBRACE) self->skip_until(skip_until_buf, 1, false, false);
-    let end: Loc;
-    end = start;
+    let end = start;
     if (self->tok->loc != start) end = self->prev_tok_location;
     cond = sema::create_recovery_expr(start, end, nullptr, 0, Type::get_builtin(BTK_BOOL));
   }
-  rparen_loc = self->consume_paren();
+  let rparen_loc = self->consume_paren();
 
   self->exit_scope();
 
@@ -400,23 +357,19 @@ lib fn Parser::parse_do_stmt(self: Parser *) -> DoStmt* {
 }
 
 lib fn Parser::parse_continue_stmt(self: Parser *) -> ContinueStmt* {
-  let continue_loc: Loc;
-  continue_loc = self->consume_token();
+  let continue_loc = self->consume_token();
   return sema::act_on_continue_stmt(continue_loc, self->cur_scope);
 }
 
 lib fn Parser::parse_break_stmt(self: Parser *) -> BreakStmt* {
-  let break_loc: Loc;
-  break_loc = self->consume_token();
+  let break_loc = self->consume_token();
   return sema::act_on_break_stmt(break_loc, self->cur_scope);
 }
 
 lib fn Parser::parse_return_stmt(self: Parser *) -> ReturnStmt* {
   // assert self.tok.ty == Tok.KW_RETURN, "not a return stmt!"
-  let return_loc: Loc;
-  let return_expr: Expr*;
-  return_loc = self->consume_token();
-  return_expr = nullptr;
+  let return_loc = self->consume_token();
+  let return_expr: Expr* = nullptr;
   if (self->tok->ty != TOK_SEMI) {
     // if (self->tok->ty == TOK_LBRACE) return_expr = parse_initializer(); else
     return_expr = self->parse_expr();
@@ -431,11 +384,8 @@ lib fn Parser::parse_return_stmt(self: Parser *) -> ReturnStmt* {
 }
 
 lib fn Parser::parse_expr_stmt(self: Parser *) -> Stmt* {
-  let old_token_loc: Loc;
-  let expr: Expr*;
-  old_token_loc = self->tok->loc;
-
-  expr = self->parse_expr();
+  let old_token_loc = self->tok->loc;
+  let expr: Expr* = self->parse_expr();
   if (expr == nullptr) {
     let skip_until_buf: Tok[1];
     skip_until_buf[0] = TOK_RBRACE;
@@ -456,13 +406,9 @@ lib fn Parser::parse_expr_stmt(self: Parser *) -> Stmt* {
 
 lib fn Parser::parse_compound_stmt_body(self: Parser *) -> CompoundStmt* {
   if (self->tok->ty != TOK_LBRACE) return nullptr;
-  let open_loc: Loc;
-  let close_loc: Loc;
-  let stmts: DArray;
-  let out: CompoundStmt*;
-  open_loc = self->consume_brace();
+  let open_loc = self->consume_brace();
   // sema::push_compound_scope(false);
-  stmts.init();
+  let stmts = DArray::init();
 
   while (self->tok->ty != TOK_RBRACE) {
     if (self->tok->ty == TOK_EOF) break;
@@ -471,8 +417,8 @@ lib fn Parser::parse_compound_stmt_body(self: Parser *) -> CompoundStmt* {
     if (stmt != nullptr) stmts.push(stmt);
   }
 
-  close_loc = self->consume_brace();
-  out = sema::act_on_compound_stmt(open_loc, close_loc, cast<Stmt**>(stmts.data), stmts.len);
+  let close_loc = self->consume_brace();
+  let out = sema::act_on_compound_stmt(open_loc, close_loc, cast<Stmt**>(stmts.data), stmts.len);
   // sema::pop_compound_scope();
   return out;
 }
@@ -480,19 +426,15 @@ lib fn Parser::parse_compound_stmt_body(self: Parser *) -> CompoundStmt* {
 lib fn Parser::parse_compound_stmt(self: Parser *, scope_flags: ScopeFlags) -> CompoundStmt* {
   // assert self.tok.ty == Tok.LBRACE, "not a compound stmt!"
   self->enter_scope(scope_flags);
-  let out: CompoundStmt*;
-  out = self->parse_compound_stmt_body();
+  let out = self->parse_compound_stmt_body();
   self->exit_scope();
   return out;
 }
 
 lib fn Parser::parse_stmt(self: Parser *, trailing_else_loc: Loc*) -> Stmt* {
-  let semi_error: CStr;
-  let res: Stmt*;
-  let tok_ty: Tok;
-  semi_error = "";
-  res = nullptr;
-  tok_ty = self->tok->ty;
+  let semi_error: CStr = "";
+  let res: Stmt* = nullptr;
+  let tok_ty = self->tok->ty;
   // XXX: what was this for ? I forgot...
   // if self.tok.ty == Tok.IDENT:
   //     if colon after, parse label statement
@@ -523,12 +465,9 @@ lib fn Parser::parse_stmt(self: Parser *, trailing_else_loc: Loc*) -> Stmt* {
     res = self->parse_return_stmt();
     semi_error = "return";
   } else if (self->is_declaration_statement()){
-    let decl_start: Loc;
-    let decl_end: Loc;
-    let decl: Decl*;
-    decl_start = self->tok->loc;
-    decl_end = 0;
-    decl = self->parse_decl(DC_BLOCK, &decl_end);
+    let decl_start = self->tok->loc;
+    let decl_end: Loc = 0;
+    let decl = self->parse_decl(DC_BLOCK, &decl_end);
     return sema::act_on_decl_stmt(decl, decl_start, decl_end);
   } else if (tok_ty == TOK_RBRACE) {
     diag(self->tok->loc, "expected statement", DIAG_ERROR);
@@ -547,8 +486,7 @@ lib fn Parser::parse_stmt(self: Parser *, trailing_else_loc: Loc*) -> Stmt* {
 }
 
 lib fn Parser::is_declaration_statement(self: Parser*) -> bool {
-  let ty: Tok;
-  ty = self->tok->ty;
+  let ty = self->tok->ty;
   if (ty == TOK_KW_LET) return true;
   if (ty == TOK_KW_FN) return true;
   if (ty == TOK_KW_LIB) return true;

@@ -5,8 +5,7 @@
 let IDENTIFIERS: DArray;
 
 fn IdentInfo::add(ty: Tok, val: i8*, len: i64) -> IdentInfo* {
-    let self: IdentInfo*;
-    self = malloc(sizeof(IdentInfo));
+    let self = cast<IdentInfo*>(malloc(sizeof(IdentInfo)));
     self->ty = ty;
     self->val = malloc(len + 1);
     memcpy(self->val, val, len);
@@ -17,12 +16,11 @@ fn IdentInfo::add(ty: Tok, val: i8*, len: i64) -> IdentInfo* {
 }
 
 fn IdentInfo::remove_all() {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < IDENTIFIERS.len) {
         free(cast<IdentInfo*>(IDENTIFIERS[i])->val);
         free(IDENTIFIERS[i]);
-        i += 1;
+        i++;
     }
     IDENTIFIERS.destroy();
 }
@@ -68,15 +66,13 @@ fn IdentInfo::needs_handling(self: IdentInfo *) -> bool {
 }
 
 fn IdentInfo::find(name: i8*, len: i64) -> IdentInfo* {
-    let i: i64;
-    i = 0;
+    let i = 0;
     while (i < IDENTIFIERS.len) {
-        let cur_ii: IdentInfo*;
-        cur_ii = cast<IdentInfo*>(IDENTIFIERS[i]);
+        let cur_ii = cast<IdentInfo*>(IDENTIFIERS[i]);
         if (cur_ii->len == len) {
             if (memcmp(name, cur_ii->val, len) == 0) return cur_ii;
         }
-        i += 1;
+        i++;
     }
     return IdentInfo::add(TOK_IDENT, name, len);
 }

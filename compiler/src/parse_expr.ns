@@ -42,15 +42,13 @@ fn prec_from_bin_op(tok: Tok) -> Prec {
 }
 
 fn Parser::parse_expr(self: Parser *) -> Expr* { 
-  let lhs: Expr*;
-  lhs = self->parse_assignment_expr();
+  let lhs = self->parse_assignment_expr();
   return self->parse_rhs_of_binary_expr(lhs, PREC_COMMA);
 }
 
 fn Parser::parse_integer_constexpr(self: Parser *, loc: Loc*) -> i64 { 
-  let e: Expr*;
+  let e = self->parse_expr();
   let rge: LocRge;
-  e = self->parse_expr();
   cast<Stmt*>(e)->get_range(&rge);
   if (loc != nullptr) *loc = rge.end;
   if (!e->ty->is_integer_type()) {
@@ -61,13 +59,10 @@ fn Parser::parse_integer_constexpr(self: Parser *, loc: Loc*) -> i64 {
 }
 
 fn Parser::parse_expression_list(self: Parser *, exprs: Expr***, exprs_count: i64*) -> bool {
-  let saw_error: bool;
-  saw_error = false;
-  let array: DArray;
-  array.init();
+  let saw_error = false;
+  let array = DArray::init();
   while (true) {
-    let expr: Expr*;
-    expr = nullptr;
+    let expr: Expr* = nullptr;
     // if (self->tok->ty == TOK_LBRACE) {
     //   diag::warn_cxx98_compat_generalized_initializer_lists
     //   expr = parse_brace_initializer();
@@ -95,15 +90,12 @@ fn Parser::parse_expression_list(self: Parser *, exprs: Expr***, exprs_count: i6
 }
 
 fn Parser::parse_postfix_expression_suffix(self: Parser *, lhs: Expr*) -> Expr* {
-  let loc: Loc;
-  loc = 0;
+  let loc: Loc = 0;
   while (true) {
-    let ty: Tok;
-    ty = self->tok->ty;
+    let ty = self->tok->ty;
     if ((ty == TOK_PLUSPLUS) | (ty == TOK_MINUSMINUS)) {
       if (lhs != nullptr) {
-        let arg: Expr*;
-        arg = lhs;
+        let arg = lhs;
         lhs = sema::act_on_postfix_unary_op(self->cur_scope, self->tok->loc, self->tok->ty, arg);
         if (lhs == nullptr) {
           // XXX: TODO
@@ -112,17 +104,14 @@ fn Parser::parse_postfix_expression_suffix(self: Parser *, lhs: Expr*) -> Expr* 
       }
       self->consume_token();
     } else if (ty == TOK_LSQUARE) {
-      let loc: Loc;
-      let rloc: Loc;
+      let loc = self->consume_bracket();
+      let had_error = false;
       let arg_exprs: Expr**;
       let arg_count: i64;
-      let had_error: bool;
-      loc = self->consume_bracket();
-      had_error = false;
       if (self->parse_expression_list(&arg_exprs, &arg_count)) {
         had_error = true;
       }
-      rloc = self->tok->loc;
+      let rloc = self->tok->loc;
       if ((lhs != nullptr) & (!had_error) & (self->tok->ty == TOK_RSQUARE)) {
         lhs = sema::act_on_array_subscript_expr(self->cur_scope, lhs, loc, arg_exprs, arg_count, rloc);
       } else {
@@ -130,14 +119,11 @@ fn Parser::parse_postfix_expression_suffix(self: Parser *, lhs: Expr*) -> Expr* 
       }
       self->consume_bracket();
     } else if (ty == TOK_LPAREN) {
-      let loc: Loc;
-      let arg_exprs: Expr**;
-      let arg_count: i64;
+      let loc = self->consume_paren();
+      let arg_exprs: Expr** = nullptr;
+      let arg_count: i64 = 0;
       let skip_until_buf: Tok[1];
-      arg_exprs = nullptr;
-      arg_count = 0;
       skip_until_buf[0] = TOK_RPAREN;
-      loc = self->consume_paren();
       if (self->tok->ty != TOK_RPAREN) {
         if (self->parse_expression_list(&arg_exprs, &arg_count)) {
           lhs = nullptr;
@@ -149,10 +135,8 @@ fn Parser::parse_postfix_expression_suffix(self: Parser *, lhs: Expr*) -> Expr* 
         self->skip_until(skip_until_buf, 1, true, false);
         lhs = nullptr;
       } else {
-        let fun: Expr*;
-        fun = lhs;
-        let rpar_loc: Loc;
-        rpar_loc = self->consume_paren();
+        let fun = lhs;
+        let rpar_loc = self->consume_paren();
         lhs = sema::act_on_call_expr(self->cur_scope, fun, loc, arg_exprs, arg_count, rpar_loc);
         if (lhs == nullptr) {
           // XXX: TODO
@@ -161,14 +145,10 @@ fn Parser::parse_postfix_expression_suffix(self: Parser *, lhs: Expr*) -> Expr* 
         }
       }
     } else if ((ty == TOK_ARROW) | (ty == TOK_PERIOD)) {
-      let opkind: Tok;
-      let oploc: Loc;
-      let orig_lhs: Expr*;
-      let name: UnqualifiedId*;
-      opkind = self->tok->ty;
-      oploc = self->consume_token();
-      orig_lhs = lhs;
-      name = UnqualifiedId::new();
+      let opkind = self->tok->ty;
+      let oploc = self->consume_token();
+      let orig_lhs = lhs;
+      let name = UnqualifiedId::new();
       if (self->parse_unqualified_id(name)) {
         lhs = nullptr;
       }
@@ -194,22 +174,17 @@ fn Parser::parse_unqualified_id(self: Parser *, out: UnqualifiedId*) -> bool {
     diag(self->tok->loc, "Expected unqualified identifier", DIAG_ERROR);
     return true;
   }
-  let idinf: IdentInfo*;
-  let idloc: Loc;
-  idinf = cast<IdentInfo*>(self->tok->value);
-  idloc = self->consume_token();
+  let idinf = cast<IdentInfo*>(self->tok->value);
+  let idloc = self->consume_token();
   out->set_identifier(idinf, idloc);
   return false;
 }
 
 fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
-  let res: Expr*;
-  let saved_kind: Tok;
-  res = nullptr;
-  saved_kind = self->tok->ty;
+  let res: Expr* = nullptr;
+  let saved_kind = self->tok->ty;
   if (saved_kind == TOK_LPAREN) {
-    let open_loc: Loc;
-    open_loc = self->consume_paren();
+    let open_loc = self->consume_paren();
     res = self->parse_expr();
     if (res != nullptr) if (self->tok->ty == TOK_RPAREN) {
       res = sema::act_on_paren_expr(open_loc, self->tok->loc, res);
@@ -229,37 +204,28 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
   } else if (saved_kind == TOK_KW_NULLPTR) {
     res = sema::act_on_nullptr_literal(self->consume_token());
   } else if (saved_kind == TOK_KW_VAARG) {
-    let start_loc: Loc;
-    let end_loc: Loc;
-    let ty: Type*;
-    start_loc = self->consume_token();
+    let start_loc = self->consume_token();
     self->expect_and_consume(TOK_LESS, nullptr, nullptr);
-    ty = self->parse_type();
-    end_loc = self->tok->loc;
+    let ty = self->parse_type();
+    let end_loc = self->tok->loc;
     self->expect_and_consume(TOK_GREATER, nullptr, nullptr);
     res = sema::act_on_vaarg_expr(ty, start_loc, end_loc);
   } else if (saved_kind == TOK_IDENT) {
-    let ii: IdentInfo*;
-    let iloc: Loc;
-    let ss: StructType*;
-    ii = cast<IdentInfo*>(self->tok->value);
-    iloc = self->consume_token();
-    ss = nullptr;
+    let ii = cast<IdentInfo*>(self->tok->value);
+    let iloc = self->consume_token();
+    let ss: StructType* = nullptr;
     if (self->tok->ty == TOK_COLONCOLON) {
       self->consume_token();
       if (self->tok->ty != TOK_IDENT) {
         print("TODO: error handling\n"); exit(1);
       }
-      let scope_ii: IdentInfo*;
-      let scope_loc: Loc;
-      scope_ii = ii;
-      scope_loc = iloc;
+      let scope_ii = ii;
+      let scope_loc = iloc;
       ii = cast<IdentInfo*>(self->tok->value);
       iloc = self->consume_token();
       ss = sema::act_on_scoped_identifier(self->cur_scope, scope_ii, scope_loc);
     }
-    let replacement: Token*;
-    replacement = nullptr; // new Token
+    let replacement: Token* = nullptr; // new Token
     res = sema::act_on_id_expression(self->cur_scope, ss, ii, iloc, self->tok->ty == TOK_LPAREN, replacement); // if self->tok->ty == TOK_RPAREN else None
     if (res == nullptr) {
       self->unconsume_token(replacement);
@@ -269,8 +235,7 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
     res = sema::act_on_character_constant(self->tok);
     self->consume_token();
   } else if (saved_kind == TOK_STR) {
-    let string_toks: DArray;
-    string_toks.init();
+    let string_toks = DArray::init();
     while (self->tok->ty == TOK_STR) {
       string_toks.push(self->tok);
       self->consume_any_token();
@@ -281,8 +246,7 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
     saved_loc = self->consume_token();
     res = self->parse_unit_expr();
     if (res != nullptr) {
-      let arg: Expr*;
-      arg = res;
+      let arg = res;
       res = sema::act_on_unary_op(self->cur_scope, saved_loc, saved_kind, arg);
       if (res == nullptr) {
         // XXX: TODO
@@ -290,12 +254,10 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
       }
     }
   } else if ((saved_kind == TOK_AMP) | (saved_kind == TOK_STAR) | (saved_kind == TOK_PLUS) | (saved_kind == TOK_MINUS) | (saved_kind == TOK_TILDE) | (saved_kind == TOK_EXCLAIM)) {
-    let saved_loc: Loc;
-    saved_loc = self->consume_token();
+    let saved_loc = self->consume_token();
     res = self->parse_unit_expr();
     if (res != nullptr) {
-      let arg: Expr*;
-      arg = res;
+      let arg = res;
       res = sema::act_on_unary_op(self->cur_scope, saved_loc, saved_kind, arg);
       if (res == nullptr) {
         // XXX: TODO
@@ -303,28 +265,20 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
       }
     }
   } else if (saved_kind == TOK_KW_CAST) {
-    let start_loc: Loc;
-    let end_loc: Loc;
-    let ty: Type*;
-    let expr: Expr*;
-    start_loc = self->consume_token();
+    let start_loc = self->consume_token();
     self->expect_and_consume(TOK_LESS, nullptr, nullptr);
-    ty = self->parse_type();
+    let ty = self->parse_type();
     self->expect_and_consume(TOK_GREATER, nullptr, nullptr);
     self->expect_and_consume(TOK_LPAREN, nullptr, nullptr);
-    expr = self->parse_expr();
-    end_loc = self->tok->loc;
+    let expr = self->parse_expr();
+    let end_loc = self->tok->loc;
     self->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
     res = sema::act_on_explicit_cast(ty, expr, start_loc, end_loc);
   } else if (saved_kind == TOK_KW_SIZEOF) {
-    let start_loc: Loc;
-    let end_loc: Loc;
-    let ty: Type*;
-    let expr: Expr*;
-    start_loc = self->consume_token();
+    let start_loc = self->consume_token();
     self->expect_and_consume(TOK_LPAREN, nullptr, nullptr);
-    ty = nullptr;
-    expr = nullptr;
+    let ty: Type* = nullptr;
+    let expr: Expr* = nullptr;
     if (self->is_start_of_type()) {
       ty = self->parse_type();
     } else {
@@ -335,7 +289,7 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
       diag(start_loc, "sizeof on invalid type", DIAG_ERROR);
       ty = Type::get_builtin(BTK_I64);
     }
-    end_loc = self->tok->loc;
+    let end_loc = self->tok->loc;
     self->expect_and_consume(TOK_RPAREN, nullptr, nullptr);
     res = sema::act_on_sizeof_expr(ty, expr, start_loc, end_loc);
   }
@@ -343,27 +297,21 @@ fn Parser::parse_unit_expr(self: Parser *) -> Expr* {
 }
 
 fn Parser::parse_assignment_expr(self: Parser *) -> Expr* {
-  let lhs: Expr*;
-  lhs = self->parse_unit_expr();
+  let lhs = self->parse_unit_expr();
   return self->parse_rhs_of_binary_expr(lhs, PREC_ASSIGN);
 }
 
 fn Parser::parse_rhs_of_binary_expr(self: Parser *, lhs: Expr*, prec: Prec) -> Expr* {
-  let next_tok_prec: Prec;
-  let colon_loc: Loc;
-  next_tok_prec = prec_from_bin_op(self->tok->ty);
-  colon_loc = 0;
+  let next_tok_prec = prec_from_bin_op(self->tok->ty);
+  let colon_loc: Loc = 0;
   while (true) {
-    let op_token_ty: Tok;
-    let op_token_loc: Loc;
-    let ternary_middle: Expr*;
     if (next_tok_prec < prec) return lhs;
-    op_token_ty = self->tok->ty;
+    let op_token_ty = self->tok->ty;
     if (self->tok->ty == TOK_COMMA) {
       return lhs;
     }
-    op_token_loc = self->consume_token();
-    ternary_middle = nullptr;
+    let op_token_loc = self->consume_token();
+    let ternary_middle: Expr* = nullptr;
     if (next_tok_prec == PREC_COND) {
       // if (self->tok->ty == TOK_LBRACE) {
         // // brace_loc = self.tok.loc
@@ -388,8 +336,7 @@ fn Parser::parse_rhs_of_binary_expr(self: Parser *, lhs: Expr*, prec: Prec) -> E
         diag(op_token_loc, "to match this '?'", DIAG_NOTE);
       }
     }
-    let rhs: Expr*;
-    rhs = nullptr;
+    let rhs: Expr* = nullptr;
     if (next_tok_prec <= PREC_COND) {
       rhs = self->parse_assignment_expr();
     } else {
@@ -398,33 +345,27 @@ fn Parser::parse_rhs_of_binary_expr(self: Parser *, lhs: Expr*, prec: Prec) -> E
     if (rhs == nullptr) {
       lhs = nullptr;
     }
-    let this_prec: Prec;
-    let is_right_assoc: bool;
-    this_prec = next_tok_prec;
+    let this_prec = next_tok_prec;
     next_tok_prec = prec_from_bin_op(self->tok->ty);
-    is_right_assoc = (this_prec == PREC_COND) | (this_prec == PREC_ASSIGN);
-    if ((this_prec < next_tok_prec) | ((this_prec == next_tok_prec) & is_right_assoc)) {
-      let prec_new: i64;
+    let is_right_assoc = (this_prec == PREC_COND) || (this_prec == PREC_ASSIGN);
+    if ((this_prec < next_tok_prec) || ((this_prec == next_tok_prec) && is_right_assoc)) {
       // XXX: weird cast with enums
-      prec_new = cast<i64>(this_prec) + cast<i64>(!is_right_assoc);
+      let prec_new = cast<i64>(this_prec) + cast<i64>(!is_right_assoc);
       rhs = self->parse_rhs_of_binary_expr(rhs, cast<Prec>(prec_new));
       if (rhs == nullptr) lhs = nullptr;
       next_tok_prec = prec_from_bin_op(self->tok->ty);
     }
-    let orig_lhs: Expr*;
-    orig_lhs = lhs;
+    let orig_lhs = lhs;
     if (lhs != nullptr) {
       if (ternary_middle == nullptr) {
-        let bin_op: Expr*;
-        bin_op = sema::act_on_bin_op(self->cur_scope, op_token_loc, op_token_ty, lhs, rhs);
+        let bin_op = sema::act_on_bin_op(self->cur_scope, op_token_loc, op_token_ty, lhs, rhs);
         if (bin_op == nullptr) {
           // XXX: TODO
           // bin_op = sema::create_recovery_expr(lhs.get_range()[0], rhs.get_range()[1], [lhs, rhs]);
         }
         lhs = bin_op;
       } else {
-        let cond_op: Expr*;
-        cond_op = sema::act_on_conditional_op(op_token_loc, colon_loc, lhs, ternary_middle, rhs);
+        let cond_op = sema::act_on_conditional_op(op_token_loc, colon_loc, lhs, ternary_middle, rhs);
         if (cond_op == nullptr) {
           // XXX: TODO
           // args = []

@@ -273,14 +273,15 @@ UPtr<VarDecl> Sema::act_on_var_decl(Scope *scope, Loc kw_loc, Loc id_loc,
 UPtr<VarDecl> Sema::act_on_var_decl_init_method(Scope *scope, Loc kw_loc,
                                                 Loc id_loc, Loc end_loc,
                                                 Loc mname_loc, IdentInfo *name,
-                                                Type *type,
+                                                StructDecl *sd,
                                                 FunctionDecl const *method,
                                                 std::vector<ExprUPtr> &&args) {
-  auto decl = act_on_var_decl(scope, kw_loc, id_loc, end_loc, name, type, false,
+  auto ty = ctx.get_declared_type(sd);
+  auto decl = act_on_var_decl(scope, kw_loc, id_loc, end_loc, name, ty, false,
                               nullptr);
 
   ExprUPtr this_ptr = std::make_unique<DeclRefExpr>(decl.get(), name, id_loc,
-                                                    type, ValueKind::LVALUE);
+                                                    ty, ValueKind::LVALUE);
 
   this_ptr =
       Sema::act_on_unary_op(scope, id_loc, tok::AMP, std::move(this_ptr));

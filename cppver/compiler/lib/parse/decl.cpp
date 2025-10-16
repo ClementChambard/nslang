@@ -9,6 +9,7 @@
 #include "semantic_analysis/sema.hpp"
 #include <cassert>
 #include <memory>
+#include <vector>
 
 // TranslationUnitDecl ::= List<Decl>
 //                       ;
@@ -189,43 +190,86 @@ UPtr<ParamDecl> Parser::parse_param_decl() {
 UPtr<VarDecl> Parser::parse_var_decl(bool in_func) {
   assert(tok.kind == tok::KW_LET);
   auto kw_loc = consume_token();
-  IdentInfo *ii;
-  Type *ty;
-  Loc id_loc, colon_loc, end_loc;
-  Tok until[] = {tok::SEMI, tok::RBRACE};
-  if (!parse_end_var_decl_common(this, ii, ty, id_loc, colon_loc, end_loc,
-                                 until)) {
+
+  if (tok.kind != tok::IDENT) {
+    Diag(diag::ERROR, tok.loc, "expected identifier as declaration name");
+    skip_until(tok::SEMI, tok::RBRACE, false, true);
     try_consume_token(tok::SEMI);
     return nullptr;
   }
-  ExprUPtr initializer;
-  if (in_func && tok.kind == tok::EQUAL) {
-    consume_token();
-    initializer = parse_expr();
-  } else if (in_func && tok.kind == tok::COLONCOLON && ty->is_structure_type()) {
-    // TODO: do it better...
-    consume_token();
-    if (tok.kind != tok::IDENT) {
-      Diag(diag::ERROR, tok.loc, "expected identifier after '::'");
-    } else {
-      auto m = tok.ident();
-      auto mloc = consume_token();
-      auto sd = ty->get_as_struct_decl();
-      auto method = sema.lookup_method_in_struct(sd, m);
-      if (!method || !method->has_init_ident) {
-        Diag(diag::ERROR, mloc, "no init method '%s' in struct '%s'", method->get_name().c_str(), sd->get_name().c_str());
-        return nullptr;
-      }
-      expect_and_consume(tok::LPAREN);
-      std::vector<std::unique_ptr<Expr>> args;
-      parse_expression_list(args);
-      end_loc = tok.loc;
-      expect_and_consume(tok::RPAREN);
-      expect_and_consume_semi("expected ';' at end of var decl");
-      return sema.act_on_var_decl_init_method(cur_scope, kw_loc, id_loc, end_loc, mloc, ii, ty,
-          method, std::move(args));
+  IdentInfo *ii = tok.ident();
+  Loc id_loc = consume_token();
+
+  Type *ty = nullptr;
+  if (tok.kind != tok::COLON && tok.kind != tok::EQUAL) {
+    Diag(diag::ERROR, id_loc, "expected ': Type' after declaration name");
+    skip_until(tok::SEMI, tok::RBRACE, false, true);
+    try_consume_token(tok::SEMI);
+    return nullptr;
+  }
+  if (tok.kind == tok::COLON) {
+    Loc colon_loc = consume_token();
+    ty = parse_type();
+    if (ty == nullptr) {
+      Diag(diag::ERROR, colon_loc, "expected 'Type' after ':'");
+      skip_until(tok::SEMI, tok::RBRACE, false, true);
+      try_consume_token(tok::SEMI);
+      return nullptr;
     }
   }
+
+  Loc end_loc = prev_tok_location;
+
+  // TODO: check errors better
+  ExprUPtr initializer;
+  if (in_func && tok.kind == tok::EQUAL) {
+    if (ty && ty->is_structure_type()) {
+      Diag(diag::UNIMPLEMENTED, end_loc, "TODO: implement this edge case...");
+      return nullptr;
+    }
+    consume_token();
+
+    if (!ty && tok.kind == tok::IDENT && is_start_of_type()) {
+      Token ident = tok;
+      IdentInfo *ty_ii = tok.ident();
+      Loc ty_loc = consume_token();
+      auto nd = cur_scope->lookup_named_decl(ty_ii);
+      auto sd = nd ? nd->dyn_cast<StructDecl>() : nullptr;
+      if (!sd) {
+        Diag(diag::ERROR, ty_loc, "expected struct type name after '='");
+        return nullptr;
+      }
+
+      Token coloncolon = tok;
+      expect_and_consume(tok::COLONCOLON);
+      if (tok.kind != tok::IDENT) {
+        Diag(diag::ERROR, tok.loc, "expected identifier after '::'");
+        return nullptr;
+      }
+
+      auto method = sema.lookup_method_in_struct(sd, tok.ident());
+      if (!method || !method->has_init_ident) {
+        unconsume_token(coloncolon);
+        unconsume_token(ident);
+      } else {
+        Loc mloc = consume_token();
+        expect_and_consume(tok::LPAREN);
+        std::vector<std::unique_ptr<Expr>> args;
+        parse_expression_list(args);
+        end_loc = tok.loc;
+        expect_and_consume(tok::RPAREN);
+        expect_and_consume_semi("expected ';' at end of var decl");
+        return sema.act_on_var_decl_init_method(cur_scope, kw_loc, id_loc, end_loc, mloc, ii, sd,
+            method, std::move(args));
+      }
+    }
+
+    initializer = parse_expr();
+    if (!ty) ty = initializer->type;
+
+    assert(!ty->is_void_type()); // TODO: < better check
+  } 
+
   expect_and_consume_semi("expected ';' at end of var decl");
   return sema.act_on_var_decl(cur_scope, kw_loc, id_loc, end_loc, ii, ty,
                               !in_func, std::move(initializer));

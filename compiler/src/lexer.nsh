@@ -11,7 +11,7 @@ struct Lexer {
     already_included_files: DArray;
 };
 
-lib fn Lexer::init(self: Lexer*);
+lib fn Lexer::init(self: Lexer*) init;
 
 lib fn Lexer::delete(self: Lexer*);
 

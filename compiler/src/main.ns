@@ -25,19 +25,14 @@ fn cleanup() {
 fn main() {
     init();
 
-    let lexer: Lexer;
+    let lexer = Lexer::init();
 
-    lexer.init();
     lexer.add_include_path("/home/clement/dev/nslang/stdlib/include");
-
     lexer.enter_source_file("example.ns");
 
-    let parser: Parser*;
-    parser = Parser::new(&lexer);
+    let parser = Parser::new(&lexer);
 
-    let tu: TranslationUnitDecl*;
-
-    tu = parser->parse();
+    let tu = parser->parse();
   
     print_ast(tu);
 

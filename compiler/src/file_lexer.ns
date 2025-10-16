@@ -6,13 +6,11 @@
 #include diags.nsh
 
 fn FileLexer::create(filename: i8*, the_lexer: void*) -> FileLexer* {
-    let f: OpenedFile*;
-    f = OpenedFile::find(filename);
+    let f = OpenedFile::find(filename);
     if (f == nullptr) {
         f = OpenedFile::open(filename);
     }
-    let self: FileLexer*;
-    self = malloc(sizeof(FileLexer));
+    let self = cast<FileLexer*>(malloc(sizeof(FileLexer)));
     self->f = f;
     self->pos = 0;
     self->the_lexer = the_lexer;
@@ -86,14 +84,12 @@ fn ident_continue(c: i8) -> bool {
 }
 
 fn FileLexer::lex_ident(self: FileLexer*, token: Token*, cur_pos: i64) {
-    let c: i8;
-    c = self->f->source.data[cur_pos];
+    let c = self->f->source.data[cur_pos];
     while (ident_continue(c)) {
         cur_pos += 1;
         c = self->f->source.data[cur_pos];
     }
-    let ii: IdentInfo*;
-    ii = IdentInfo::find(&self->f->source.data[self->pos], cur_pos - self->pos);
+    let ii = IdentInfo::find(&self->f->source.data[self->pos], cur_pos - self->pos);
     if (self->the_lexer != nullptr) if (ii->needs_handling()) {
         cast<Lexer*>(self->the_lexer)->handle_ident(token, ii);
     }
@@ -102,9 +98,8 @@ fn FileLexer::lex_ident(self: FileLexer*, token: Token*, cur_pos: i64) {
 }
 
 fn FileLexer::lex_number(self: FileLexer*, token: Token*, cur_pos: i64) {
-    let c: i8;
     while (true) {
-        c = self->f->source.data[cur_pos];
+        let c = self->f->source.data[cur_pos];
         if (c == 'e') {
             if (self->f->source.data[cur_pos + 1] == '+') {
                 cur_pos += 2;
@@ -135,9 +130,8 @@ fn FileLexer::lex_number(self: FileLexer*, token: Token*, cur_pos: i64) {
 }
 
 fn FileLexer::skip_to_end_of_line_comment(self: FileLexer*, cur_pos: i64) -> i64 {
-    let c: i8;
     while (true) {
-        c = self->f->source.data[cur_pos];
+        let c = self->f->source.data[cur_pos];
         if (c == '\0') return cur_pos;
         if (c == '\n') return cur_pos;
         if (c == '\r') return cur_pos;
@@ -146,9 +140,8 @@ fn FileLexer::skip_to_end_of_line_comment(self: FileLexer*, cur_pos: i64) -> i64
 }
 
 fn FileLexer::skip_to_end_of_multiline_comment(self: FileLexer*, cur_pos: i64) -> i64 {
-    let c: i8;
     while (true) {
-        c = self->f->source.data[cur_pos];
+        let c = self->f->source.data[cur_pos];
         if (c == '\0') {
             if (cur_pos + 1 != self->f->source.len) {
                 diag(self->f->pos_offset + cur_pos, "NULL in file", DIAG_WARNING);
@@ -165,8 +158,7 @@ fn FileLexer::skip_to_end_of_multiline_comment(self: FileLexer*, cur_pos: i64) -
 }
 
 fn FileLexer::lex_char_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
-    let c: i8;
-    c = self->f->source.data[cur_pos];
+    let c = self->f->source.data[cur_pos];
     while (c != '\'') {
         if (c == '\\') cur_pos += 1;
         cur_pos += 1;
@@ -176,8 +168,7 @@ fn FileLexer::lex_char_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
 }
 
 fn FileLexer::lex_str_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
-    let c: i8;
-    c = self->f->source.data[cur_pos];
+    let c = self->f->source.data[cur_pos];
     while (c != '"') {
         if (c == '\\') cur_pos += 1;
         cur_pos += 1;
@@ -187,11 +178,9 @@ fn FileLexer::lex_str_literal(self: FileLexer*, token: Token*, cur_pos: i64) {
 }
 
 fn FileLexer::lex_internal(self: FileLexer*, token: Token*) {
-    let c: i8;
-    let cur_pos: i64;
     while (isspace(self->f->source.data[self->pos])) self->pos = self->pos + 1;
-    c = self->f->source.data[self->pos];
-    cur_pos = self->pos + 1;
+    let c = self->f->source.data[self->pos];
+    let cur_pos = self->pos + 1;
     if (c == '\0') {
         if (cur_pos == self->f->source.len) self->handle_end_of_file(token, cur_pos);
         else {
@@ -394,8 +383,7 @@ fn FileLexer::lex_internal(self: FileLexer*, token: Token*) {
         self->lex_str_literal(token, cur_pos);
         return;
     }
-    let diag_msg: String;
-    diag_msg.format("Unknown character '%c' in source file", c);
+    let diag_msg = String::format("Unknown character '%c' in source file", c);
     diag(self->pos + self->f->pos_offset, diag_msg.inner.data, DIAG_ERROR);
     diag_msg.destroy();
     self->pos = cur_pos;
@@ -403,8 +391,7 @@ fn FileLexer::lex_internal(self: FileLexer*, token: Token*) {
 }
 
 fn FileLexer::lex(self: FileLexer*) -> Token* {
-    let out: Token*;
-    out = malloc(sizeof(Token));
+    let out = cast<Token*>(malloc(sizeof(Token)));
     self->lex_internal(out);
     return out;
 }

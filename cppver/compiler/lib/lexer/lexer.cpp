@@ -94,8 +94,8 @@ void Lexer::handle_ident(Token &tok, IdentInfo *ident) {
 
 Token Lexer::lex() {
   if (cached_tokens.size() != 0) {
-    auto t = cached_tokens.front();
-    cached_tokens.erase(cached_tokens.begin());
+    auto t = cached_tokens.back();
+    cached_tokens.pop_back();
     return t;
   }
   assert(cur_lexer != nullptr && "Nothing to lex");

@@ -14,7 +14,7 @@ fn print_va(fmt: i8*, ...*) {
 }
 
 fn fprint_va(fd: i64, fmt: i8*, ...*) {
-  let s: String::format_va(fmt, vaargs);
+  let s = String::format_va(fmt, vaargs);
   write(fd, s.data, s.len);
   s.destroy();
 }
