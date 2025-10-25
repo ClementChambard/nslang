@@ -67,8 +67,15 @@ bool is_allowed_explicit_cast(Sema *sema, Type *from_type, Type *to_type, Conver
 
 
 bool is_integral_promotion(Sema *sema, Type *from_type, Type *to_type);
-bool is_floating_point_promotion(Sema *, Type *, Type *) { return false; }
-bool is_floating_point_conversion(Sema *, Type *, Type *) { return false; }
+
+bool is_floating_point_promotion(Type *from_type, Type *to_type) {
+  BuiltinType *from_bt;
+  BuiltinType *to_bt;
+  if (!(from_bt = from_type->dyn_cast<BuiltinType>())) return false;
+  if (!(to_bt = to_type->dyn_cast<BuiltinType>())) return false;
+  return from_bt->get_kind() == BuiltinType::F32 && to_bt->get_kind() == BuiltinType::F64;
+}
+
 bool is_pointer_conversion(Sema *sema, Expr *f, Type *from_type, Type *to_type,
                            Type *&out_type, bool is_explicit);
 
@@ -105,7 +112,7 @@ bool is_standard_conversion(Sema *sema, Expr *from_e, Type *to_type,
   } else if (is_integral_promotion(sema, from_type, to_type)) {
     cs->second = CK_INTEGRAL_PROMOTION;
     from_type = to_type;
-  } else if (is_floating_point_promotion(sema, from_type, to_type)) {
+  } else if (is_floating_point_promotion(from_type, to_type)) {
     cs->second = CK_FLOATING_PROMOTION;
     from_type = to_type;
   } else if (to_type->is_boolean_type() && (from_type->is_arithmetic_type() ||
@@ -116,10 +123,13 @@ bool is_standard_conversion(Sema *sema, Expr *from_e, Type *to_type,
              to_type->is_integral_type()) {
     cs->second = CK_INTEGRAL_CONVERSION;
     from_type = to_type;
-  } else if (is_floating_point_conversion(sema, from_type, to_type)) {
+  } else if (from_type->is_real_floating_type() && to_type->is_real_floating_type()) {
     cs->second = CK_FLOATING_CONVERSION;
     from_type = to_type;
-  } else if (false) { // TODO: CK_FLOATING_INTEGRAL
+  } else if ((from_type->is_real_floating_type() && to_type->is_integral_type()) ||
+      (from_type->is_integral_or_unscoped_enumeration_type() && to_type->is_real_floating_type())) {
+    cs->second = CK_FLOATING_INTEGRAL;
+    from_type = to_type;
   } else if (is_pointer_conversion(sema, from_e, from_type, to_type, from_type,
                                    is_explicit)) {
     cs->second = CK_POINTER_CONVERSION;
@@ -272,6 +282,8 @@ static bool is_null_pointer_constant(Expr *expr) {
     return true;
   if (auto *e = expr->dyn_cast<IntegerLiteral>())
     return e->value == 0;
+  if (auto *e = expr->dyn_cast<FloatingLiteral>())
+    return e->value == 0.0;
   return false;
 }
 

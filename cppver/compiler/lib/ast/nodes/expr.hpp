@@ -151,15 +151,27 @@ struct DeclRefExpr : public Expr {
 };
 
 struct IntegerLiteral : public Expr {
-  i64 value;
+  u64 value;
   Loc loc;
 
-  IntegerLiteral(i64 v, Loc l, Type *type)
+  IntegerLiteral(u64 v, Loc l, Type *type)
       : Expr(INTEGER_LITERAL, type, ValueKind::PRVALUE), value(v), loc(l) {}
 
   Loc get_start_loc() const override { return loc; }
   Loc get_end_loc() const override { return loc; }
   static bool is_class(Kind k) { return k == INTEGER_LITERAL; }
+};
+
+struct FloatingLiteral : public Expr {
+  f64 value;
+  Loc loc;
+
+  FloatingLiteral(f64 v, Loc l, Type *type)
+      : Expr(FLOATING_LITERAL, type, ValueKind::PRVALUE), value(v), loc(l) {}
+
+  Loc get_start_loc() const override { return loc; }
+  Loc get_end_loc() const override { return loc; }
+  static bool is_class(Kind k) { return k == FLOATING_LITERAL; }
 };
 
 struct BoolLiteral : public Expr {
@@ -453,7 +465,11 @@ struct CastExpr : public Expr {
     POINTER_TO_INTEGRAL,
     INTEGRAL_TO_BOOLEAN,
     INTEGRAL_TO_POINTER,
+    INTEGRAL_TO_FLOATING,
     INTEGRAL_CAST,
+    FLOATING_TO_BOOLEAN,
+    FLOATING_TO_INTEGRAL,
+    FLOATING_CAST,
     ARRAY_TO_POINTER_DECAY,
     FUNCTION_TO_POINTER_DECAY,
     NULL_TO_POINTER,

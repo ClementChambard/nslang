@@ -105,6 +105,8 @@
   "u16"
   "u32"
   "u64"
+  "f32"
+  "f64"
   "void"
   "bool" 
 ] @type.builtin

@@ -179,6 +179,8 @@ TEST_CASE("lex each token once") {
   CHECK(lexer.lex().kind == tok::KW_U16);
   CHECK(lexer.lex().kind == tok::KW_U32);
   CHECK(lexer.lex().kind == tok::KW_U64);
+  CHECK(lexer.lex().kind == tok::KW_F32);
+  CHECK(lexer.lex().kind == tok::KW_F64);
   CHECK(lexer.lex().kind == tok::KW_BOOL);
   CHECK(lexer.lex().kind == tok::KW_VOID);
   CHECK(lexer.lex().kind == tok::KW_SIZEOF);

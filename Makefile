@@ -7,7 +7,7 @@ tests/clientserver/server: tests/clientserver/server.ns
 	./nslang -O1 $^ -o $@
 
 tests/sdl3_test/sdl3_test: tests/sdl3_test/sdl3_test.ns
-	./nslang -O1 $^ -o $@ -lSDL3
+	./nslang -O1 $^ -o $@ -lSDL3 -lGL
 
 a.out: main.ns
 	./nslang -O1 $^ -o $@

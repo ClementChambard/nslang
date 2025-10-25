@@ -4,7 +4,6 @@
 #include <cassert>
 
 u32 ASTContext::get_type_size(Type *t) {
-  // TODO: actual values that depend on arch
   if (t->is_specific_builtin_type(BuiltinType::I8))
     return 1;
   if (t->is_specific_builtin_type(BuiltinType::U8))
@@ -25,6 +24,11 @@ u32 ASTContext::get_type_size(Type *t) {
     return 8;
   if (t->is_specific_builtin_type(BuiltinType::U64))
     return 8;
+  if (t->is_specific_builtin_type(BuiltinType::F32))
+    return 4;
+  if (t->is_specific_builtin_type(BuiltinType::F64))
+    return 8;
+  // TODO: actual values that depend on arch
   if (t->is_specific_builtin_type(BuiltinType::NULLPTR))
     return 8;
   if (t->is_specific_builtin_type(BuiltinType::VALIST))
@@ -88,6 +92,8 @@ ASTContext::ASTContext() {
   prepare_builtin_type(this, u32_ty, BuiltinType::U32);
   prepare_builtin_type(this, u64_ty, BuiltinType::U64);
   prepare_builtin_type(this, bool_ty, BuiltinType::BOOL);
+  prepare_builtin_type(this,         f32_ty, BuiltinType::F32);
+  prepare_builtin_type(this,         f64_ty, BuiltinType::F64);
   prepare_builtin_type(this, void_ty, BuiltinType::VOID);
   prepare_builtin_type(this, nullptr_ty, BuiltinType::NULLPTR);
   prepare_builtin_type(this, valist_ty, BuiltinType::VALIST);
@@ -211,6 +217,10 @@ Type *ASTContext::get_builtin_type_from_tok(Tok tok) {
     return u32_ty;
   case tok::KW_U64:
     return u64_ty;
+  case tok::KW_F32:
+    return f32_ty;
+  case tok::KW_F64:
+    return f64_ty;
   case tok::KW_VOID:
     return void_ty;
   case tok::KW_BOOL:

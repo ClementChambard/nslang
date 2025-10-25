@@ -11,6 +11,8 @@ std::pair<i64, bool> eval_integer_constexpr(ASTContext &ctx, Expr const *expr) {
     return {0, false};
   } else if (auto *e = expr->dyn_cast<IntegerLiteral>()) {
     return {e->value, true};
+  } else if (auto *e = expr->dyn_cast<FloatingLiteral>()) {
+    return {e->value, true};
   } else if (auto *e = expr->dyn_cast<CharLiteral>()) {
     return {e->value, true};
   } else if (auto *_ = expr->dyn_cast<NullptrLiteral>()) {

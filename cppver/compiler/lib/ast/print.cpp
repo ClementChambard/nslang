@@ -294,6 +294,9 @@ void print_expr(Expr const *expr) {
   case Stmt::INTEGER_LITERAL:
     fprintf(stderr, "IntegerLiteral");
     break;
+  case Stmt::FLOATING_LITERAL:
+    fprintf(stderr, "FloatingLiteral");
+    break;
   case Stmt::BOOL_LITERAL:
     fprintf(stderr, "BoolLiteral");
     break;
@@ -368,6 +371,8 @@ void print_expr(Expr const *expr) {
 
   if (auto *e = expr->dyn_cast<IntegerLiteral>()) {
     fprintf(stderr, " %s%lld%s", COL::VALUE, e->value, COL::RESET);
+  } else if (auto *e = expr->dyn_cast<FloatingLiteral>()) {
+    fprintf(stderr, " %s%f%s", COL::VALUE, e->value, COL::RESET);
   } else if (auto *e = expr->dyn_cast<CharLiteral>()) {
     fprintf(stderr, " %s%lld%s", COL::VALUE, e->value, COL::RESET);
   } else if (auto *e = expr->dyn_cast<BoolLiteral>()) {

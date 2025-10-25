@@ -172,6 +172,23 @@ fn fmt_hex(self: String*, num: i64, upper: bool) {
     self->push_cstr(p);
 }
 
+fn fmt_float(self: String*, num: f64) {
+  // TODO: big numbers
+  let int = cast<i64>(num);
+  fmt_num(self, int, true);
+  let rem = num - cast<f64>(int);
+  self->push('.');
+  let i = 0;
+  while (i < 5) {
+    rem *= 10;
+    int = cast<i64>(rem);
+    let digit: char = int + '0';
+    self->push(digit);
+    rem -= cast<f64>(int);
+    i++;
+  }
+}
+
 fn String::format(self: String*, fmt: CStr, ...) {
   self->format_va(fmt, vaargs);
 }
@@ -214,6 +231,8 @@ fn String::push_format_va(self: String*, fmt: CStr, ...*) {
             fmt_hex(self, vaarg<i64>, false);
         } else if (fmt[i] == 'X') {
             fmt_hex(self, vaarg<i64>, true);
+        } else if (fmt[i] == 'f') {
+            fmt_float(self, vaarg<f64>);
         } else if (fmt[i] == 's') {
             self->push_cstr(vaarg<CStr>);
         } else if (fmt[i] == 'S') {

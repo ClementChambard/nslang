@@ -53,10 +53,15 @@ RValue gen_pre_post_inc_dec(CGContext &ctx, UnaryExpr const &e, LValue lv,
     auto elty = ptr->pointee_type;
     auto amt = ctx.builder.getInt32(amount);
     if (elty->is_function_type()) {
-      value = ctx.builder.CreateGEP(llvm::Type::getInt8Ty(ctx.llvmctx), value, amt, "incdec.funcptr");
+      value = ctx.builder.CreateGEP(llvm::Type::getInt8Ty(ctx.llvmctx), value,
+                                    amt, "incdec.funcptr");
     } else {
-      value = ctx.builder.CreateGEP(convert_type_for_mem(ctx, elty), value, amt, "incdec.ptr");
+      value = ctx.builder.CreateGEP(convert_type_for_mem(ctx, elty), value, amt,
+                                    "incdec.ptr");
     }
+  } else if (type->is_real_floating_type()) {
+    llvm::Value *amt = llvm::ConstantFP::get(convert_type(ctx, type), amount);
+    value = ctx.builder.CreateFAdd(value, amt, is_inc ? "inc" : "dec");
   }
 
   gen_store_of_scalar(ctx, value, lv, type);
@@ -96,8 +101,16 @@ llvm::Value *gen_cast_expr(CGContext &ctx, CastExpr const &e) {
     gen_ignored_expr(ctx, *e.op);
     return nullptr;
   case CastExpr::INTEGRAL_CAST:
+  case CastExpr::INTEGRAL_TO_FLOATING:
+  case CastExpr::FLOATING_TO_INTEGRAL:
+  case CastExpr::FLOATING_CAST:
     return gen_scalar_conversion(ctx, gen_scalar_expr(ctx, e.op.get()),
                                  e.op->type, e.type, e.get_start_loc());
+  case CastExpr::FLOATING_TO_BOOLEAN: {
+    auto v = gen_scalar_expr(ctx, e.op.get());
+    return ctx.builder.CreateFCmpUNE(
+        v, llvm::Constant::getNullValue(v->getType()), "tobool");
+  }
   case CastExpr::INTEGRAL_TO_BOOLEAN:
     return ctx.builder.CreateIsNotNull(gen_scalar_expr(ctx, e.op.get()),
                                        "tobool");
@@ -121,7 +134,8 @@ llvm::Value *gen_call_expr(CGContext &ctx, CallExpr const &e) {
     fd = dr->decl->dyn_cast<FunctionDecl>();
   } else if (auto *me = fn->dyn_cast<MethodExpr>()) {
     fd = me->method_func;
-    llvm::Value *this_arg = me->is_arrow ? gen_scalar_expr(ctx, me->base.get()) : gen_lvalue(ctx, *me->base);
+    llvm::Value *this_arg = me->is_arrow ? gen_scalar_expr(ctx, me->base.get())
+                                         : gen_lvalue(ctx, *me->base);
     args.push_back(this_arg);
   }
   for (auto const &a : e.args) {
@@ -130,7 +144,10 @@ llvm::Value *gen_call_expr(CGContext &ctx, CallExpr const &e) {
   auto t = llvm::cast<llvm::FunctionType>(convert_type(ctx, fd->type));
   auto f = get_addr_of_function(ctx, fd, convert_type(ctx, fd->type));
 
-  return ctx.builder.CreateCall(t, f, args, fd->type->dyn_cast<FunctionType>()->result_type->is_void_type() ? "" : "call");
+  return ctx.builder.CreateCall(
+      t, f, args,
+      fd->type->dyn_cast<FunctionType>()->result_type->is_void_type() ? ""
+                                                                      : "call");
 }
 
 struct BinOpInfo {
@@ -196,9 +213,9 @@ llvm::Value *gen_binary_expr_inner(CGContext &ctx, BinOpInfo ops) {
     if (ops.lhs->getType()->isPointerTy() ||
         ops.rhs->getType()->isPointerTy()) {
       return gen_pointer_arithmetic(ctx, ops, false);
-    }
-    // TODO: other types
-    if (ops.ty->is_signed_integer_or_enumeration_type()) {
+    } else if (ops.lhs->getType()->isFloatingPointTy()) {
+      return ctx.builder.CreateFAdd(ops.lhs, ops.rhs, "add");
+    } else if (ops.ty->is_signed_integer_or_enumeration_type()) {
       return ctx.builder.CreateNSWAdd(ops.lhs, ops.rhs, "add");
     } else {
       return ctx.builder.CreateAdd(ops.lhs, ops.rhs, "add");
@@ -206,9 +223,10 @@ llvm::Value *gen_binary_expr_inner(CGContext &ctx, BinOpInfo ops) {
   case BinaryExpr::SUB:
   case BinaryExpr::SUBASSIGN:
     if (!ops.lhs->getType()->isPointerTy()) {
-      // TODO: other types
       if (ops.ty->is_signed_integer_or_enumeration_type()) {
         return ctx.builder.CreateNSWSub(ops.lhs, ops.rhs, "sub");
+      } else if (ops.lhs->getType()->isFloatingPointTy()) {
+        return ctx.builder.CreateFSub(ops.lhs, ops.rhs, "sub");
       } else {
         return ctx.builder.CreateSub(ops.lhs, ops.rhs, "sub");
       }
@@ -237,6 +255,8 @@ llvm::Value *gen_binary_expr_inner(CGContext &ctx, BinOpInfo ops) {
     // TODO: other types
     if (ops.ty->is_signed_integer_or_enumeration_type()) {
       return ctx.builder.CreateNSWMul(ops.lhs, ops.rhs, "mul");
+    } else if (ops.lhs->getType()->isFloatingPointTy()) {
+      return ctx.builder.CreateFMul(ops.lhs, ops.rhs, "mul");
     } else {
       return ctx.builder.CreateMul(ops.lhs, ops.rhs, "mul");
     }
@@ -245,6 +265,8 @@ llvm::Value *gen_binary_expr_inner(CGContext &ctx, BinOpInfo ops) {
     // TODO: other types
     if (ops.ty->is_unsigned_integer_or_enumeration_type()) {
       return ctx.builder.CreateUDiv(ops.lhs, ops.rhs, "div");
+    } else if (ops.lhs->getType()->isFloatingPointTy()) {
+      return ctx.builder.CreateFDiv(ops.lhs, ops.rhs, "div");
     } else {
       return ctx.builder.CreateSDiv(ops.lhs, ops.rhs, "div");
     }
@@ -294,7 +316,7 @@ LValue gen_compound_assign_lvalue(CGContext &ctx, CompoundAssignExpr const &e) {
   bo.ty = e.type;
   bo.opc = e.opc;
   bo.e = &e;
-  
+
   LValue lhslv = gen_lvalue(ctx, *e.lhs);
 
   bo.lhs = gen_load_of_scalar(ctx, lhslv, e.lhs->type);
@@ -318,12 +340,12 @@ llvm::Value *gen_unary_expr(CGContext &ctx, UnaryExpr const &e) {
   case UnaryExpr::ADDROF:
     return gen_lvalue(ctx, *e.arg);
   case UnaryExpr::DEREF:
-    return gen_load_of_scalar(ctx, gen_lvalue(ctx, *e.arg), e.type);
+    return gen_load_of_scalar(ctx, gen_lvalue(ctx, e), e.type);
   case UnaryExpr::PLUS:
     return gen_scalar_expr(ctx, e.arg.get());
   case UnaryExpr::MINUS: {
     auto op = gen_scalar_expr(ctx, e.arg.get());
-    // float -> fneg
+    if (op->getType()->isFloatingPointTy()) return ctx.builder.CreateFNeg(op, "fneg");
     BinOpInfo bin_op;
     bin_op.rhs = op;
     bin_op.lhs = llvm::Constant::getNullValue(bin_op.rhs->getType());
@@ -502,15 +524,21 @@ llvm::Value *gen_lor(CGContext &ctx, BinaryExpr const &e) {
 }
 
 llvm::Value *gen_compare(CGContext &ctx, BinaryExpr const &e,
-                         llvm::ICmpInst::Predicate uicmp,
-                         llvm::ICmpInst::Predicate sicmp,
-                         llvm::ICmpInst::Predicate fcmp, bool signaling) {
+                         llvm::CmpInst::Predicate uicmp,
+                         llvm::CmpInst::Predicate sicmp,
+                         llvm::CmpInst::Predicate fcmp, bool signaling) {
   (void)fcmp, (void)signaling;
   BinOpInfo bo = gen_bin_ops(ctx, e);
 
   llvm::Value *result;
   // TODO: other types
-  if (e.lhs->type->is_signed_integer_or_enumeration_type()) {
+  if (bo.lhs->getType()->isFloatingPointTy()) {
+    if (signaling) {
+      result = ctx.builder.CreateFCmpS(fcmp, bo.lhs, bo.rhs, "cmp");
+    } else {
+      result = ctx.builder.CreateFCmp(fcmp, bo.lhs, bo.rhs, "cmp");
+    }
+  } else if (e.lhs->type->is_signed_integer_or_enumeration_type()) {
     result = ctx.builder.CreateICmp(sicmp, bo.lhs, bo.rhs, "cmp");
   } else {
     result = ctx.builder.CreateICmp(uicmp, bo.lhs, bo.rhs, "cmp");
@@ -543,6 +571,9 @@ llvm::Value *gen_scalar_expr(CGContext &ctx, Expr const *e, bool ignore) {
   case Expr::INTEGER_LITERAL:
     return llvm::ConstantInt::get(convert_type(ctx, e->type),
                                   e->dyn_cast<IntegerLiteral>()->value);
+  case Expr::FLOATING_LITERAL:
+    return llvm::ConstantFP::get(convert_type(ctx, e->type),
+                                 e->dyn_cast<FloatingLiteral>()->value);
   case Expr::CHAR_LITERAL:
     return llvm::ConstantInt::get(convert_type(ctx, e->type),
                                   e->dyn_cast<CharLiteral>()->value);
@@ -557,7 +588,8 @@ llvm::Value *gen_scalar_expr(CGContext &ctx, Expr const *e, bool ignore) {
         convert_type(ctx, e->type),
         ctx.astctx.get_type_size(e->dyn_cast<SizeofExpr>()->ty_of_sizeof));
   case Expr::DECLREF_EXPR:
-    if (auto *v = e->dyn_cast<DeclRefExpr>()->decl->dyn_cast<EnumVariantDecl>()) {
+    if (auto *v =
+            e->dyn_cast<DeclRefExpr>()->decl->dyn_cast<EnumVariantDecl>()) {
       return gen_enum_variant(ctx, v);
     }
     [[fallthrough]];
@@ -651,7 +683,8 @@ LValue gen_pointer(CGContext &ctx, const Expr *e) {
       auto elt_ty =
           convert_type(ctx, ce->op->type->dyn_cast<ArrayType>()->element_type);
       auto idx = ctx.builder.getInt32(0);
-      return ctx.builder.CreateInBoundsGEP(elt_ty, addr, {idx, idx}, "arraydecay");
+      return ctx.builder.CreateInBoundsGEP(elt_ty, addr, {idx, idx},
+                                           "arraydecay");
     }
     default:
       break;
@@ -716,7 +749,8 @@ LValue gen_array_subscript_expr(CGContext &ctx, ArraySubscriptExpr const &e) {
           idx, llvm::Type::getInt32Ty(ctx.llvmctx),
           e.rhs->type->is_signed_integer_or_enumeration_type(), "idxprom");
 
-    return ctx.builder.CreateGEP(convert_type_for_mem(ctx, elt_type), array_lv, idx, "arrayidx");
+    return ctx.builder.CreateGEP(convert_type_for_mem(ctx, elt_type), array_lv,
+                                 idx, "arrayidx");
   } else {
     // The base must be a pointer; emit it with an estimate of its alignment.
     auto base_addr = gen_pointer(ctx, e.lhs.get());
@@ -756,8 +790,8 @@ LValue gen_member_expr(CGContext &ctx, MemberExpr const &e) {
     idx++;
   }
 
-  return ctx.builder.CreateStructGEP(convert_type_for_mem(ctx, st_decl->type_for_decl), base_lv,
-                                     idx);
+  return ctx.builder.CreateStructGEP(
+      convert_type_for_mem(ctx, st_decl->type_for_decl), base_lv, idx);
 }
 
 struct CondInfo {
@@ -769,7 +803,8 @@ LValue gen_conditional_expr_lvalue(CGContext &ctx, ConditionalExpr const &e) {
   bool cond_v;
   if (constant_folds_to_simple_integer(ctx, e.cond.get(), cond_v)) {
     Expr const *live = e.true_expr.get(), *dead = e.false_expr.get();
-    if (!cond_v) std::swap(live, dead);
+    if (!cond_v)
+      std::swap(live, dead);
     return gen_lvalue(ctx, *live);
   }
 
@@ -850,18 +885,24 @@ llvm::Value *gen_scalar_conversion(CGContext &ctx, llvm::Value *v,
   (void)l;
   from_ty = ctx.astctx.desugar_type(from_ty);
   to_ty = ctx.astctx.desugar_type(to_ty);
-  if (from_ty == to_ty) return v;
-  if (to_ty->is_void_type()) return nullptr;
+  if (from_ty == to_ty)
+    return v;
+  if (to_ty->is_void_type())
+    return nullptr;
 
   // TODO: handle all types
   auto src_ty = v->getType();
 
   if (to_ty->is_boolean_type()) {
-    if (isa<llvm::IntegerType>(src_ty)) {
+    if (from_ty->is_real_floating_type()) {
+      return ctx.builder.CreateFCmpUNE(
+          v, llvm::Constant::getNullValue(v->getType()), "tobool");
+    } else if (isa<llvm::IntegerType>(src_ty)) {
       return ctx.builder.CreateIsNotNull(v, "tobool");
     } else {
       // only ptr for now
-      return ctx.builder.CreateICmpNE(v,
+      return ctx.builder.CreateICmpNE(
+          v,
           llvm::ConstantPointerNull::get(
               llvm::PointerType::getUnqual(ctx.llvmctx)),
           "tobool");
@@ -870,16 +911,46 @@ llvm::Value *gen_scalar_conversion(CGContext &ctx, llvm::Value *v,
 
   auto dst_ty = convert_type(ctx, to_ty);
 
-  if (src_ty == dst_ty) return v;
+  if (src_ty == dst_ty)
+    return v;
 
   if (isa<llvm::PointerType>(dst_ty)) {
-    if (isa<llvm::PointerType>(src_ty)) return v;
-    auto int_res = ctx.builder.CreateIntCast(v, llvm::Type::getInt64Ty(ctx.llvmctx), from_ty->is_signed_integer_or_enumeration_type(), "conv");
+    if (isa<llvm::PointerType>(src_ty))
+      return v;
+    auto int_res = ctx.builder.CreateIntCast(
+        v, llvm::Type::getInt64Ty(ctx.llvmctx),
+        from_ty->is_signed_integer_or_enumeration_type(), "conv");
     return ctx.builder.CreateIntToPtr(int_res, dst_ty, "conv");
   }
+
   if (isa<llvm::PointerType>(src_ty)) {
     return ctx.builder.CreatePtrToInt(v, dst_ty);
   }
 
-  return ctx.builder.CreateIntCast(v, dst_ty, from_ty->is_signed_integer_or_enumeration_type(), "conv");
+  if (isa<llvm::IntegerType>(src_ty)) {
+    bool is_signed = from_ty->is_signed_integer_or_enumeration_type();
+    if (isa<llvm::IntegerType>(dst_ty)) {
+      return ctx.builder.CreateIntCast(v, dst_ty, is_signed, "conv");
+    } else if (is_signed) {
+      return ctx.builder.CreateSIToFP(v, dst_ty, "conv");
+    } else {
+      return ctx.builder.CreateUIToFP(v, dst_ty, "conv");
+    }
+  }
+
+  if (isa<llvm::IntegerType>(dst_ty)) {
+    assert(src_ty->isFloatingPointTy());
+    bool is_signed = to_ty->is_signed_integer_or_enumeration_type();
+    if (is_signed) {
+      return ctx.builder.CreateFPToSI(v, dst_ty, "conv");
+    } else {
+      return ctx.builder.CreateFPToUI(v, dst_ty, "conv");
+    }
+  }
+
+  if (dst_ty->getTypeID() < src_ty->getTypeID()) {
+    return ctx.builder.CreateFPTrunc(v, dst_ty, "conv");
+  } else {
+    return ctx.builder.CreateFPExt(v, dst_ty, "conv");
+  }
 }

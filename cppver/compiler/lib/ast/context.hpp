@@ -17,6 +17,8 @@ struct ASTContext {
   Type *u32_ty;
   Type *u64_ty;
   Type *bool_ty;
+  Type *f32_ty;
+  Type *f64_ty;
   Type *void_ty;
   Type *nullptr_ty;
   Type *valist_ty;

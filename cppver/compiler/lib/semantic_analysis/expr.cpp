@@ -169,8 +169,19 @@ ExprUPtr Sema::default_function_array_lvalue_conversion(ExprUPtr e,
   return default_lvalue_conversion(std::move(e));
 }
 
+ExprUPtr Sema::usual_unary_fp_conversions(ExprUPtr e) {
+  if (e->type->is_floating_type()) {
+    return imp_cast_expr_to_type(std::move(e), ctx.f64_ty,
+                                 CastExpr::FLOATING_CAST);
+  }
+  return e;
+}
+
 ExprUPtr Sema::usual_unary_conversions(ExprUPtr expr) {
   expr = default_function_array_lvalue_conversion(std::move(expr));
+  if (!expr)
+    return nullptr;
+  expr = usual_unary_fp_conversions(std::move(expr));
   if (!expr)
     return nullptr;
   // usual_unary_fp_conversions
@@ -243,6 +254,37 @@ static Type *handle_integer_conversion(Sema &s, ExprUPtr &lhs, ExprUPtr &rhs,
   }
 }
 
+static Type *handle_float_conversion(Sema &s, ExprUPtr &lhs, ExprUPtr &rhs,
+                                     Type *lhs_type, Type *rhs_type,
+                                     bool is_comp_assign) {
+  bool lhs_float = lhs_type->is_real_floating_type();
+  bool rhs_float = rhs_type->is_real_floating_type();
+  // fixed
+  if (lhs_float && rhs_float) {
+    if (lhs_type->is_float64_type()) {
+      rhs = s.imp_cast_expr_to_type(std::move(rhs), lhs_type,
+                                    CastExpr::FLOATING_CAST);
+      return lhs_type;
+    }
+
+    assert(rhs_type->is_float64_type() && "illegal float comparison");
+    if (!is_comp_assign)
+      lhs = s.imp_cast_expr_to_type(std::move(lhs), rhs_type,
+                                    CastExpr::FLOATING_CAST);
+    return rhs_type;
+  }
+
+  if (lhs_float) {
+    rhs = s.imp_cast_expr_to_type(std::move(rhs), lhs_type, CastExpr::INTEGRAL_TO_FLOATING);
+    return lhs_type;
+  }
+  assert(rhs_float);
+  if (!is_comp_assign) {
+    lhs = s.imp_cast_expr_to_type(std::move(lhs), rhs_type, CastExpr::INTEGRAL_TO_FLOATING);
+  }
+  return rhs_type;
+}
+
 Type *Sema::usual_arithmetic_conversions(ExprUPtr &lhs, ExprUPtr &rhs,
                                          bool is_comp_assign) {
   if (!is_comp_assign) {
@@ -272,7 +314,10 @@ Type *Sema::usual_arithmetic_conversions(ExprUPtr &lhs, ExprUPtr &rhs,
   if (unsupported_type_conversion(*this, lhs_type, rhs_type))
     return nullptr;
   // complex types
-  // float types
+  if (lhs_type->is_real_floating_type() || rhs_type->is_real_floating_type()) {
+    return handle_float_conversion(*this, lhs, rhs, lhs_type, rhs_type,
+                                   is_comp_assign);
+  }
   // complex int types
   // fixed types
   return handle_integer_conversion<do_integral_cast, do_integral_cast>(
@@ -283,34 +328,41 @@ static bool check_arithmetic_op_pointer_operand(Sema &s, Loc loc,
                                                 Expr *operand) {
   (void)s;
   Type *res_type = operand->type;
-  if (!res_type->is_pointer_type()) return true;
+  if (!res_type->is_pointer_type())
+    return true;
   Type *pointee_type = res_type->get_pointee_type();
   if (pointee_type->is_void_type()) {
-    Diag(diag::ERROR, loc, "arithmetic on void pointer") << operand->get_range();
+    Diag(diag::ERROR, loc, "arithmetic on void pointer")
+        << operand->get_range();
     return false;
   }
   if (pointee_type->is_function_type()) {
-    Diag(diag::ERROR, loc, "arithmetic on function pointer") << operand->get_range();
+    Diag(diag::ERROR, loc, "arithmetic on function pointer")
+        << operand->get_range();
     return false;
   }
 
   if (pointee_type->is_incomplete_type()) {
-    Diag(diag::ERROR, loc, "arithmetic on incomplete type") << operand->get_range();
+    Diag(diag::ERROR, loc, "arithmetic on incomplete type")
+        << operand->get_range();
     return false;
   }
 
   return true;
 }
 
-static bool check_arithmetic_bin_op_pointer_operands(Loc loc,
-                                                     Expr *lhs, Expr *rhs) {
+static bool check_arithmetic_bin_op_pointer_operands(Loc loc, Expr *lhs,
+                                                     Expr *rhs) {
   bool is_lhs_ptr = lhs->type->is_pointer_type();
   bool is_rhs_ptr = rhs->type->is_pointer_type();
-  if (!is_lhs_ptr && !is_rhs_ptr) return true;
+  if (!is_lhs_ptr && !is_rhs_ptr)
+    return true;
 
   Type *lhs_pointee_ty, *rhs_pointee_ty;
-  if (is_lhs_ptr) lhs_pointee_ty = lhs->type->get_pointee_type();
-  if (is_rhs_ptr) rhs_pointee_ty = rhs->type->get_pointee_type();
+  if (is_lhs_ptr)
+    lhs_pointee_ty = lhs->type->get_pointee_type();
+  if (is_rhs_ptr)
+    rhs_pointee_ty = rhs->type->get_pointee_type();
 
   bool is_lhs_voidptr = is_lhs_ptr && lhs_pointee_ty->is_void_type();
   bool is_rhs_voidptr = is_rhs_ptr && rhs_pointee_ty->is_void_type();
@@ -518,10 +570,10 @@ Type *Sema::check_subtraction_operands(ExprUPtr &lhs, ExprUPtr &rhs, Loc loc,
     auto rpointee = rhs_pty->get_pointee_type();
     auto lpointee = lhs->type->get_pointee_type();
     if (!ctx.is_same_type(lpointee, rpointee)) {
-      Diag(diag::WARNING, loc, "comparison between pointers of different types");
+      Diag(diag::WARNING, loc,
+           "comparison between pointers of different types");
     }
-    if (!check_arithmetic_bin_op_pointer_operands(loc, lhs.get(),
-                                                  rhs.get()))
+    if (!check_arithmetic_bin_op_pointer_operands(loc, lhs.get(), rhs.get()))
       return nullptr;
     if (comp_lhs_ty)
       *comp_lhs_ty = lhs->type;
@@ -664,8 +716,9 @@ Type *Sema::check_assignment_operands(Expr *lhs_expr, ExprUPtr &rhs, Loc loc,
 
     auto cs = try_implicit_conversion(rhs.get(), lhs_type);
     rhs = perform_implicit_conversion(std::move(rhs), lhs_type, &cs);
-    conv_ty = true; 
-    if (!rhs) return nullptr;
+    conv_ty = true;
+    if (!rhs)
+      return nullptr;
 
     // rhs_expr = {loc, rhs_type, prvalue};
     // rhs_ptr = &rhs_expr;
@@ -743,7 +796,7 @@ static Type *check_arithmetic_or_enumeral_compare(Sema &s, ExprUPtr &lhs,
   if (!type)
     return s.invalid_operands(loc, lhs, rhs);
   // complex
-  // float
+  // float => warn for precision loss
   return s.ctx.bool_ty;
 }
 
@@ -768,16 +821,22 @@ Type *Sema::check_compare_operands(ExprUPtr &lhs, ExprUPtr &rhs, Loc loc,
   }
 
   if (lhs->type->is_pointer_type() && rhs->type->is_integer_type()) {
-    Diag(diag::WARNING, loc, "comparing integer to pointer") << lhs->get_range() << rhs->get_range();
-    rhs = imp_cast_expr_to_type(std::move(rhs), lhs->type, CastExpr::INTEGRAL_TO_POINTER);
-    if (!rhs) return nullptr;
+    Diag(diag::WARNING, loc, "comparing integer to pointer")
+        << lhs->get_range() << rhs->get_range();
+    rhs = imp_cast_expr_to_type(std::move(rhs), lhs->type,
+                                CastExpr::INTEGRAL_TO_POINTER);
+    if (!rhs)
+      return nullptr;
     return ctx.bool_ty;
   }
 
   if (rhs->type->is_pointer_type() && lhs->type->is_integer_type()) {
-    Diag(diag::WARNING, loc, "comparing integer to pointer") << lhs->get_range() << rhs->get_range();
-    lhs = imp_cast_expr_to_type(std::move(lhs), rhs->type, CastExpr::INTEGRAL_TO_POINTER);
-    if (!lhs) return nullptr;
+    Diag(diag::WARNING, loc, "comparing integer to pointer")
+        << lhs->get_range() << rhs->get_range();
+    lhs = imp_cast_expr_to_type(std::move(lhs), rhs->type,
+                                CastExpr::INTEGRAL_TO_POINTER);
+    if (!lhs)
+      return nullptr;
     return ctx.bool_ty;
   }
 
@@ -940,7 +999,8 @@ Type *Sema::check_address_of_operand(ExprUPtr &orig_op, Loc oploc) {
   } else if (lval != Expr::LV_Valid && lval != Expr::LV_IncompleteVoidType) {
     if (!op->type->is_function_type()) {
       Diag(diag::ERROR, oploc,
-           "err_typecheck_invalid_lvalue_addrof << op->getType()") << op->get_range();
+           "err_typecheck_invalid_lvalue_addrof << op->getType()")
+          << op->get_range();
       return nullptr;
     }
   }
@@ -980,8 +1040,8 @@ Type *Sema::check_increment_decrement_operand(ExprUPtr &op, ValueKind &vk,
   } else if (res_type->is_enumeral_type()) {
     Diag(diag::ERROR, oploc, "increment decrement enum") << op->get_range();
     return nullptr;
-  } else if (res_type->is_integer_type()) { // or float
-                                            // OK
+  } else if (res_type->is_real_type()) { 
+    // OK
   } else if (res_type->is_pointer_type()) {
     if (!check_arithmetic_op_pointer_operand(*this, oploc, op.get()))
       return nullptr;
@@ -1107,7 +1167,10 @@ ExprUPtr Sema::act_on_numeric_constant(Token tok) {
   if (literal.had_error)
     return nullptr;
 
-  // TODO: float, fixed ...
+  if (literal.ty->is_floating_type()) {
+    return std::make_unique<FloatingLiteral>(literal.res_float, tok.loc,
+                                             literal.ty);
+  }
 
   if (!literal.ty->is_integral_type())
     return nullptr;
@@ -1194,8 +1257,21 @@ CastExpr::CastKind Sema::prepare_scalar_cast(ExprUPtr &src, Type *dest_ty) {
     if (dest_ty->is_integer_type()) {
       return CastExpr::INTEGRAL_CAST;
     }
+    if (dest_ty->is_floating_type()) {
+      return CastExpr::INTEGRAL_TO_FLOATING;
+    }
+  } else if (src_ty->is_floating_type()) {
+    if (dest_ty->is_floating_type()) {
+      return CastExpr::FLOATING_CAST;
+    }
+    if (dest_ty->is_boolean_type()) {
+      return CastExpr::FLOATING_TO_BOOLEAN;
+    }
+    if (dest_ty->is_integral_type()) {
+      return CastExpr::FLOATING_TO_INTEGRAL;
+    }
   }
-  // float, complex, fixed
+  // complex, fixed
   assert(false && "other types");
 }
 
@@ -1330,11 +1406,13 @@ UPtr<ConditionalExpr> Sema::act_on_conditional_op(Loc question_loc,
 ExprUPtr Sema::perform_implicit_conversion(ExprUPtr from, Type *to_type,
                                            ConversionSequence *cs) {
   if (cs->state != ConversionSequence::OK) {
-    Diag(diag::ERROR, from->get_start_loc(), "Conversion error") << from->get_range();
+    Diag(diag::ERROR, from->get_start_loc(), "Conversion error")
+        << from->get_range();
     from->type->dump();
     printf(" (%p) -> ", from->type);
     to_type->dump();
-    printf(" (%p)  is_same=%d\n", to_type, ctx.is_same_type(from->type, to_type));
+    printf(" (%p)  is_same=%d\n", to_type,
+           ctx.is_same_type(from->type, to_type));
     return nullptr;
   }
   assert(cs->state == ConversionSequence::OK); // TODO: diagnose
@@ -1383,17 +1461,19 @@ ExprUPtr Sema::perform_implicit_conversion(ExprUPtr from, Type *to_type,
     break;
   case CK_FLOATING_CONVERSION:
   case CK_FLOATING_PROMOTION:
-    // from = imp_cast_expr_to_type(std::move(from), to_type,
-    // CastExpr::FLOATING_CAST, ValueKind::PRVALUE);
+    from = imp_cast_expr_to_type(std::move(from), to_type,
+                                 CastExpr::FLOATING_CAST, ValueKind::PRVALUE);
     break;
   case CK_FLOATING_INTEGRAL:
-    // if (to_type->is_real_floating_point()) {
-    //   from = imp_cast_expr_to_type(std::move(from), to_type,
-    //   CastExpr::INTEGRAL_TO_FLOATING, ValueKind::PRVALUE);
-    // } else {
-    //   from = imp_cast_expr_to_type(std::move(from), to_type,
-    //   CastExpr::FLOATING_TO_INTEGRAL, ValueKind::PRVALUE);
-    // }
+    if (to_type->is_real_floating_type()) {
+      from = imp_cast_expr_to_type(std::move(from), to_type,
+                                   CastExpr::INTEGRAL_TO_FLOATING,
+                                   ValueKind::PRVALUE);
+    } else {
+      from = imp_cast_expr_to_type(std::move(from), to_type,
+                                   CastExpr::FLOATING_TO_INTEGRAL,
+                                   ValueKind::PRVALUE);
+    }
     break;
   case CK_FIXED_POINT_CONVERSION:
     // TODO:
@@ -1403,15 +1483,18 @@ ExprUPtr Sema::perform_implicit_conversion(ExprUPtr from, Type *to_type,
                                  from->vk);
     break;
   case CK_POINTER_CONVERSION:
-    if (from_type->is_pointer_type() && to_type->is_integral_or_enumeration_type()) {
-      from = imp_cast_expr_to_type(std::move(from), to_type, CastExpr::POINTER_TO_INTEGRAL,
-                                  ValueKind::PRVALUE);
+    if (from_type->is_pointer_type() &&
+        to_type->is_integral_or_enumeration_type()) {
+      from = imp_cast_expr_to_type(std::move(from), to_type,
+                                   CastExpr::POINTER_TO_INTEGRAL,
+                                   ValueKind::PRVALUE);
     } else if (from_type->is_integral_or_enumeration_type()) {
-      from = imp_cast_expr_to_type(std::move(from), to_type, CastExpr::INTEGRAL_TO_POINTER,
-                                  ValueKind::PRVALUE);
+      from = imp_cast_expr_to_type(std::move(from), to_type,
+                                   CastExpr::INTEGRAL_TO_POINTER,
+                                   ValueKind::PRVALUE);
     } else {
       from = imp_cast_expr_to_type(std::move(from), to_type, CastExpr::NOOP,
-                                  ValueKind::PRVALUE);
+                                   ValueKind::PRVALUE);
     }
     break;
   case CK_BOOLEAN_CONVERSION:
@@ -1477,7 +1560,8 @@ ExprUPtr Sema::build_call_expr(Scope *scope, ExprUPtr fn, Loc lp,
 
   if (func_ty->result_type->is_structure_type()) { // or incomplete enum type ?
     // TODO: more complex result type checking
-    Diag(diag::UNIMPLEMENTED, fn->get_start_loc(), "function returns a struct...");
+    Diag(diag::UNIMPLEMENTED, fn->get_start_loc(),
+         "function returns a struct...");
     return nullptr;
   }
 
@@ -1496,7 +1580,8 @@ ExprUPtr Sema::build_call_expr(Scope *scope, ExprUPtr fn, Loc lp,
 
   FunctionDecl const *fdecl = ndecl->dyn_cast<FunctionDecl>();
   assert(fdecl);
-  bool is_variadic = func_ty->function.variadic == Type::FunctionTypeBits::VARIADIC;
+  bool is_variadic =
+      func_ty->function.variadic == Type::FunctionTypeBits::VARIADIC;
 
   if (the_call->args.size() + method < fdecl->params.size()) {
     if (fdecl->params.size() == 1 && fdecl->params[0]->name)
@@ -1579,7 +1664,9 @@ ExprUPtr Sema::default_argument_promotion(ExprUPtr e) {
   if (!e)
     return nullptr;
 
-  // float => double
+  if (e->type->is_float32_type()) {
+    e = imp_cast_expr_to_type(std::move(e), ctx.f64_ty, CastExpr::FLOATING_CAST);
+  }
   // temporary lvalues
 
   if (e->type->is_nullptr_type())
@@ -1742,7 +1829,9 @@ UPtr<Expr> Sema::create_builtin_array_subscript_expr(ExprUPtr base, Loc lloc,
     return nullptr;
   }
   if (!idx_expr->type->is_integer_type()) {
-    Diag(diag::ERROR, idx_expr->get_start_loc(), "diag::err_typecheck_subscript_not_integer") << idx_expr->get_range();
+    Diag(diag::ERROR, idx_expr->get_start_loc(),
+         "diag::err_typecheck_subscript_not_integer")
+        << idx_expr->get_range();
     return nullptr;
   }
   //// Warn if index is char constexpr
@@ -1830,10 +1919,12 @@ ExprUPtr Sema::act_on_id_expression(Scope *scope, StructDecl *struct_scope,
 
 #include "constexpr.hpp"
 
-i64 Sema::eval_integer_constexpr(Expr *e) { 
-  auto [i, b] =  ::eval_integer_constexpr(ctx, e);
+i64 Sema::eval_integer_constexpr(Expr *e) {
+  auto [i, b] = ::eval_integer_constexpr(ctx, e);
   if (!b) {
-    Diag(diag::ERROR, e->get_start_loc(), "expected integer constant expression") << e->get_range();
+    Diag(diag::ERROR, e->get_start_loc(),
+         "expected integer constant expression")
+        << e->get_range();
     return 0;
   }
   return i;

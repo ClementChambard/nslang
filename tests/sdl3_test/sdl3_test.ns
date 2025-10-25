@@ -1,30 +1,29 @@
 #include io.nsh
-#include sdl3/sdl.nsh
+#include sdl3/SDL.nsh
+#include GL/gl.nsh
 
 struct Window {
-  window: void*;
-  gl_context: void*;
+  window: SDL_Window*;
+  gl_context: SDL_GLContext;
   is_running: bool;
 };
 
-fn init(w: Window *) {
+fn Window::new(w: Window*) init {
     SDL_Init(SDL_INIT_VIDEO);
-    w->window = SDL_CreateWindow("test window", 0, 0, 1920, 1080, 2);
+    w->window = SDL_CreateWindow("test window", 1920, 1080, SDL_WINDOW_OPENGL);
     w->gl_context = SDL_GL_CreateContext(w->window);
     w->is_running = true;
 }
 
-fn cleanup(w: Window *) {
+fn cleanup(w: Window*) {
     SDL_GL_DestroyContext(w->gl_context);
     SDL_DestroyWindow(w->window);
     SDL_Quit();
 }
 
 fn main() {
-    let w: Window;
+    let w = Window::new();
     let ev: SDL_Event;
-
-    init(&w);
 
     while (w.is_running) {
         while (SDL_PollEvent(&ev)) {
@@ -36,6 +35,8 @@ fn main() {
                 print("%u\n", key_event->keysym.sym);
             }
         }
+        glClearColor(1, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
         SDL_GL_SwapWindow(w.window);
     }
 

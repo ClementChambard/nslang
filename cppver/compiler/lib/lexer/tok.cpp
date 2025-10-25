@@ -140,6 +140,10 @@ cstr tok::get_name(Tok kind) {
     return "u32";
   case KW_U64:
     return "u64";
+  case KW_F32:
+    return "f32";
+  case KW_F64:
+    return "f64";
   case KW_BOOL:
     return "bool";
   case KW_SIZEOF:

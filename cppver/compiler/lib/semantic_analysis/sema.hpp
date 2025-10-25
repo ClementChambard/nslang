@@ -115,6 +115,7 @@ struct Sema {
   ExprUPtr default_lvalue_conversion(ExprUPtr e);
   ExprUPtr default_function_array_lvalue_conversion(ExprUPtr e,
                                                     bool diagnose = true);
+  ExprUPtr usual_unary_fp_conversions(ExprUPtr e);
   CastExpr::CastKind scalar_type_to_boolean_cast_kind(Type *scalar_ty);
   CastExpr::CastKind prepare_scalar_cast(ExprUPtr &src, Type *dest_ty);
   ExprUPtr usual_unary_conversions(ExprUPtr expr);

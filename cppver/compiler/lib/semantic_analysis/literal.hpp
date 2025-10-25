@@ -6,7 +6,8 @@
 struct Type;
 
 struct NumLiteralParser {
-  i64 res;
+  u64 res;
+  f64 res_float;
   Type *ty;
   bool had_error;
   bool has_explicit_type;
@@ -16,7 +17,7 @@ struct NumLiteralParser {
 };
 
 struct CharLiteralParser {
-  i64 res;
+  u64 res;
   Type *ty;
   bool had_error;
   struct ASTContext *ctx;

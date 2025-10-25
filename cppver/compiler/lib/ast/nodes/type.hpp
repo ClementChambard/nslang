@@ -90,6 +90,11 @@ struct Type {
   bool is_unsigned_integer_type() const;
   bool is_unsigned_integer_or_enumeration_type() const;
   bool is_literal_type() const;
+  bool is_real_floating_type() const;
+  bool is_floating_type() const;
+  bool is_float32_type() const;
+  bool is_float64_type() const;
+  bool is_real_type() const;
   Type *get_pointee_type() const;
   struct EnumDecl *get_as_enum_decl() const;
   struct StructDecl *get_as_struct_decl() const;
@@ -125,6 +130,8 @@ struct BuiltinType : public Type {
     U32,
     U64,
     BOOL,
+    F32,
+    F64,
     NULLPTR,
     VOID,
     VALIST,
@@ -146,14 +153,17 @@ struct BuiltinType : public Type {
     return get_kind() >= U8 && get_kind() <= BOOL;
   }
 
+  bool is_floating_point() const {
+    return get_kind() >= F32 && get_kind() <= F64;
+  }
+
   static bool is_class(Type::Kind k) { return k == BUILTIN_TYPE; }
 };
 
 struct AliasType : public Type {
   TypeDecl *decl = nullptr;
 
-  AliasType(TypeDecl *decl)
-      : Type(ALIAS_TYPE), decl(decl) {}
+  AliasType(TypeDecl *decl) : Type(ALIAS_TYPE), decl(decl) {}
 
   static bool is_class(Type::Kind k) { return k == ALIAS_TYPE; }
 };
@@ -171,7 +181,9 @@ struct DeclaredType : public Type {
 struct EnumType : public DeclaredType {
   EnumType(EnumDecl *decl);
 
-  EnumDecl const *get_decl() const { return const_cast<EnumType*>(this)->get_decl(); }
+  EnumDecl const *get_decl() const {
+    return const_cast<EnumType *>(this)->get_decl();
+  }
   EnumDecl *get_decl();
 
   static bool is_class(Kind k) { return k == ENUM_TYPE; }
@@ -180,7 +192,9 @@ struct EnumType : public DeclaredType {
 struct StructType : public DeclaredType {
   StructType(StructDecl *decl);
 
-  StructDecl const *get_decl() const { return const_cast<StructType*>(this)->get_decl(); }
+  StructDecl const *get_decl() const {
+    return const_cast<StructType *>(this)->get_decl();
+  }
   StructDecl *get_decl();
 
   static bool is_class(Kind k) { return k == STRUCT_TYPE; }
@@ -213,7 +227,7 @@ struct FunctionType : public Type {
   std::vector<Type *> param_types;
 
   FunctionType(Type *result_type, std::span<Type *> param_types,
-                            FunctionTypeBits::ValistKind variadic)
+               FunctionTypeBits::ValistKind variadic)
       : Type(FUNCTION_TYPE), result_type(result_type),
         param_types(param_types.begin(), param_types.end()) {
     function.num_params = param_types.size();
@@ -243,6 +257,14 @@ inline bool Type::is_compound_type() const {
 
 inline bool Type::is_nullptr_type() const {
   return is_specific_builtin_type(BuiltinType::NULLPTR);
+}
+
+inline bool Type::is_float32_type() const {
+  return is_specific_builtin_type(BuiltinType::F32);
+}
+
+inline bool Type::is_float64_type() const {
+  return is_specific_builtin_type(BuiltinType::F64);
 }
 
 #endif // AST_NODES_TYPE_HPP_INCLUDED

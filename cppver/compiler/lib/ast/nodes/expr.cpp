@@ -113,7 +113,11 @@ cstr CastExpr::kind_to_str(CastKind k) {
   case POINTER_TO_INTEGRAL: return "PointerToIntegral";
   case INTEGRAL_TO_BOOLEAN: return "IntegralToBoolean";
   case INTEGRAL_TO_POINTER: return "IntegralToPointer";
+  case INTEGRAL_TO_FLOATING: return "IntegralToFloating";
   case INTEGRAL_CAST: return "IntegralCast";
+  case FLOATING_TO_BOOLEAN: return "FloatingToBoolean";
+  case FLOATING_TO_INTEGRAL: return "FloatingToIntegral";
+  case FLOATING_CAST: return "FloatingCast";
   case LVALUE_TO_RVALUE: return "LValueToRValue";
   case ARRAY_TO_POINTER_DECAY: return "ArrayToPointerDecay";
   case FUNCTION_TO_POINTER_DECAY: return "FunctionToPointerDecay";

@@ -22,6 +22,8 @@ void IdentInfo::create_ident_info_list() {
   ident_map["u16"] = std::make_unique<IdentInfo>("u16", tok::KW_U16);
   ident_map["u32"] = std::make_unique<IdentInfo>("u32", tok::KW_U32);
   ident_map["u64"] = std::make_unique<IdentInfo>("u64", tok::KW_U64);
+  ident_map["f32"] = std::make_unique<IdentInfo>("f32", tok::KW_F32);
+  ident_map["f64"] = std::make_unique<IdentInfo>("f64", tok::KW_F64);
   ident_map["bool"] = std::make_unique<IdentInfo>("bool", tok::KW_BOOL);
   ident_map["void"] = std::make_unique<IdentInfo>("void", tok::KW_VOID);
   ident_map["sizeof"] = std::make_unique<IdentInfo>("sizeof", tok::KW_SIZEOF);

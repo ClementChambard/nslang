@@ -82,6 +82,8 @@ enum Tok : u8 {
   KW_U16,
   KW_U32,
   KW_U64,
+  KW_F32,
+  KW_F64,
   KW_BOOL,
   KW_VOID,
   KW_SIZEOF,

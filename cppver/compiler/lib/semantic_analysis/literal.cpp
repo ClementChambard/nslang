@@ -2,6 +2,7 @@
 #include "ast/context.hpp"
 #include "diags/diagnostic.hpp"
 #include <cassert>
+#include <cmath>
 #include <cstring>
 
 i64 get_digit(char c) {
@@ -20,6 +21,10 @@ i64 get_digit(char c) {
 i64 parse_int(char *&buf, i64 base) {
   i64 n = 0;
   while (*buf) {
+    if (*buf == '\'') {
+      buf++;
+      continue;
+    }
     i64 digit = get_digit(*buf);
     if (digit == -1 || digit >= base)
       break;
@@ -30,7 +35,71 @@ i64 parse_int(char *&buf, i64 base) {
   return n;
 }
 
-void parse_num(NumLiteralParser *self, char *&buf) {
+f64 parse_float(char *&buf, bool &had_error, Loc loc) {
+  auto save = buf;
+  u64 int_part = parse_int(buf, 10);
+  f64 res = static_cast<f64>(int_part);
+  if (*buf == '.') {
+    buf++;
+    f64 mult = 0.1;
+    while (*buf) {
+      auto digit = get_digit(*buf);
+      if (digit == -1 || digit >= 10) {
+        break;
+      }
+      res += mult * digit;
+      mult /= 10.0;
+      buf++;
+    }
+  }
+  if (*buf == 'e' || *buf == 'E') {
+    buf++;
+    i64 mult = 1;
+    if (*buf == '+') {
+      buf++;
+    } else if (*buf == '-') {
+      buf++;
+      mult = -1;
+    }
+    i64 exp = get_digit(*buf);
+    if (exp == -1 || exp >= 10) {
+      had_error = true;
+      Diag(diag::ERROR, loc + (buf - save), "invalid number suffix '%s'", buf);
+      return res;
+    }
+    buf++;
+    while (*buf) {
+      auto digit = get_digit(*buf);
+      if (digit == -1 || digit >= 10) {
+        break;
+      }
+      exp = 10 * exp + digit;
+      buf++;
+    }
+    exp *= mult;
+    res *= std::pow(10, static_cast<f64>(exp));
+  }
+  return res;
+}
+
+void parse_num(NumLiteralParser *self, char *&buf, Loc loc) {
+  char *check_buf = buf;
+  bool parse_as_float = false;
+  while (*check_buf) {
+    if (*check_buf == '.') {
+      parse_as_float = true;
+      break;
+    }
+    check_buf++;
+  }
+
+  if (parse_as_float) {
+    self->res_float = parse_float(buf, self->had_error, loc);
+    self->res = static_cast<u64>(self->res_float);
+    self->ty = self->ctx->f64_ty;
+    return;
+  }
+
   if (buf[0] == '0') {
     if (buf[1] == 'x' || buf[1] == 'X') {
       buf = &buf[2];
@@ -42,11 +111,10 @@ void parse_num(NumLiteralParser *self, char *&buf) {
       buf = &buf[1];
       self->res = parse_int(buf, 8);
     }
-    // TODO: float that start with 0
   } else {
-    // TODO: float
     self->res = parse_int(buf, 10);
   }
+  self->res_float = static_cast<f64>(self->res);
 }
 
 void parse_num_suffix(NumLiteralParser *self, char *&buf, Loc loc) {
@@ -66,6 +134,10 @@ void parse_num_suffix(NumLiteralParser *self, char *&buf, Loc loc) {
     self->ty = self->ctx->u32_ty;
   else if (strcmp(buf, "u64") == 0)
     self->ty = self->ctx->u64_ty;
+  else if (strcmp(buf, "f32") == 0)
+    self->ty = self->ctx->f32_ty;
+  else if (strcmp(buf, "f64") == 0)
+    self->ty = self->ctx->f64_ty;
   else {
     self->had_error = true;
     Diag(diag::ERROR, loc, "invalid number suffix '%s'", buf);
@@ -84,7 +156,7 @@ NumLiteralParser::NumLiteralParser(ASTContext *ctx, Token tok) {
   assert(tok.kind == tok::NUM && "non NUM token used in NumLiteralParser");
   std::string tok_value_str(static_cast<char *>(tok.value), tok.len);
   char *buf = tok_value_str.data();
-  parse_num(this, buf);
+  parse_num(this, buf, tok.loc);
   if (*buf)
     parse_num_suffix(this, buf, tok.loc + (buf - tok_value_str.data()));
 }

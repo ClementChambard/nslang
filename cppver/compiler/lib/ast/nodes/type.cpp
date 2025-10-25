@@ -1,6 +1,5 @@
 #include "type.hpp"
 #include "decl.hpp"
-#include <algorithm>
 
 EnumType::EnumType(EnumDecl *decl) : DeclaredType(ENUM_TYPE, decl) {}
 EnumDecl *EnumType::get_decl() { return static_cast<EnumDecl *>(decl); }
@@ -120,7 +119,7 @@ bool Type::is_unscoped_enumeration_type() const {
 bool Type::is_arithmetic_type() const {
   if (auto *bt = dyn_cast<BuiltinType>()) {
     return bt->get_kind() >= BuiltinType::I8 &&
-           bt->get_kind() <= BuiltinType::BOOL;
+           bt->get_kind() <= BuiltinType::F64;
   }
   if (auto *et = dyn_cast<EnumType>()) {
     return !is_enum_decl_scoped(et->get_decl()) &&
@@ -177,7 +176,8 @@ bool Type::is_void_pointer_type() const {
 
 bool Type::is_valist_pointer_type() const {
   if (auto *pt = dyn_cast<PointerType>()) {
-    return pt->get_pointee_type()->is_specific_builtin_type(BuiltinType::VALIST);
+    return pt->get_pointee_type()->is_specific_builtin_type(
+        BuiltinType::VALIST);
   }
   if (auto *ad = get_as_alias_decl())
     return ad->underlying_type->is_valist_pointer_type();
@@ -252,7 +252,7 @@ bool Type::is_integral_or_enumeration_type() const {
 
 bool Type::is_scalar_type() const {
   if (auto *bt = dyn_cast<BuiltinType>()) {
-    return bt->is_integer() || bt->get_kind() == BuiltinType::NULLPTR;
+    return bt->get_kind() >= BuiltinType::I8 && bt->get_kind() <= BuiltinType::NULLPTR;
   }
   if (auto *et = dyn_cast<EnumType>()) {
     return is_enum_decl_complete(et->get_decl());
@@ -278,6 +278,35 @@ bool Type::is_function_pointer_type() const {
   return false;
 }
 
+bool Type::is_floating_type() const {
+  if (const auto *bt = dyn_cast<BuiltinType>()) {
+    return bt->is_floating_point();
+  }
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_floating_type();
+  return false;
+}
+
+bool Type::is_real_floating_type() const {
+  if (const auto *bt = dyn_cast<BuiltinType>()) {
+    return bt->is_floating_type();
+  }
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_floating_type();
+  return false;
+}
+
+bool Type::is_real_type() const {
+  if (const auto *bt = dyn_cast<BuiltinType>())
+    return bt->get_kind() >= BuiltinType::I8 &&
+           bt->get_kind() <= BuiltinType::F64;
+  if (const auto *ed = get_as_enum_decl())
+    return !ed->is_scoped && ed->is_complete;
+  if (auto *ad = get_as_alias_decl())
+    return ad->underlying_type->is_real_type();
+  return false;
+}
+
 cstr BuiltinType::get_name() const {
   switch (builtin.kind) {
   case I8:
@@ -298,6 +327,10 @@ cstr BuiltinType::get_name() const {
     return "u64";
   case BOOL:
     return "bool";
+  case F32:
+    return "f32";
+  case F64:
+    return "f64";
   case NULLPTR:
     return "nullptr_t";
   case VOID:

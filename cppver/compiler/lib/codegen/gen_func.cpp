@@ -107,7 +107,9 @@ void gen_func(CGContext &ctx, llvm::Function *fn, FunctionDecl const &d) {
     gen_param_decl(ctx, *d.params[i].get(), fn->getArg(i));
   }
 
-  fn->addFnAttr(llvm::Attribute::MustProgress);
+  llvm::AttrBuilder func_attrs{ctx.llvmctx};
+  func_attrs.addAttribute(llvm::Attribute::MustProgress);
+  fn->addFnAttrs(func_attrs);
   if (auto *b = body->dyn_cast<CompoundStmt>()) {
     gen_compound_stmt(ctx, *b);
   } else {

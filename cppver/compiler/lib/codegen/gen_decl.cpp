@@ -49,6 +49,9 @@ llvm::Constant *get_or_create_llvm_function(CGContext &ctx,
 
   assert(f->getName() == name && "name was uniqued!");
 
+  // llvm::AttrBuilder func_attrs{ctx.llvmctx};
+  // f->addFnAttrs(func_attrs);
+
   return f;
 }
 

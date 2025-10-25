@@ -30,9 +30,9 @@ fn main() {
 
     let cnt: i64;
     let buf: i8[1024];
-    cnt = recv(client_sockfd, buf, 1023, 0);
+    cnt = read(client_sockfd, buf, 1023);
     buf[cnt] = 0;
-    print(buf);
+    print("%s\n", buf);
 
     shutdown(sockfd, SHUT_RDWR);
     close(sockfd);

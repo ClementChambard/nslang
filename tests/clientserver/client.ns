@@ -20,7 +20,7 @@ fn main() {
         return;
     }
 
-    send(sockfd, "Hello, from client\n", 19, 0);
+    write(sockfd, "Hello, from client\n", 19);
 
     close(sockfd);
 }

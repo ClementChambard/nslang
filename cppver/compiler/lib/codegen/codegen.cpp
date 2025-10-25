@@ -32,6 +32,10 @@ llvm::Type *convert_type(CGContext &ctx, Type* type) {
       return llvm::IntegerType::get(ctx.llvmctx, 64);
     case BuiltinType::BOOL:
       return llvm::IntegerType::get(ctx.llvmctx, 1);
+    case BuiltinType::F32:
+      return llvm::Type::getFloatTy(ctx.llvmctx);
+    case BuiltinType::F64:
+      return llvm::Type::getDoubleTy(ctx.llvmctx);
     case BuiltinType::NULLPTR:
       return llvm::PointerType::getUnqual(ctx.llvmctx);
     case BuiltinType::VALIST: {

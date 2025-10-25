@@ -28,9 +28,8 @@ lib fn tst() {
 }
 
 fn main() {
-    if (0) {  1; 2; } else { 3; 4; }
     print("Hello, World!\n");
-    print("%X %x %i %i %u %c %s\n", 30, 30, 3, -3, 4, 'a', "test");
+    print("%X %x %i %i %u %c %s %f\n", 30, 30, 3, -3, 4, 'a', "test", 1.25);
     my_namespace::test();
     tst();
 }

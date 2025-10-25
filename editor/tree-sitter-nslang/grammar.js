@@ -54,7 +54,7 @@ module.exports = grammar({
 
     // TYPES
     type: $ => choice(field("name", $.ident), $.pointer_type, $.array_type, $.builtin_type),
-    builtin_type: $ => choice("i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "void", "bool"),
+    builtin_type: $ => choice("i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "void", "bool"),
     pointer_type: $ => seq(field("subtype", $.type), '*'),
     array_type: $ => seq(field("subtype", $.type), '[', field("count", $.expr), ']'), // constexpr
 
@@ -155,7 +155,7 @@ module.exports = grammar({
     )),
 
     ident: _ => /[a-zA-Z_][a-zA-Z_0-9]*/,
-    num: _ => /(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*)([iu](8|16|32|64))?/,
+    num: _ => /(0[xX][0-9a-fA-F]+|0[0-7]*|[1-9][0-9]*|([0-9]*\.[0-9]+|[1-9][0-9]*\.?)([eE][+-]?[0-9]+)?)([iuf](8|16|32|64))?/,
     str: _ => /"([^"\\]|\\.)*"/,
     chr: _ => /'([^'\\]|\\.)*'/,
   }
