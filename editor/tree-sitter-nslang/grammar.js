@@ -94,6 +94,7 @@ module.exports = grammar({
       $.chr,
       seq('(', $.expr, ')'),
       seq('vaarg', '<', $.type, '>'),
+      'vaargs',
       prec.right(0, seq($.expr, '=', $.expr)),
       prec.right(0, seq($.expr, '+=', $.expr)),
       prec.right(0, seq($.expr, '-=', $.expr)),

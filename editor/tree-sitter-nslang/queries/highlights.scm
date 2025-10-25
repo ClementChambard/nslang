@@ -33,6 +33,7 @@
 "false" @boolean
 "nullptr" @constant.builtin
 "vaarg" @constant.builtin
+"vaargs" @constant.builtin
 
 "#include" @keyword.import
 

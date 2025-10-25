@@ -1182,6 +1182,10 @@
           ]
         },
         {
+          "type": "STRING",
+          "value": "vaargs"
+        },
+        {
           "type": "PREC_RIGHT",
           "value": 0,
           "content": {
