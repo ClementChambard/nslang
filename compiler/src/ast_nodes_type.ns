@@ -4,7 +4,7 @@
 #include str.nsh
 
 // TODO: TYPES ARE BAD BECAUSE OF REALLOCATION OF DARRAY ...
-// XXX: FIX -> type_id instead of pointers ?
+// XXX: FIX -> store type pointers in arrays ?
 
 ///////////////////////////////////////////////
 //////////////// INTERNAL /////////////////////
@@ -15,7 +15,7 @@
 
 struct __Internal_CreatedTypes {
   // void -> nullptr
-  builtins: BuiltinType[9]; // TODO: enum variants in integer constant expressions
+  builtins: BuiltinType[BTK_COUNT]; // TODO: enum variants in integer constant expressions
   enums: DArray;
   structs: DArray;
   pointers: DArray;
@@ -32,20 +32,23 @@ fn __type_internal__get_builtin_type_for(kind: BuiltinTypeKind) -> BuiltinType* 
 
 //--- enums
 fn __type_internal__create_enum_type(name: CStr, of: Type*) -> EnumType* {
-  __internal_created_types.enums.push(cast<void*>(cast<i64>(TYPEKIND_ENUM)));
-  __internal_created_types.enums.push(strdup(name));
-  __internal_created_types.enums.push(of);
-  return cast<EnumType*>(&__internal_created_types.enums[__internal_created_types.enums.len - 3]);
+  let e: EnumType * = malloc(sizeof(EnumType));
+  e->kind = TYPEKIND_ENUM;
+  e->name = strdup(name);
+  e->aliased_type = of;
+  __internal_created_types.enums.push(e);
+  return e;
 }
 
 fn __type_internal__get_enum_type_by_name(name: CStr) -> EnumType* {
   // semantically, enums can't have the same name.
   let i = 0;
   while (i < __internal_created_types.enums.len) {
-    if (strcmp(cast<CStr>(__internal_created_types.enums[i + 1]), name) == 0) {
-      return cast<EnumType*>(&__internal_created_types.enums[i]);
+    let e = cast<EnumType*>(__internal_created_types.enums[i]);
+    if (strcmp(e->name, name) == 0) {
+      return e;
     }
-    i += 2;
+    i++;
   }
   return nullptr;
 }
@@ -54,111 +57,115 @@ fn __type_internal__get_enum_type(name: CStr, subtype: Type*) -> EnumType* {
   if (name != nullptr) return __type_internal__get_enum_type_by_name(name);
   let i = 0;
   while (i < __internal_created_types.enums.len) {
-    if (__internal_created_types.enums[i + 2] == subtype) {
-      return cast<EnumType*>(&__internal_created_types.enums[i]);
+    let e = cast<EnumType*>(__internal_created_types.enums[i]);
+    if (e->aliased_type == subtype) {
+      return e;
     }
-    i += 2;
+    i++;
   }
   return nullptr;
 }
 
 //--- structs
 fn __type_internal__create_struct_type(name: CStr) -> StructType* {
-  __internal_created_types.structs.push(cast<void*>(cast<i64>(TYPEKIND_STRUCT)));
-  __internal_created_types.structs.push(strdup(name));
-  __internal_created_types.structs.push(nullptr);
-  __internal_created_types.structs.push(nullptr);
-  __internal_created_types.structs.push(nullptr);
-  __internal_created_types.structs.push(nullptr);
-  __internal_created_types.structs.push(nullptr);
-  __internal_created_types.structs.push(nullptr);
-  __internal_created_types.structs.push(cast<void*>(0x100));
-  // TODO:...
-  return cast<StructType*>(&__internal_created_types.structs[__internal_created_types.structs.len - 9]);
+  let t = cast<StructType*>(malloc(sizeof(StructType)));
+  t->kind = TYPEKIND_STRUCT;
+  t->name = strdup(name);
+  t->fields.init();
+  t->methods.init();
+  t->first_field_is_super = false;
+  t->is_incomplete = true;
+  __internal_created_types.structs.push(t);
+  return t;
 }
 
 fn __type_internal__get_struct_type_by_name(name: CStr) -> StructType* {
   // semantically, structs can't have the same name.
   let i = 0;
   while (i < __internal_created_types.structs.len) {
-    if (strcmp(cast<CStr>(__internal_created_types.structs[i + 1]), name) == 0) {
-      return cast<StructType*>(&__internal_created_types.structs[i]);
+    let t = cast<StructType*>(__internal_created_types.structs[i]);
+    if (strcmp(t->name, name) == 0) {
+      return t;
     }
-    i += 9;
+    i++;
   }
   return nullptr;
 }
 
 //--- pointers
 fn __type_internal__create_ptr_type(of: Type*) -> PointerType* {
-  __internal_created_types.pointers.push(cast<void*>(cast<i64>(TYPEKIND_POINTER)));
-  __internal_created_types.pointers.push(of);
-  return cast<PointerType*>(&__internal_created_types.pointers[__internal_created_types.pointers.len - 2]);
+  let t: PointerType * = malloc(sizeof(PointerType));
+  t->kind = TYPEKIND_POINTER;
+  t->subtype = of;
+  __internal_created_types.pointers.push(t);
+  return t;
 }
 
 fn __type_internal__get_ptr_type_of(of: Type*) -> PointerType* {
   let i = 0;
   while (i < __internal_created_types.pointers.len) {
-    if (__internal_created_types.pointers[i + 1] == of) {
-      return cast<PointerType*>(&__internal_created_types.pointers[i]);
+    let p = cast<PointerType*>(__internal_created_types.pointers[i]);
+    if (p->subtype == of) {
+      return p;
     }
-    i += 2;
+    i++;
   }
   return nullptr;
 }
 
 //--- arrays
 fn __type_internal__create_array_type(of: Type*, len: i64) -> ArrayType* {
-  __internal_created_types.arrays.push(cast<void*>(cast<i64>(TYPEKIND_ARRAY)));
-  __internal_created_types.arrays.push(of);
-  __internal_created_types.arrays.push(cast<void*>(len));
-  return cast<ArrayType*>(&__internal_created_types.arrays[__internal_created_types.arrays.len - 3]);
+  let t: ArrayType * = malloc(sizeof(ArrayType));
+  t->kind = TYPEKIND_ARRAY;
+  t->subtype = of;
+  t->count = len;
+  __internal_created_types.arrays.push(t);
+  return t;
 }
 
 fn __type_internal__get_array_type_of(of: Type*, len: i64) -> ArrayType* {
   let i = 0;
   while (i < __internal_created_types.arrays.len) {
-    if (__internal_created_types.arrays[i + 1] == of) {
-      if (cast<i64>(__internal_created_types.arrays[i + 2]) == len) {
-        return cast<ArrayType*>(&__internal_created_types.arrays[i]);
-      }
+    let t = cast<ArrayType*>(__internal_created_types.arrays[i]);
+    if (t->subtype == of && t->count == len) {
+      return cast<ArrayType*>(&__internal_created_types.arrays[i]);
     }
-    i += 3;
+    i++;
   }
   return nullptr;
 }
 
 //--- functions
 fn __type_internal__create_function_type(return_type: Type*, param_types: Type**, param_count: i64, is_variadic: bool) -> FunctionType* {
-  __internal_created_types.functions.push(nullptr);
-  __internal_created_types.functions.push(nullptr);
-  __internal_created_types.functions.push(nullptr);
-  __internal_created_types.functions.push(nullptr);
-  __internal_created_types.functions.push(nullptr);
-  let ft: FunctionType*;
-  ft = cast<FunctionType*>(&__internal_created_types.functions[__internal_created_types.functions.len - 5]);
-  ft->kind = TYPEKIND_FUNCTION;
-  ft->return_type = return_type;
-  ft->param_types = param_types;
-  ft->param_count = param_count;
-  ft->is_variadic = is_variadic;
-  return ft;
+  let t: FunctionType * = malloc(sizeof(FunctionType) + sizeof(Type *) * param_count);
+  t->kind = TYPEKIND_FUNCTION;
+  t->param_types = cast<Type**>(t + 1);
+  t->param_count = param_count;
+  t->is_variadic = is_variadic;
+  t->return_type = return_type;
+  let i = 0;
+  while (i < param_count) {
+    t->param_types[i] = param_types[i];
+    i++;
+  }
+  __internal_created_types.functions.push(t);
+  return t;
 }
 
 fn __type_internal__get_function_type_of(return_type: Type*, param_types: Type**, param_count: i64, is_variadic: bool) -> FunctionType* {
   let i = 0;
   while (i < __internal_created_types.functions.len) {
-    let ft = cast<FunctionType*>(&__internal_created_types.functions[i]);
+    let ft = cast<FunctionType*>(__internal_created_types.functions[i]);
     if (ft->return_type != return_type) {
-      i += 5;
+      i++;
       continue;
     }
     if (ft->param_count != param_count) {
-      i += 5;
+      i++;
       continue;
     }
     if (ft->is_variadic != is_variadic) {
-      i += 5;
+      i++;
       continue;
     }
     let j = 0;
@@ -171,7 +178,7 @@ fn __type_internal__get_function_type_of(return_type: Type*, param_types: Type**
       j++;
     }
     if (bad) {
-      i += 5;
+      i++;
       continue;
     }
     return ft;
@@ -200,22 +207,40 @@ fn init_type_data() {
 
 fn cleanup_type_data() {
   let i: i32;
+
+  // pointers:
+  i = 0; while (i < __internal_created_types.pointers.len) {
+    free(__internal_created_types.pointers[i]);
+    i++;
+  }
+
+  // arrays:
+  i = 0; while (i < __internal_created_types.arrays.len) {
+    free(__internal_created_types.arrays[i]);
+    i++;
+  }
+
+  // functions:
+  i = 0; while (i < __internal_created_types.functions.len) {
+    free(__internal_created_types.functions[i]);
+    i++;
+  }
+
   // enums: free name
   i = 0; while (i < __internal_created_types.enums.len) {
-    free(__internal_created_types.enums[i + 1]);
-    i += 3; 
+    let e = cast<EnumType*>(__internal_created_types.enums[i]);
+    free(e->name);
+    free(e);
+    i++; 
   }
+
   // structs: free name
   i = 0; 
   while (i < __internal_created_types.structs.len) {
-    free(__internal_created_types.structs[i + 1]);
-    i += 9; 
-  }
-  // functions: free param array
-  i = 0; 
-  while (i < __internal_created_types.functions.len) {
-    free(__internal_created_types.functions[i + 2]);
-    i += 5; 
+    let e = cast<StructType*>(__internal_created_types.structs[i]);
+    free(e->name);
+    free(e);
+    i++;
   }
 
   __internal_created_types.pointers.destroy();
@@ -260,10 +285,7 @@ fn Type::get_array(subtype: Type*, size: i64) -> ArrayType* {
 
 fn Type::get_function(return_type: Type*, param_types: Type**, param_count: i64, is_variadic: bool) -> FunctionType* {
   let out: FunctionType* = __type_internal__get_function_type_of(return_type, param_types, param_count, is_variadic);
-  if (out != nullptr) {
-    free(param_types);
-    return out;
-  }
+  if (out != nullptr) return out;
   return __type_internal__create_function_type(return_type, param_types, param_count, is_variadic);
 }
 

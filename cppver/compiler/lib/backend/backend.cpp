@@ -30,11 +30,6 @@ void print_and_remove_file(std::string const &filename) {
 }
 
 void run_backend(Options const &opts, CGContext &ctx, std::string const &output_file_name) {
-  if (opts.mode == Mode::PRINT_LLVM) {
-    ctx.module.print(llvm::outs(), nullptr);
-    return;
-  }
-
   std::string f_tmp_no = output_file_name + ".tmp-no.ll";
   std::string f_tmp = output_file_name + ".tmp.ll";
   std::string f_s = output_file_name + ".tmp.s";
@@ -46,12 +41,13 @@ void run_backend(Options const &opts, CGContext &ctx, std::string const &output_
 
   out.close();
 
-  char const *ar[] = {"opt", f_tmp_no.c_str(), "-S", "-o", f_tmp.c_str(), "-passes=sroa,simplifycfg"};
+  char const * const opt_strs[] = {"-O0", "-O1", "-O2", "-O3"};
+  char const *ar[] = {"opt", f_tmp_no.c_str(), "-S", "-o", f_tmp.c_str(), opt_strs[opts.opt_level]};
   subprocess_run(ar);
 
   std::filesystem::remove(f_tmp_no);
 
-  if (opts.mode == Mode::PRINT_OPT_LLVM) {
+  if (opts.mode == Mode::PRINT_LLVM) {
     return print_and_remove_file(f_tmp);
   }
 

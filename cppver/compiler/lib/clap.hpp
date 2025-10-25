@@ -1,6 +1,7 @@
 #ifndef CLAP_HPP_INCLUDED
 #define CLAP_HPP_INCLUDED
 
+#include "defines.hpp"
 #include "opts.hpp"
 #include <optional>
 
@@ -24,11 +25,11 @@ struct Clap {
   bool compile_only = false;
   bool no_stdlib = false;
   bool no_runtime = false;
+  u8 opt_level = 0;
 
   static Clap parse(int argc, char **argv);
 
   CheckedClap check() const;
 };
-
 
 #endif // CLAP_HPP_INCLUDED

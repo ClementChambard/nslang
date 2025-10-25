@@ -281,6 +281,7 @@ Type *Sema::usual_arithmetic_conversions(ExprUPtr &lhs, ExprUPtr &rhs,
 
 static bool check_arithmetic_op_pointer_operand(Sema &s, Loc loc,
                                                 Expr *operand) {
+  (void)s;
   Type *res_type = operand->type;
   if (!res_type->is_pointer_type()) return true;
   Type *pointee_type = res_type->get_pointee_type();

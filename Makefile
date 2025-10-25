@@ -1,16 +1,16 @@
 all: a.out tests/clientserver/client tests/clientserver/server tests/sdl3_test/sdl3_test
 
 tests/clientserver/client: tests/clientserver/client.ns
-	./nslang $^ -o $@
+	./nslang -O1 $^ -o $@
 
 tests/clientserver/server: tests/clientserver/server.ns
-	./nslang $^ -o $@
+	./nslang -O1 $^ -o $@
 
 tests/sdl3_test/sdl3_test: tests/sdl3_test/sdl3_test.ns
-	./nslang $^ -o $@ -lSDL3
+	./nslang -O1 $^ -o $@ -lSDL3
 
 a.out: main.ns
-	./nslang $^ -o $@
+	./nslang -O1 $^ -o $@
 
 run: a.out
 	./a.out

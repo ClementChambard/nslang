@@ -28,7 +28,7 @@ fn sbrk(size: i64) -> void* {
         }
     }
 
-    __curbrk = cast<void*>(brk(oldbrk + size));
+    __curbrk = cast<void*>(brk(cast<u8*>(oldbrk) + size));
     if (cast<i64>(__curbrk) < 0)
         return cast<void*>(-1);
 
