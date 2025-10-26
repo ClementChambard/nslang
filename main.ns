@@ -32,4 +32,8 @@ fn main() {
     print("%X %x %i %i %u %c %s %f\n", 30, 30, 3, -3, 4, 'a', "test", 1.25);
     my_namespace::test();
     tst();
+    let args = Args::get();
+    for (let i = 0; i < args.count; i++) {
+      print("%s\n", args[i]);
+    }
 }

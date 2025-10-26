@@ -43,3 +43,13 @@ lib fn print(fmt: i8*, ...);
 // va functions
 lib fn fprint_va(fd: i64, fmt: i8*, ...*);
 lib fn print_va(fmt: i8*, ...*);
+
+
+
+// command line arguments
+struct Args {
+  super data: i8**;
+  count: i64;
+};
+
+lib fn Args::get(self: Args *) init;

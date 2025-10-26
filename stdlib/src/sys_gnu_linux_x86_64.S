@@ -92,3 +92,37 @@ listen: ; ( rdi: sockfd, rsi: backlog )
   syscall
   ret
 
+
+section .data
+global __ns__argc
+global __ns__argv
+global __ns__env
+__ns__args:
+__ns__argv:
+  dq 0
+__ns__argc:
+  dq 0
+__ns__env:
+  dq 0
+
+section .text
+global __ns__get_argc
+global __ns__get_argv
+global __ns__get_args
+global __ns__get_env
+
+__ns__get_argc:
+  mov rax, QWORD[__ns__argc]
+  ret
+
+__ns__get_argv:
+  mov rax, QWORD[__ns__argv]
+  ret
+
+__ns__get_args:
+  lea rax, __ns__args
+  ret
+
+__ns__get_env:
+  mov rax, QWORD[__ns__env]
+  ret

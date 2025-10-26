@@ -18,3 +18,12 @@ fn fprint_va(fd: i64, fmt: i8*, ...*) {
   write(fd, s.data, s.len);
   s.destroy();
 }
+
+lib fn __ns__get_args() -> Args *;
+
+fn Args::get(self: Args*) {
+  let args = __ns__get_args();
+  self->data = args->data;
+  self->count = args->count;
+}
+
