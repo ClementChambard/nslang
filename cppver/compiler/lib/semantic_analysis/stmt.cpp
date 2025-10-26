@@ -37,16 +37,23 @@ UPtr<IfStmt> Sema::act_on_if_stmt(Loc il, Loc lp, ExprUPtr cond, Loc rp,
 
 UPtr<SwitchStmt> Sema::act_on_start_of_switch_stmt(Loc switch_loc, Loc lp_loc,
                                                    ExprUPtr cond, Loc rp_loc) {
+  // TODO: \/ better way to do this ?
+  cond = usual_unary_conversions(std::move(cond));
+
   auto cond_expr = act_on_finish_full_expr(std::move(cond), switch_loc, false);
   if (!cond_expr) return nullptr;
   if (!cond_expr->type->is_integral_or_enumeration_type()) return nullptr;
-  return std::make_unique<SwitchStmt>(std::move(cond_expr), nullptr, switch_loc, lp_loc, rp_loc);
+  auto switch_stmt = std::make_unique<SwitchStmt>(std::move(cond_expr), nullptr, switch_loc, lp_loc, rp_loc);
+  switch_stack.push_back(switch_stmt.get());
+  return switch_stmt;
 }
 
 UPtr<SwitchStmt> Sema::act_on_finish_switch_stmt(Loc sl, UPtr<SwitchStmt> stmt,
                                                  StmtUPtr body) {
   (void)sl;
   stmt->body = std::move(body);
+  assert(!switch_stack.empty());
+  switch_stack.pop_back();
   return stmt;
 }
 
@@ -86,9 +93,18 @@ UPtr<DoStmt> Sema::act_on_do_stmt(Loc do_loc, StmtUPtr body, Loc while_loc,
 
 UPtr<DefaultStmt> Sema::act_on_default_stmt(Loc default_loc, Loc colon_loc,
                                             StmtUPtr sub_stmt, Scope *scope) {
-  // TODO: check in switch
+  if (switch_stack.empty()) {
+    Diag(diag::ERROR, default_loc, "'default' statement found outside of 'switch'");
+    return nullptr;
+  }
   (void)scope;
-  return std::make_unique<DefaultStmt>(std::move(sub_stmt), default_loc, colon_loc);
+  auto stmt = std::make_unique<DefaultStmt>(std::move(sub_stmt), default_loc, colon_loc);
+
+  auto switch_stmt = switch_stack.back();
+  SwitchCase * &case_ptr = switch_stmt->first_case->next_switch_case;
+  while (case_ptr != nullptr) case_ptr = case_ptr->next_switch_case;
+  case_ptr = stmt.get();
+  return stmt;
 }
 
 ExprUPtr Sema::act_on_case_expr(Loc case_loc, ExprUPtr val) {
@@ -98,9 +114,18 @@ ExprUPtr Sema::act_on_case_expr(Loc case_loc, ExprUPtr val) {
 }
 
 UPtr<CaseStmt> Sema::act_on_case_stmt(Loc case_loc, ExprUPtr e, Loc colon_loc) {
-  // TODO: check in switch
+  if (switch_stack.empty()) {
+    Diag(diag::ERROR, case_loc, "'case' statement found outside of 'switch'");
+    return nullptr;
+  }
   assert(e);
-  return std::make_unique<CaseStmt>(nullptr, case_loc, colon_loc, eval_integer_constexpr(e.get()));
+  auto stmt = std::make_unique<CaseStmt>(nullptr, case_loc, colon_loc, eval_integer_constexpr(e.get()));
+
+  auto switch_stmt = switch_stack.back();
+  SwitchCase * &case_ptr = switch_stmt->first_case;
+  while (case_ptr != nullptr) case_ptr = case_ptr->next_switch_case;
+  case_ptr = stmt.get();
+  return stmt;
 }
 
 void Sema::act_on_case_stmt_body(CaseStmt *stmt, StmtUPtr sub_stmt) {

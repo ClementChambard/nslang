@@ -283,6 +283,9 @@ void print_stmt(Stmt const *stmt) {
   }
   fprintf(stderr, "%s", COL::RESET);
   print_loc_range(stmt->get_range());
+  if (auto cs = stmt->dyn_cast<CaseStmt>()) {
+    fprintf(stderr, " %lld", cs->case_val);
+  }
 }
 
 void print_expr(Expr const *expr) {

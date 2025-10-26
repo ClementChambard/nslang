@@ -10,12 +10,14 @@
 #include "lexer/token.hpp"
 #include "semantic_analysis/scope.hpp"
 #include <memory>
+#include <vector>
 
 template <typename T> using UPtr = std::unique_ptr<T>;
 
 struct Sema {
   ASTContext &ctx;
   FunctionDecl *cur_fn_decl;
+  std::vector<SwitchStmt *> switch_stack;
 
   Sema(ASTContext &ctx) : ctx(ctx) {}
 

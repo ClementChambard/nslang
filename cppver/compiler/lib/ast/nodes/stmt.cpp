@@ -6,15 +6,6 @@ DeclStmt::DeclStmt(DeclUPtr decl, Loc start_loc, Loc end_loc)
     : Stmt(DECL_STMT), decl(std::move(decl)), start_loc(start_loc),
       end_loc(end_loc) {}
 
-Loc CaseStmt::get_end_loc() const {
-  CaseStmt const *s = this;
-  Stmt *sub = this->sub_stmt.get();
-  while ((s = sub->dyn_cast<CaseStmt>())) {
-    sub = s->sub_stmt.get();
-  }
-  return sub->get_end_loc();
-}
-
 IfStmt::IfStmt(ExprUPtr cond, StmtUPtr ts, Loc il, Loc lp, Loc rp)
     : Stmt(IF_STMT), cond(std::move(cond)), then_stmt(std::move(ts)),
       else_stmt(nullptr), if_loc(il), else_loc(LOC_INVALID), lparen_loc(lp),

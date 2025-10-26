@@ -122,37 +122,34 @@ struct CompoundStmt : public Stmt {
 
 struct SwitchCase : public Stmt {
   SwitchCase *next_switch_case = nullptr;
+  StmtUPtr sub_stmt;
   Loc keyword_loc;
   Loc colon_loc;
 
-  SwitchCase(Kind k, Loc kl, Loc cl)
-      : Stmt(k), keyword_loc(kl), colon_loc(cl) {}
+  SwitchCase(Kind k, Loc kl, Loc cl, StmtUPtr sub_stmt)
+      : Stmt(k), sub_stmt(std::move(sub_stmt)), keyword_loc(kl), colon_loc(cl) {}
 
   Loc get_start_loc() const override { return keyword_loc; }
+  Loc get_end_loc() const override { return sub_stmt->get_end_loc(); }
 
   static bool is_class(Kind k);
 };
 
 struct CaseStmt : public SwitchCase {
-  StmtUPtr sub_stmt;
+  // TODO: save the expression into ast
   i64 case_val;
 
   CaseStmt(StmtUPtr sub_stmt, Loc kl, Loc cl, i64 case_val)
-      : SwitchCase(CASE_STMT, kl, cl), sub_stmt(std::move(sub_stmt)),
+      : SwitchCase(CASE_STMT, kl, cl, std::move(sub_stmt)),
         case_val(case_val) {}
-
-  Loc get_end_loc() const override;
 
   static bool is_class(Kind k) { return k == CASE_STMT; }
 };
 
 struct DefaultStmt : public SwitchCase {
-  StmtUPtr sub_stmt;
 
   DefaultStmt(StmtUPtr sub_stmt, Loc kl, Loc cl)
-      : SwitchCase(CASE_STMT, kl, cl), sub_stmt(std::move(sub_stmt)) {}
-
-  Loc get_end_loc() const override { return sub_stmt->get_end_loc(); }
+      : SwitchCase(DEFAULT_STMT, kl, cl, std::move(sub_stmt)) {}
 
   static bool is_class(Kind k) { return k == DEFAULT_STMT; }
 };

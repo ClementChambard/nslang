@@ -167,7 +167,7 @@ std::unique_ptr<SwitchStmt> Parser::parse_switch_stmt(Loc *trailing_else_loc) {
   assert(tok.kind == tok::KW_SWITCH);
   auto switch_loc = consume_token();
 
-  if (tok.kind == tok::LPAREN) {
+  if (tok.kind != tok::LPAREN) {
     Diag(diag::ERROR, tok.loc, "expected '(' after 'switch'");
     skip_until(tok::SEMI);
     return nullptr;

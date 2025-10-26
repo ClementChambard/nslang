@@ -73,11 +73,11 @@ bool Scope::contained_in_prototype_scope() const {
 void Scope::add_flags(ScopeFlags flags) {
   assert(!(flags & ~(SF_BREAK | SF_CONTINUE)) && "Unsupported scope flags");
   if (flags & SF_BREAK) {
-    assert(!(flags & SF_BREAK) && "Already set");
+    assert(!(this->flags & SF_BREAK) && "Already set");
     break_parent = this;
   }
   if (flags & SF_CONTINUE) {
-    assert(!(flags & SF_CONTINUE) && "Already set");
+    assert(!(this->flags & SF_CONTINUE) && "Already set");
     continue_parent = this;
   }
   this->flags = ScopeFlags(this->flags | flags);

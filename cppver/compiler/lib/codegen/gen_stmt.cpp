@@ -67,8 +67,9 @@ void gen_case_stmt(CGContext &ctx, const CaseStmt &s) {
   if (!ctx.fn.switch_insn)
     return gen_stmt(ctx, *s.sub_stmt);
 
-  llvm::ConstantInt *case_val =
-      ctx.builder.getInt64(s.case_val); // TODO: what should the size be ?
+  auto ty = dyn_cast<llvm::IntegerType>(ctx.fn.switch_insn->getCondition()->getType());
+
+  llvm::ConstantInt *case_val = llvm::ConstantInt::get(ty, s.case_val);
 
   if (s.sub_stmt->isa<BreakStmt>()) {
     auto block = ctx.fn.break_continue_stack.back().break_d;
@@ -369,185 +370,261 @@ void gen_return_stmt(CGContext &ctx, ReturnStmt const &s) {
   }
 }
 
+
+bool contains_break(const Stmt *s) {
+  // Null statement, not a label!
+  if (!s) return false;
+
+  // If this is a switch or loop that defines its own break scope, then we can
+  // include it and anything inside of it.
+  if (s->isa<SwitchStmt>() || s->isa<WhileStmt>() || s->isa<DoStmt>() ||
+      s->isa<ForStmt>())
+    return false;
+
+  if (s->isa<BreakStmt>())
+    return true;
+
+  // Scan subexpressions for verboten breaks.
+  if (auto ss = s->dyn_cast<SwitchCase>()) return contains_break(ss->sub_stmt.get());
+  if (auto ss = s->dyn_cast<IfStmt>()) {
+    if (contains_break(ss->then_stmt.get())) return true;
+    return !ss->else_stmt || contains_break(ss->else_stmt.get());
+  }
+  if (auto ss = s->dyn_cast<CompoundStmt>()) {
+    for (auto &sss : ss->inner) {
+      if (contains_break(sss.get())) return true;
+    }
+  }
+
+  return false;
+}
+
+bool might_add_decl_to_scope(const Stmt *s) {
+  if (!s) return false;
+
+  // Some statement kinds add a scope and thus never add a decl to the current
+  // scope. Note, this list is longer than the list of statements that might
+  // have an unscoped decl nested within them, but this way is conservatively
+  // correct even if more statement kinds are added.
+  if (s->isa<IfStmt>() || s->isa<SwitchStmt>() || s->isa<WhileStmt>() ||
+      s->isa<DoStmt>() || s->isa<ForStmt>() || s->isa<CompoundStmt>())
+    return false;
+
+  if (s->isa<DeclStmt>())
+    return true;
+
+  if (auto ss = s->dyn_cast<SwitchCase>()) return might_add_decl_to_scope(ss->sub_stmt.get());
+
+  return false;
+}
+
+enum CSFC_Result { CSFC_Failure, CSFC_FallThrough, CSFC_Success };
+static CSFC_Result CollectStatementsForCase(const Stmt *s, const SwitchCase *Case, bool &found_case, std::vector<const Stmt*> &res) {
+  // If this is a null statement, just succeed.
+  if (!s || s->dyn_cast<NullStmt>())
+    return Case ? CSFC_Success : CSFC_FallThrough;
+
+  // If this is the switchcase (case 4: or default) that we're looking for, then
+  // we're in business.  Just add the substatement.
+  if (const SwitchCase *SC = s->dyn_cast<SwitchCase>()) {
+    if (s == Case) {
+      found_case = true;
+      return CollectStatementsForCase(SC->sub_stmt.get(), nullptr, found_case, res);
+    }
+
+    // Otherwise, this is some other case or default statement, just ignore it.
+    return CollectStatementsForCase(SC->sub_stmt.get(), Case, found_case, res);
+  }
+
+  // If we are in the live part of the code and we found our break statement,
+  // return a success!
+  if (!Case && s->isa<BreakStmt>())
+    return CSFC_Success;
+
+  // If this is a switch statement, then it might contain the SwitchCase, the
+  // break, or neither.
+  if (const CompoundStmt *CS = s->dyn_cast<CompoundStmt>()) {
+    // Handle this as two cases: we might be looking for the SwitchCase (if so
+    // the skipped statements must be skippable) or we might already have it.
+    auto I = CS->inner.begin(), E = CS->inner.end();
+    bool StartedInLiveCode = found_case;
+    unsigned StartSize = res.size();
+
+    // If we've not found the case yet, scan through looking for it.
+    if (Case) {
+      // Keep track of whether we see a skipped declaration.  The code could be
+      // using the declaration even if it is skipped, so we can't optimize out
+      // the decl if the kept statements might refer to it.
+      bool HadSkippedDecl = false;
+
+      // If we're looking for the case, just see if we can skip each of the
+      // substatements.
+      for (; Case && I != E; ++I) {
+        HadSkippedDecl |= might_add_decl_to_scope(I->get());
+
+        switch (CollectStatementsForCase(I->get(), Case, found_case, res)) {
+        case CSFC_Failure: return CSFC_Failure;
+        case CSFC_Success:
+          // A successful result means that either 1) that the statement doesn't
+          // have the case and is skippable, or 2) does contain the case value
+          // and also contains the break to exit the switch.  In the later case,
+          // we just verify the rest of the statements are elidable.
+          if (found_case) {
+            // If we found the case and skipped declarations, we can't do the
+            // optimization.
+            if (HadSkippedDecl)
+              return CSFC_Failure;
+            return CSFC_Success;
+          }
+          break;
+        case CSFC_FallThrough:
+          // If we have a fallthrough condition, then we must have found the
+          // case started to include statements.  Consider the rest of the
+          // statements in the compound statement as candidates for inclusion.
+          assert(found_case && "Didn't find case but returned fallthrough?");
+          // We recursively found Case, so we're not looking for it anymore.
+          Case = nullptr;
+
+          // If we found the case and skipped declarations, we can't do the
+          // optimization.
+          if (HadSkippedDecl)
+            return CSFC_Failure;
+          break;
+        }
+      }
+
+      if (!found_case)
+        return CSFC_Success;
+
+      assert(!HadSkippedDecl && "fallthrough after skipping decl");
+    }
+
+    // If we have statements in our range, then we know that the statements are
+    // live and need to be added to the set of statements we're tracking.
+    bool AnyDecls = false;
+    for (; I != E; ++I) {
+      AnyDecls |= might_add_decl_to_scope(I->get());
+
+      switch (CollectStatementsForCase(I->get(), nullptr, found_case, res)) {
+      case CSFC_Failure: return CSFC_Failure;
+      case CSFC_FallThrough:
+        // A fallthrough result means that the statement was simple and just
+        // included in ResultStmt, keep adding them afterwards.
+        break;
+      case CSFC_Success:
+        // A successful result means that we found the break statement and
+        // stopped statement inclusion.  We just ensure that any leftover stmts
+        // are skippable and return success ourselves.
+        return CSFC_Success;
+      }
+    }
+
+    // If we're about to fall out of a scope without hitting a 'break;', we
+    // can't perform the optimization if there were any decls in that scope
+    // (we'd lose their end-of-lifetime).
+    if (AnyDecls) {
+      // If the entire compound statement was live, there's one more thing we
+      // can try before giving up: emit the whole thing as a single statement.
+      // We can do that unless the statement contains a 'break;'.
+      // FIXME: Such a break must be at the end of a construct within this one.
+      // We could emit this by just ignoring the BreakStmts entirely.
+      if (StartedInLiveCode && !contains_break(s)) {
+        res.resize(StartSize);
+        res.push_back(s);
+      } else {
+        return CSFC_Failure;
+      }
+    }
+
+    return CSFC_FallThrough;
+  }
+
+  // Okay, this is some other statement that we don't handle explicitly, like a
+  // for statement or increment etc.
+  if (Case) {
+    return CSFC_Success;
+  }
+
+  // Otherwise, we want to include this statement.  Everything is cool with that
+  // so long as it doesn't contain a break out of the switch we're in.
+  if (contains_break(s)) return CSFC_Failure;
+
+  // Otherwise, everything is great.  Include the statement and tell the caller
+  // that we fall through and include the next statement as well.
+  res.push_back(s);
+  return CSFC_FallThrough;
+}
+
+
+static bool find_case_stmts_for_val(const SwitchStmt &s, const i64 val, std::vector<const Stmt*> &res) {
+  const SwitchCase *case_stmt = s.first_case;
+  const DefaultStmt *default_case = nullptr;
+
+  for (; case_stmt; case_stmt = case_stmt->next_switch_case) {
+    if (const DefaultStmt *ds = case_stmt->dyn_cast<DefaultStmt>()) {
+      default_case = ds;
+      continue;
+    }
+    const CaseStmt *cs = case_stmt->dyn_cast<CaseStmt>();
+    if (cs->case_val == val) break;
+  }
+
+  if (!case_stmt) {
+    if (!default_case)
+      return true;
+    case_stmt = default_case;
+  }
+
+  bool found = false;
+  return CollectStatementsForCase(s.body.get(), case_stmt, found, res) != CSFC_Failure && found;
+}
+
+
 void gen_switch_stmt(CGContext &ctx, SwitchStmt const &s) {
-  (void)ctx, (void)s;
-  assert(false && "no switch yet");
-#if false
   llvm::SwitchInst *saved_switch_ins = ctx.fn.switch_insn;
-  llvm::BasicBlock *SavedCRBlock = CaseRangeBlock;
-  // See if we can constant fold the condition of the switch and therefore only
-  // emit the live case statement (if any) of the switch.
-  llvm::APSInt ConstantCondValue;
-  if (ConstantFoldsToSimpleInteger(S.getCond(), ConstantCondValue)) {
-    SmallVector<const Stmt*, 4> CaseStmts;
-    const SwitchCase *Case = nullptr;
-    if (FindCaseStatementsForValue(S, ConstantCondValue, CaseStmts,
-                                   getContext(), Case)) {
-      if (Case)
-        incrementProfileCounter(Case);
-      RunCleanupsScope ExecutedScope(*this);
 
-      if (S.getInit())
-        EmitStmt(S.getInit());
+  auto [constant_cond_value, is_const] = eval_integer_constexpr(ctx.astctx, s.cond.get());
+  if (is_const) {
+    std::vector<const Stmt*> stmts;
+    if (find_case_stmts_for_val(s, constant_cond_value, stmts)) {
+      ctx.fn.switch_insn = nullptr;
 
-      // Emit the condition variable if needed inside the entire cleanup scope
-      // used by this special case for constant folded switches.
-      if (S.getConditionVariable())
-        EmitDecl(*S.getConditionVariable(), /*EvaluateConditionDecl=*/true);
+      for (const Stmt *stmt : stmts)
+        gen_stmt(ctx, *stmt);
 
-      // At this point, we are no longer "within" a switch instance, so
-      // we can temporarily enforce this to ensure that any embedded case
-      // statements are not emitted.
-      SwitchInsn = nullptr;
-
-      // Okay, we can dead code eliminate everything except this case.  Emit the
-      // specified series of statements and we're good.
-      for (const Stmt *CaseStmt : CaseStmts)
-        EmitStmt(CaseStmt);
-      incrementProfileCounter(&S);
-      PGO->markStmtMaybeUsed(S.getBody());
-
-      // Now we want to restore the saved switch instance so that nested
-      // switches continue to function properly
-      SwitchInsn = SavedSwitchInsn;
+      ctx.fn.switch_insn = saved_switch_ins;
 
       return;
     }
   }
 
-  JumpDest SwitchExit = getJumpDestInCurrentScope("sw.epilog");
+  auto switch_exit = llvm::BasicBlock::Create(ctx.llvmctx, "sw.epilog");
 
-  RunCleanupsScope ConditionScope(*this);
+  llvm::Value *cond_v = gen_scalar_expr(ctx, s.cond.get());
 
-  if (S.getInit())
-    EmitStmt(S.getInit());
+  llvm::BasicBlock *default_block = llvm::BasicBlock::Create(ctx.llvmctx, "sw.default");
+  ctx.fn.switch_insn = ctx.builder.CreateSwitch(cond_v, default_block);
 
-  if (S.getConditionVariable())
-    EmitDecl(*S.getConditionVariable());
-  llvm::Value *CondV = EmitScalarExpr(S.getCond());
-  MaybeEmitDeferredVarDeclInit(S.getConditionVariable());
+  ctx.builder.ClearInsertionPoint();
 
-  // Create basic block to hold stuff that comes after switch
-  // statement. We also need to create a default block now so that
-  // explicit case ranges tests can have a place to jump to on
-  // failure.
-  llvm::BasicBlock *DefaultBlock = createBasicBlock("sw.default");
-  SwitchInsn = Builder.CreateSwitch(CondV, DefaultBlock);
-  addInstToNewSourceAtom(SwitchInsn, CondV);
+  llvm::BasicBlock *outer_continue = nullptr;
+  if (!ctx.fn.break_continue_stack.empty())
+    outer_continue = ctx.fn.break_continue_stack.back().continue_d;
 
-  if (HLSLControlFlowAttr != HLSLControlFlowHintAttr::SpellingNotCalculated) {
-    llvm::MDBuilder MDHelper(CGM.getLLVMContext());
-    llvm::ConstantInt *BranchHintConstant =
-        HLSLControlFlowAttr ==
-                HLSLControlFlowHintAttr::Spelling::Microsoft_branch
-            ? llvm::ConstantInt::get(CGM.Int32Ty, 1)
-            : llvm::ConstantInt::get(CGM.Int32Ty, 2);
-    llvm::Metadata *Vals[] = {MDHelper.createString("hlsl.controlflow.hint"),
-                              MDHelper.createConstant(BranchHintConstant)};
-    SwitchInsn->setMetadata("hlsl.controlflow.hint",
-                            llvm::MDNode::get(CGM.getLLVMContext(), Vals));
+  ctx.fn.break_continue_stack.push_back(CGFunctionCtx::BreakContinue(&s, switch_exit, outer_continue));
+
+  gen_stmt(ctx, *s.body);
+
+  ctx.fn.break_continue_stack.pop_back();
+
+  if (!default_block->getParent()) {
+    default_block->replaceAllUsesWith(switch_exit);
+    delete default_block;
   }
 
-  if (PGO->haveRegionCounts()) {
-    // Walk the SwitchCase list to find how many there are.
-    uint64_t DefaultCount = 0;
-    unsigned NumCases = 0;
-    for (const SwitchCase *Case = S.getSwitchCaseList();
-         Case;
-         Case = Case->getNextSwitchCase()) {
-      if (isa<DefaultStmt>(Case))
-        DefaultCount = getProfileCount(Case);
-      NumCases += 1;
-    }
-    SwitchWeights = new SmallVector<uint64_t, 16>();
-    SwitchWeights->reserve(NumCases);
-    // The default needs to be first. We store the edge count, so we already
-    // know the right weight.
-    SwitchWeights->push_back(DefaultCount);
-  } else if (CGM.getCodeGenOpts().OptimizationLevel) {
-    SwitchLikelihood = new SmallVector<Stmt::Likelihood, 16>();
-    // Initialize the default case.
-    SwitchLikelihood->push_back(Stmt::LH_None);
-  }
+  gen_block(ctx, switch_exit);
 
-  CaseRangeBlock = DefaultBlock;
-
-  // Clear the insertion point to indicate we are in unreachable code.
-  Builder.ClearInsertionPoint();
-
-  // All break statements jump to NextBlock. If BreakContinueStack is non-empty
-  // then reuse last ContinueBlock.
-  JumpDest OuterContinue;
-  if (!BreakContinueStack.empty())
-    OuterContinue = BreakContinueStack.back().ContinueBlock;
-
-  BreakContinueStack.push_back(BreakContinue(S, SwitchExit, OuterContinue));
-
-  // Emit switch body.
-  EmitStmt(S.getBody());
-
-  BreakContinueStack.pop_back();
-
-  // Update the default block in case explicit case range tests have
-  // been chained on top.
-  SwitchInsn->setDefaultDest(CaseRangeBlock);
-
-  // If a default was never emitted:
-  if (!DefaultBlock->getParent()) {
-    // If we have cleanups, emit the default block so that there's a
-    // place to jump through the cleanups from.
-    if (ConditionScope.requiresCleanups()) {
-      EmitBlock(DefaultBlock);
-
-    // Otherwise, just forward the default block to the switch end.
-    } else {
-      DefaultBlock->replaceAllUsesWith(SwitchExit.getBlock());
-      delete DefaultBlock;
-    }
-  }
-
-  ConditionScope.ForceCleanup();
-
-  // Emit continuation.
-  EmitBlock(SwitchExit.getBlock(), true);
-  incrementProfileCounter(&S);
-
-  // If the switch has a condition wrapped by __builtin_unpredictable,
-  // create metadata that specifies that the switch is unpredictable.
-  // Don't bother if not optimizing because that metadata would not be used.
-  auto *Call = dyn_cast<CallExpr>(S.getCond());
-  if (Call && CGM.getCodeGenOpts().OptimizationLevel != 0) {
-    auto *FD = dyn_cast_or_null<FunctionDecl>(Call->getCalleeDecl());
-    if (FD && FD->getBuiltinID() == Builtin::BI__builtin_unpredictable) {
-      llvm::MDBuilder MDHelper(getLLVMContext());
-      SwitchInsn->setMetadata(llvm::LLVMContext::MD_unpredictable,
-                              MDHelper.createUnpredictable());
-    }
-  }
-
-  if (SwitchWeights) {
-    assert(SwitchWeights->size() == 1 + SwitchInsn->getNumCases() &&
-           "switch weights do not match switch cases");
-    // If there's only one jump destination there's no sense weighting it.
-    if (SwitchWeights->size() > 1)
-      SwitchInsn->setMetadata(llvm::LLVMContext::MD_prof,
-                              createProfileWeights(*SwitchWeights));
-    delete SwitchWeights;
-  } else if (SwitchLikelihood) {
-    assert(SwitchLikelihood->size() == 1 + SwitchInsn->getNumCases() &&
-           "switch likelihoods do not match switch cases");
-    std::optional<SmallVector<uint64_t, 16>> LHW =
-        getLikelihoodWeights(*SwitchLikelihood);
-    if (LHW) {
-      llvm::MDBuilder MDHelper(CGM.getLLVMContext());
-      SwitchInsn->setMetadata(llvm::LLVMContext::MD_prof,
-                              createProfileWeights(*LHW));
-    }
-    delete SwitchLikelihood;
-  }
-  SwitchInsn = SavedSwitchInsn;
-  CaseRangeBlock = SavedCRBlock;
-#endif
+  ctx.fn.switch_insn = saved_switch_ins;
 }
 
 void gen_stmt(CGContext &ctx, Stmt const &s) {
