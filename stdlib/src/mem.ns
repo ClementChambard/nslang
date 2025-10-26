@@ -36,33 +36,23 @@ fn sbrk(size: i64) -> void* {
 }
 
 fn memcpy(dst: void*, src: void*, size: i64) -> void* {
-    let dst_as_i8 = cast<i8*>(dst);
-    let src_as_i8 = cast<i8*>(src);
-    let i = 0;
-    while (i < size) {
-        dst_as_i8[i] = src_as_i8[i];
-        ++i;
+    for (let i = 0; i < size; i++) {
+      cast<i8*>(dst)[i] = cast<i8*>(src)[i];
     }
     return dst;
 }
 
 fn memset(dst: void*, byte: i8, size: i64) -> void* {
-    let dst_as_i8 = cast<i8*>(dst);
-    let i = 0;
-    while (i < size) {
-        dst_as_i8[i] = byte;
-        ++i;
+    for (let i = 0; i < size; i++) {
+      cast<i8*>(dst)[i] = byte;
     }
     return dst;
 }
 
 fn memcmp(mem1: void*, mem2: void*, size: i64) -> i64 {
-    let mem1_as_i8 = cast<i8*>(mem1);
-    let mem2_as_i8 = cast<i8*>(mem2);
-    let i = 0;
-    while (i < size) {
-        if (mem1_as_i8[i] != mem2_as_i8[i]) return mem1_as_i8[i] - mem2_as_i8[i];
-        ++i;
+    for (let i = 0; i < size; i++) {
+      if (cast<i8*>(mem1)[i] != cast<i8*>(mem2)[i]) 
+        return cast<i8*>(mem1)[i] - cast<i8*>(mem2)[i];
     }
     return 0;
 }

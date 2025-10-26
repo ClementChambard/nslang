@@ -497,6 +497,18 @@ void print_stmt_tree(Stmt const *stmt, std::vector<int> &indent) {
     print_expr_tree(s->cond.get(), indent);
     indent.back()--;
     print_stmt_tree(s->body.get(), indent);
+  } else if (auto *s = stmt->dyn_cast<ForStmt>()) {
+    if (s->init_stmt) {
+      print_stmt_tree(s->init_stmt.get(), indent);
+    }
+    if (s->cond) {
+      print_expr_tree(s->cond.get(), indent);
+    }
+    if (s->latch) {
+      print_expr_tree(s->latch.get(), indent);
+    }
+    indent.back()--;
+    print_stmt_tree(s->body.get(), indent);
   } else if (auto *s = stmt->dyn_cast<SwitchStmt>()) {
     print_expr_tree(s->cond.get(), indent);
     indent.back()--;

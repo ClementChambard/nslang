@@ -339,6 +339,52 @@
     }
   },
   {
+    "type": "for_stmt",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "stmt",
+            "named": true
+          }
+        ]
+      },
+      "cond": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "expr",
+            "named": true
+          }
+        ]
+      },
+      "init_stmt": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "var_decl",
+            "named": true
+          }
+        ]
+      },
+      "latch": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "expr",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "if_stmt",
     "named": true,
     "fields": {
@@ -622,6 +668,10 @@
         },
         {
           "type": "expr",
+          "named": true
+        },
+        {
+          "type": "for_stmt",
           "named": true
         },
         {
@@ -1056,6 +1106,10 @@
   },
   {
     "type": "fn",
+    "named": false
+  },
+  {
+    "type": "for",
     "named": false
   },
   {

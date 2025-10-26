@@ -42,6 +42,14 @@ DoStmt::DoStmt(ExprUPtr cond, StmtUPtr body, Loc dl, Loc wl, Loc rp)
     : Stmt(DO_STMT), cond(std::move(cond)), body(std::move(body)), do_loc(dl),
       while_loc(wl), rparen_loc(rp) {}
 
+ForStmt::ForStmt(StmtUPtr init_stmt, ExprUPtr cond, ExprUPtr latch, StmtUPtr body, Loc fl, Loc lp, Loc rp) 
+    : Stmt(FOR_STMT), 
+    init_stmt(std::move(init_stmt)), 
+    cond(std::move(cond)), 
+    latch(std::move(latch)), 
+    body(std::move(body)),
+    for_loc(fl), lparen_loc(lp), rparen_loc(rp) {}
+
 ReturnStmt::ReturnStmt(ExprUPtr return_value, Loc rl)
     : Stmt(RETURN_STMT), return_value(std::move(return_value)), return_loc(rl) {
 }

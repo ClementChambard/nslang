@@ -227,8 +227,18 @@ struct DoStmt : public Stmt {
 };
 
 struct ForStmt : public Stmt {
-  // TODO:
-  ForStmt() : Stmt(FOR_STMT) {}
+  StmtUPtr init_stmt;
+  ExprUPtr cond;
+  ExprUPtr latch;
+  StmtUPtr body;
+  Loc for_loc;
+  Loc lparen_loc;
+  Loc rparen_loc;
+  
+  ForStmt(StmtUPtr init_stmt, ExprUPtr cond, ExprUPtr latch, StmtUPtr body, Loc fl, Loc lp, Loc rp);
+
+  Loc get_start_loc() const override { return for_loc; }
+  Loc get_end_loc() const override { return body->get_end_loc(); }
 
   static bool is_class(Kind k) { return k == FOR_STMT; }
 };

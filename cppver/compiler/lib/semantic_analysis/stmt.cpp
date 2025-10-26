@@ -60,6 +60,20 @@ UPtr<WhileStmt> Sema::act_on_while_stmt(Loc while_loc, Loc lparen_loc,
   return std::make_unique<WhileStmt>(std::move(cond_expr), std::move(body), while_loc, lparen_loc, rparen_loc);
 }
 
+UPtr<ForStmt> Sema::act_on_for_stmt(Loc for_loc, Loc lp_loc, StmtUPtr init_stmt, ExprUPtr cond, ExprUPtr latch, Loc rp_loc, StmtUPtr body) {
+  if (cond) {
+    cond = check_boolean_condition(std::move(cond));
+    if (!cond) return nullptr;
+    cond = act_on_finish_full_expr(std::move(cond), for_loc, false);
+    if (!cond) return nullptr;
+  }
+  if (latch) {
+    latch = act_on_finish_full_expr(std::move(latch), for_loc, true);
+    if (!latch) return nullptr;
+  }
+  return std::make_unique<ForStmt>(std::move(init_stmt), std::move(cond), std::move(latch), std::move(body), for_loc, lp_loc, rp_loc);
+}
+
 UPtr<DoStmt> Sema::act_on_do_stmt(Loc do_loc, StmtUPtr body, Loc while_loc,
                                   Loc lp_loc, ExprUPtr cond, Loc rp_loc) {
   (void)lp_loc;

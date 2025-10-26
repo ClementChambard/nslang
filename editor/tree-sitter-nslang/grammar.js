@@ -65,6 +65,7 @@ module.exports = grammar({
       $.while_stmt,
       $.do_stmt,
       $.switch_stmt,
+      $.for_stmt,
       seq('break', ';'),
       seq('continue', ';'),
       seq($.expr, ';'),
@@ -80,6 +81,11 @@ module.exports = grammar({
     if_stmt: $ => prec.right(0, seq('if', '(', field("cond", $.expr), ')', field("then_body", $.stmt), field("else_body", optional(seq('else', $.stmt))))),
     do_stmt: $ => seq('do', field("body", $.stmt), 'while', '(', field("cond", $.expr), ')', ';'),
     switch_stmt: $ => seq('switch', '(', field("switch_var", $.expr), ')', field("body", $.stmt)),
+    for_stmt: $ => seq('for', '(', 
+      choice(field("init_stmt", $.var_decl), ';'),
+      optional(field("cond", $.expr)), ';', 
+      optional(field("latch", $.expr)), ')', 
+      field("body", $.stmt)),
 
     // EXPRS
     expr_list: $ => seq($.expr, repeat(seq(',', $.expr))),

@@ -21,6 +21,7 @@
 [
   "while"
   "do" 
+  "for"
   "break"
   "continue"
 ] @keyword.repeat

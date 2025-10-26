@@ -178,14 +178,12 @@ fn fmt_float(self: String*, num: f64) {
   fmt_num(self, int, true);
   let rem = num - cast<f64>(int);
   self->push('.');
-  let i = 0;
-  while (i < 5) {
+  for (let i = 0; i < 5; i++) {
     rem *= 10;
     int = cast<i64>(rem);
     let digit: char = int + '0';
     self->push(digit);
     rem -= cast<f64>(int);
-    i++;
   }
 }
 
@@ -260,10 +258,8 @@ fn String::insert(self: String*, idx: i64, c: char) {
     if (self->len + 1 > self->capacity) {
         self->__alloc_more();
     }
-    let i: i64 = self->len;
-    while (i >= idx) {
+    for (let i = self->len; i >= idx; i--) {
         self->data[i + 1] = self->data[i];
-        --i;
     }
     self->data[idx] = c;
     self->len++;
@@ -278,10 +274,8 @@ fn String::insert_str(self: String*, idx: i64, str: Str*) {
     while (self->len + str->len > self->capacity) {
         self->__alloc_more();
     }
-    let i = self->len;
-    while (i >= idx) {
+    for (let i = self->len; i >= idx; i--) {
         self->data[i + str->len] = self->data[i];
-        --i;
     }
     memcpy(&self->data[idx], str->data, str->len);
     self->len += str->len;
@@ -341,8 +335,7 @@ fn String::truncate(self: String*, count: i64) {
 }
 
 fn String::pop(self: String*) -> char {
-    let out = self->data[self->len--];
-    return out;
+    return self->data[self->len--];
 }
 
 fn String::remove(self: String*, idx: i64) -> char {
@@ -351,10 +344,8 @@ fn String::remove(self: String*, idx: i64) -> char {
     }
     if (idx < 0) idx = 0;
     let out = self->data[idx];
-    let i = idx;
-    while (i < self->len) {
+    for (let i = idx; i < self->len; i++) {
         self->data[i] = self->data[i + 1];
-        ++i;
     }
     self->len--;
     return out;

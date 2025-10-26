@@ -278,6 +278,63 @@ std::unique_ptr<WhileStmt> Parser::parse_while_stmt(Loc *trailing_else_loc) {
                                 std::move(body));
 }
 
+std::unique_ptr<ForStmt> Parser::parse_for_stmt(Loc *trailing_else_loc) {
+  assert(tok.kind == tok::KW_FOR);
+  auto for_loc = consume_token();
+  if (tok.kind != tok::LPAREN) {
+    Diag(diag::ERROR, tok.loc, "expected '(' after 'for'");
+    skip_until(tok::SEMI);
+    return nullptr;
+  }
+
+  enter_scope(ScopeFlags(SF_CONTROL | SF_BREAK | SF_CONTINUE | SF_DECL));
+
+  auto lp_loc = consume_paren();
+  StmtUPtr init_stmt{};
+
+  if (tok.kind == tok::KW_LET) {
+    auto decl_start = tok.loc;
+    auto decl_end = LOC_INVALID;
+    auto decl = parse_decl(true, &decl_end);
+    init_stmt = sema.act_on_decl_stmt(std::move(decl), decl_start, decl_end);
+  } else if (tok.kind == tok::SEMI) {
+    consume_token();
+  } else {
+    Diag(diag::ERROR, tok.loc, "expected 'let' or ';' in 'for'");
+    skip_until(tok::SEMI);
+    return nullptr;
+  }
+
+  auto cond = tok.kind == tok::SEMI ? nullptr : parse_expr();
+
+  if (tok.kind != tok::SEMI) {
+    Diag(diag::ERROR, tok.loc, "expected ';' in 'for'");
+    skip_until(tok::SEMI);
+    return nullptr;
+  }
+  consume_token();
+
+  auto latch = tok.kind == tok::RPAREN ? nullptr : parse_expr();
+
+  auto rp_loc = tok.loc;
+  expect_and_consume(tok::RPAREN);
+
+  bool has_brace = tok.kind == tok::LBRACE;
+  if (has_brace)
+    enter_scope(SF_DECL);
+
+  auto body = parse_stmt(trailing_else_loc);
+
+  if (has_brace)
+    exit_scope();
+  exit_scope();
+
+  if (!body)
+    return nullptr;
+
+  return sema.act_on_for_stmt(for_loc, lp_loc, std::move(init_stmt), std::move(cond), std::move(latch), rp_loc, std::move(body));
+}
+
 std::unique_ptr<DoStmt> Parser::parse_do_stmt() {
   assert(tok.kind == tok::KW_DO);
   auto do_loc = consume_token();
@@ -425,9 +482,7 @@ std::unique_ptr<Stmt> Parser::parse_stmt(Loc *trailing_else_loc) {
     semi_error = "do/while";
     break;
   case tok::KW_FOR:
-    // TODO:
-    assert(false && "for stmt not implemented");
-    break;
+    return parse_for_stmt(trailing_else_loc);
   case tok::KW_CONTINUE:
     res = parse_continue_stmt();
     semi_error = "continue";

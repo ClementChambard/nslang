@@ -314,8 +314,43 @@ void gen_do_stmt(CGContext &ctx, DoStmt const &s) {
 }
 
 void gen_for_stmt(CGContext &ctx, ForStmt const &s) {
-  (void)ctx, (void)s;
-  assert(false && "no for stmt yet");
+  if (s.init_stmt) gen_stmt(ctx, *s.init_stmt);
+
+  
+  auto loop_header = llvm::BasicBlock::Create(ctx.llvmctx, "for.cond");
+  gen_block(ctx, loop_header);
+
+  auto loop_exit = llvm::BasicBlock::Create(ctx.llvmctx, "for.end");
+  auto loop_latch = llvm::BasicBlock::Create(ctx.llvmctx, "for.latch");
+
+  ctx.fn.break_continue_stack.emplace_back(&s, loop_exit, loop_latch);
+
+  auto *cond = s.cond.get();
+  bool emit_cond = false;
+  llvm::Value *bool_cond_val;
+  if (cond) {
+    bool_cond_val = gen_scalar_conversion(ctx, gen_scalar_expr(ctx, cond), cond->type,
+                              ctx.astctx.bool_ty, cond->get_start_loc());
+    llvm::ConstantInt *c = dyn_cast<llvm::ConstantInt>(bool_cond_val);
+    emit_cond = !c || !c->isOne();
+  }
+
+  llvm::BasicBlock *loop_body =
+      llvm::BasicBlock::Create(ctx.llvmctx, "for.body");
+  if (emit_cond) {
+    ctx.builder.CreateCondBr(bool_cond_val, loop_body, loop_exit);
+  }
+
+  gen_block(ctx, loop_body);
+  gen_stmt(ctx, *s.body);
+
+  gen_block(ctx, loop_latch);
+  if (s.latch)
+    gen_stmt(ctx, *s.latch);
+
+  ctx.fn.break_continue_stack.pop_back();
+  gen_branch(ctx, loop_header);
+  gen_block(ctx, loop_exit);
 }
 
 void gen_return_stmt(CGContext &ctx, ReturnStmt const &s) {

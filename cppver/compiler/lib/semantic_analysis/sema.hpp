@@ -84,6 +84,7 @@ struct Sema {
   UPtr<WhileStmt> act_on_while_stmt(Loc while_loc, Loc lparen_loc,
                                     ExprUPtr cond, Loc rparen_loc,
                                     StmtUPtr body);
+  UPtr<ForStmt> act_on_for_stmt(Loc for_loc, Loc lp_loc, StmtUPtr init_stmt, ExprUPtr cond, ExprUPtr latch, Loc rp_loc, StmtUPtr body);
   UPtr<DoStmt> act_on_do_stmt(Loc do_loc, StmtUPtr body, Loc while_loc,
                               Loc lp_loc, ExprUPtr cond, Loc rp_loc);
   UPtr<DefaultStmt> act_on_default_stmt(Loc default_loc, Loc colon_loc,
